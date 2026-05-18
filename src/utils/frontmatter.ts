@@ -1,0 +1,247 @@
+// src/utils/frontmatter.ts
+// Frontmatter read, write, and backup utilities.
+//
+// Port of:
+//   Shared/IO/Get-Frontmatter.ps1
+//   Invoke-VaultPatch.ps1 → Read-NoteFile, Write-NoteFile, Backup-NoteFile
+//   Shared/Schema/Sort-FrontmatterFields.ps1
+//
+// Uses Obsidian's built-in parseYaml / stringifyYaml — no external dependency.
+// These are thin wrappers around js-yaml, the same library Obsidian uses internally.
+
+import { App, TFile, normalizePath, parseYaml, stringifyYaml } from "obsidian";
+import { ensureFolder } from "./files";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface VaultNote {
+  /** Parsed frontmatter as a plain object. Empty object if no frontmatter. */
+  frontmatter: Record<string, unknown>;
+  /** Note body — everything after the closing --- */
+  body: string;
+  /** True if the note had a valid frontmatter block */
+  hasFrontmatter: boolean;
+  /** The TFile this note was read from */
+  file: TFile;
+}
+
+// ── Canonical frontmatter field order ────────────────────────────────────────
+// Port of Shared/Schema/Sort-FrontmatterFields.ps1
+// Fields not in this list are appended alphabetically after the known fields.
+
+const PREFERRED_FIELD_ORDER = [
+  "type",
+  "kind",
+  "domain",
+  "status",
+  "patterns",
+  "tags",
+  "created",
+  "updated",
+  "review_by",
+  "ai_private",
+  "ai_open_questions",
+  "source",
+  "supersedes",
+  "superseded_by",
+  "version",
+  "review_cycle",
+];
+
+// ── Read ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads a TFile and splits it into frontmatter + body.
+ * Returns null if the file cannot be read.
+ *
+ * Port of Get-Frontmatter.ps1 + Read-NoteFile from Invoke-VaultPatch.ps1.
+ */
+export async function readNote(
+  app: App,
+  file: TFile
+): Promise<VaultNote | null> {
+  let raw: string;
+
+  try {
+    raw = await app.vault.read(file);
+  } catch (e) {
+    console.warn(`[VaultForge] Could not read file: ${file.path}`, e);
+    return null;
+  }
+
+  return parseNote(raw, file);
+}
+
+/**
+ * Parses raw file content into a VaultNote.
+ * Exported for testing without needing a real TFile.
+ */
+export function parseNote(raw: string, file: TFile): VaultNote {
+  // Match frontmatter block: must start at line 1 with ---
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+
+  if (!match) {
+    return {
+      frontmatter: {},
+      body: raw,
+      hasFrontmatter: false,
+      file,
+    };
+  }
+
+  const fmText = match[1];
+  const body = match[2] ?? "";
+
+  let frontmatter: Record<string, unknown> = {};
+
+  try {
+    const parsed = parseYaml(fmText);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      frontmatter = parsed as Record<string, unknown>;
+    }
+  } catch (e) {
+    console.warn(`[VaultForge] Could not parse YAML in: ${file.path}`, e);
+  }
+
+  return {
+    frontmatter,
+    body,
+    hasFrontmatter: true,
+    file,
+  };
+}
+
+// ── Write ────────────────────────────────────────────────────────────────────
+
+/**
+ * Serializes a VaultNote back to disk.
+ * Sorts frontmatter fields into canonical order before writing.
+ * Callers are responsible for calling backupNote() before writeNote()
+ * if backup is desired.
+ *
+ * Port of Write-NoteFile from Invoke-VaultPatch.ps1.
+ */
+export async function writeNote(
+  app: App,
+  note: VaultNote
+): Promise<void> {
+  const sorted = sortFrontmatterFields(note.frontmatter);
+  const yaml = stringifyYaml(sorted).trimEnd();
+  const newContent = `---\n${yaml}\n---\n${note.body}`;
+  await app.vault.modify(note.file, newContent);
+}
+
+// ── Backup ───────────────────────────────────────────────────────────────────
+
+/**
+ * Copies a file to .vault-patch-backups/ in the same directory before modification.
+ * Backup filename includes a timestamp to prevent collisions.
+ *
+ * Port of Backup-NoteFile from Invoke-VaultPatch.ps1.
+ */
+export async function backupNote(
+  app: App,
+  file: TFile,
+  backupFolder: string
+): Promise<string | null> {
+  await ensureFolder(app, backupFolder);
+
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .replace("T", "_")
+    .substring(0, 19);
+
+  // Flatten the file path into the filename so same-named files
+  // from different folders never collide in the central backup folder.
+  const safeName = file.path.replace(/\//g, "_");
+  const backupPath = normalizePath(
+    `${backupFolder}/${safeName}.${timestamp}.bak`
+  );
+
+  try {
+    const content = await app.vault.read(file);
+    await app.vault.create(backupPath, content);
+    return backupPath;
+  } catch (e) {
+    // Non-fatal — log and continue. Backup failure should not block the patch.
+    console.warn(`[VaultForge] Could not create backup for ${file.path}:`, e);
+    return null;
+  }
+}
+
+// ── Sort frontmatter fields ───────────────────────────────────────────────────
+
+/**
+ * Returns a new object with fields in canonical schema order.
+ * Unknown fields are appended alphabetically after the known fields.
+ *
+ * Port of Sort-FrontmatterFields from Shared/Schema/Sort-FrontmatterFields.ps1.
+ */
+export function sortFrontmatterFields(
+  frontmatter: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  // Known fields first, in preferred order
+  for (const field of PREFERRED_FIELD_ORDER) {
+    if (Object.prototype.hasOwnProperty.call(frontmatter, field)) {
+      result[field] = frontmatter[field];
+    }
+  }
+
+  // Remaining fields alphabetically
+  const remaining = Object.keys(frontmatter)
+    .filter((k) => !PREFERRED_FIELD_ORDER.includes(k))
+    .sort();
+
+  for (const key of remaining) {
+    result[key] = frontmatter[key];
+  }
+
+  return result;
+}
+
+// ── Field utilities ───────────────────────────────────────────────────────────
+
+/**
+ * Returns true if a frontmatter field is present and non-empty.
+ * Handles strings, arrays, booleans, and numbers.
+ *
+ * Port of Test-FieldPresent from Invoke-VaultLint.ps1.
+ */
+export function isFieldPresent(
+  frontmatter: Record<string, unknown>,
+  fieldName: string
+): boolean {
+  if (!Object.prototype.hasOwnProperty.call(frontmatter, fieldName)) {
+    return false;
+  }
+
+  const value = frontmatter[fieldName];
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+/**
+ * Returns a frontmatter field value as a string, or empty string if absent.
+ * Arrays are joined with "; " to match the inventory CSV format.
+ *
+ * Port of Get-FmValue from Shared/Ontology/Get-FmValue.ps1.
+ */
+export function getFmString(
+  frontmatter: Record<string, unknown>,
+  fieldName: string
+): string {
+  const value = frontmatter[fieldName];
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) {
+    return value
+      .filter((v) => v !== null && v !== undefined)
+      .map((v) => String(v))
+      .join("; ");
+  }
+  return String(value);
+}

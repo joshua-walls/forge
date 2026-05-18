@@ -1,0 +1,9 @@
+{
+  "id": "vault-forge",
+  "name": "Vault Forge",
+  "version": "0.2.4",
+  "minAppVersion": "1.5.11",
+  "description": "Vault governance and operations — lint, patch, normalize, repair, and maintain a schema-driven Obsidian vault.",
+  "author": "Joshua Walls",
+  "isDesktopOnly": false
+}
