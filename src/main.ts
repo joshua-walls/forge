@@ -14,6 +14,7 @@ import { runVaultMaintenance } from "./commands/maintenance";
 import { runVaultRepair } from "./commands/repair";
 import { runRestorePatch } from "./commands/restore-patch";
 import { runRenameDataviewFolder } from "./commands/utilities";
+import { installVaultForgeDocumentation } from "./docs";
 
 export default class VaultForgePlugin extends Plugin {
   settings: VaultForgeSettings;
@@ -82,6 +83,12 @@ export default class VaultForgePlugin extends Plugin {
       callback: () => runRenameDataviewFolder(this),
     });
 
+    this.addCommand({
+      id: "install-documentation",
+      name: "Install Documentation",
+      callback: () => installVaultForgeDocumentation(this.app, this.settings),
+    });
+
     this.addSettingTab(new VaultForgeSettingsTab(this.app, this));
 
     console.log("Vault Forge loaded");
@@ -92,7 +99,16 @@ export default class VaultForgePlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) ?? {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+
+    // Migrate old saved patch path from legacy raw YAML to patch note format.
+    if (
+      !loaded.patchDefaultFile ||
+      loaded.patchDefaultFile === "System/Exports/vault-patch.yaml"
+    ) {
+      this.settings.patchDefaultFile = DEFAULT_SETTINGS.patchDefaultFile;
+    }
   }
 
   async saveSettings(): Promise<void> {

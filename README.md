@@ -1,20 +1,25 @@
 # Vault Forge
 
-Vault Forge is a schema-driven vault governance plugin for Obsidian.
+Schema-driven vault governance for Obsidian.
 
-It helps maintain vault health by validating notes against a canonical schema, normalizing frontmatter and tags, applying vault patches, and running maintenance operations.
+Vault Forge helps maintain long-lived Obsidian vaults through schema validation, linting, patch operations, frontmatter normalization, tag normalization, repair workflows, and maintenance routines.
 
-## Features
+## Getting started
 
-- Apply Vault Patch
-- Run Vault Lint
-- Validate Schema
-- Normalize Tags
-- Normalize Frontmatter
-- Vault Maintenance
-- Vault Repair
-- Remove Legacy Blocks
-- Rename Dataview Folder
+After installing and enabling the plugin, run:
+
+```text
+Vault Forge: Install Documentation
+```
+
+This installs vault-native onboarding notes under your configured Vault Forge folder, usually:
+
+```text
+System/VaultForge/Docs/
+System/VaultForge/Examples/
+```
+
+The documentation honors your configured Vault Forge path.
 
 ## Development
 
@@ -22,14 +27,6 @@ It helps maintain vault health by validating notes against a canonical schema, n
 npm install
 npm run build
 ```
-
-Copy the built files into:
-
-```text
-.vscode/plugins/vault-forge/
-```
-
-Then enable the plugin inside Obsidian.
 
 ## License
 

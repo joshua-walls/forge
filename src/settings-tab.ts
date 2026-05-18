@@ -7,7 +7,16 @@
 //   - Dynamic dropdowns populated from schema field names
 //   - Falls back to text inputs if schema not yet loaded
 
-import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, TAbstractFile, TFile, TFolder } from "obsidian";
+import {
+  App,
+  FuzzySuggestModal,
+  Notice,
+  PluginSettingTab,
+  Setting,
+  TAbstractFile,
+  TFile,
+  TFolder,
+} from "obsidian";
 import type VaultForgePlugin from "./main";
 
 export class VaultForgeSettingsTab extends PluginSettingTab {
@@ -107,118 +116,60 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
       cls: "setting-item-description",
     });
 
-    new Setting(containerEl)
-      .setName("System folder")
-      .setDesc("Root folder for all vault system files.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System")
-          .setValue(this.plugin.settings.systemFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.systemFolder = value.trim() || "System";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "System folder",
+      "Root folder for all vault system files.",
+      "systemFolder",
+      "System"
+    );
 
-    new Setting(containerEl)
-      .setName("Vault Forge folder")
-      .setDesc("Folder for Vault Forge configuration and patch archives.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/VaultForge")
-          .setValue(this.plugin.settings.vaultForgeFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.vaultForgeFolder = value.trim() || "System/VaultForge";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "Vault Forge folder",
+      "Folder for Vault Forge configuration and patch archives.",
+      "vaultForgeFolder",
+      "System/VaultForge"
+    );
 
-    new Setting(containerEl)
-      .setName("Schema note")
-      .setDesc("Path to schema.md relative to vault root.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/Registry/schema.md")
-          .setValue(`${this.plugin.settings.schemaNoteFolder}/${this.plugin.settings.schemaNoteFile}`)
-          .onChange(async (value) => {
-            const trimmed = value.trim() || "System/Registry/schema.md";
-            const lastSlash = trimmed.lastIndexOf("/");
-            this.plugin.settings.schemaNoteFolder =
-              lastSlash >= 0 ? trimmed.substring(0, lastSlash) : "System/Registry";
-            this.plugin.settings.schemaNoteFile =
-              lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : "schema.md";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderSchemaNoteSetting(containerEl);
 
-    new Setting(containerEl)
-      .setName("Exports folder")
-      .setDesc("Folder where inventory, lint reports, and indexes are written.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/Exports")
-          .setValue(this.plugin.settings.exportsFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.exportsFolder = value.trim() || "System/Exports";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "Exports folder",
+      "Folder where inventory, lint reports, and indexes are written.",
+      "exportsFolder",
+      "System/Exports"
+    );
 
-    new Setting(containerEl)
-      .setName("Patches folder")
-      .setDesc("Folder where applied patch files are archived.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/VaultForge/Patches")
-          .setValue(this.plugin.settings.patchesFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.patchesFolder = value.trim() || "System/VaultForge/Patches";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "Patches folder",
+      "Folder where applied patch files are archived.",
+      "patchesFolder",
+      "System/VaultForge/Patches"
+    );
 
-    new Setting(containerEl)
-      .setName("Inbox folder")
-      .setDesc("Folder for draft notes awaiting import.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/Inbox")
-          .setValue(this.plugin.settings.inboxFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.inboxFolder = value.trim() || "System/Inbox";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "Inbox folder",
+      "Folder for draft notes awaiting import.",
+      "inboxFolder",
+      "System/Inbox"
+    );
 
-    new Setting(containerEl)
-      .setName("Patterns folder")
-      .setDesc("Folder containing pattern notes for lint validation.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/Patterns")
-          .setValue(this.plugin.settings.patternsFolder)
-          .onChange(async (value) => {
-            this.plugin.settings.patternsFolder = value.trim() || "System/Patterns";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderFolderPathSetting(
+      containerEl,
+      "Patterns folder",
+      "Folder containing pattern notes for lint validation.",
+      "patternsFolder",
+      "System/Patterns"
+    );
 
     // ── Patch ────────────────────────────────────────────────────────
     containerEl.createEl("h2", { text: "Patch" });
 
-    new Setting(containerEl)
-      .setName("Default patch file")
-      .setDesc("Path to the patch YAML file loaded by Apply Vault Patch.")
-      .addText((text) =>
-        text
-          .setPlaceholder("System/Exports/vault-patch.yaml")
-          .setValue(this.plugin.settings.patchDefaultFile)
-          .onChange(async (value) => {
-            this.plugin.settings.patchDefaultFile =
-              value.trim() || "System/Exports/vault-patch.yaml";
-            await this.plugin.saveSettings();
-          })
-      );
+    this.renderPatchFileSetting(containerEl);
 
     new Setting(containerEl)
       .setName("Backup before patch")
@@ -377,6 +328,69 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
 
   // ── Helpers ───────────────────────────────────────────────────────
 
+  private renderFolderPathSetting(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    settingKey: keyof import("./settings").VaultForgeSettings,
+    fallback: string
+  ): void {
+    const currentValue = String(this.plugin.settings[settingKey] ?? fallback);
+
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(`${desc} Current: ${currentValue}`)
+      .addButton((btn) =>
+        btn.setButtonText("Choose").onClick(() => {
+          new FolderSuggestModal(this.app, async (folder) => {
+            const selectedPath = folder.path || fallback;
+            (this.plugin.settings as any)[settingKey] = selectedPath;
+            await this.plugin.saveSettings();
+            this.display();
+          }).open();
+        })
+      );
+  }
+
+  private renderSchemaNoteSetting(containerEl: HTMLElement): void {
+    const currentPath = `${this.plugin.settings.schemaNoteFolder}/${this.plugin.settings.schemaNoteFile}`;
+
+    new Setting(containerEl)
+      .setName("Schema note")
+      .setDesc(`Path to schema.md relative to vault root. Current: ${currentPath}`)
+      .addButton((btn) =>
+        btn.setButtonText("Choose").onClick(() => {
+          new MarkdownFileSuggestModal(this.app, async (file) => {
+            const lastSlash = file.path.lastIndexOf("/");
+            this.plugin.settings.schemaNoteFolder =
+              lastSlash >= 0 ? file.path.substring(0, lastSlash) : "";
+            this.plugin.settings.schemaNoteFile =
+              lastSlash >= 0 ? file.path.substring(lastSlash + 1) : file.path;
+            await this.plugin.saveSettings();
+            this.display();
+          }).open();
+        })
+      );
+  }
+
+  private renderPatchFileSetting(containerEl: HTMLElement): void {
+    const fallback = "System/VaultForge/Patches/vault-patch.md";
+    const currentPath = this.plugin.settings.patchDefaultFile || fallback;
+
+    new Setting(containerEl)
+      .setName("Default patch file")
+      .setDesc(`Path to the patch note loaded by Apply Vault Patch. Current: ${currentPath}`)
+      .addButton((btn) =>
+        btn.setButtonText("Choose").onClick(() => {
+          new PatchFileSuggestModal(this.app, async (file) => {
+            this.plugin.settings.patchDefaultFile = file.path;
+            await this.plugin.saveSettings();
+            this.display();
+          }).open();
+        })
+      );
+  }
+
   private renderIdentityField(
     containerEl: HTMLElement,
     name: string,
@@ -468,6 +482,31 @@ class MarkdownFileSuggestModal extends FuzzySuggestModal<TFile> {
 
   getItems(): TFile[] {
     return this.app.vault.getMarkdownFiles();
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.onChooseFile(file);
+  }
+}
+
+class PatchFileSuggestModal extends FuzzySuggestModal<TFile> {
+  constructor(
+    app: App,
+    private onChooseFile: (file: TFile) => void
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a patch note or YAML file...");
+  }
+
+  getItems(): TFile[] {
+    return this.app.vault.getFiles().filter((file) => {
+      const path = file.path.toLowerCase();
+      return path.endsWith(".md") || path.endsWith(".yaml") || path.endsWith(".yml");
+    });
   }
 
   getItemText(file: TFile): string {

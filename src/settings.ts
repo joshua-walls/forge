@@ -14,7 +14,6 @@ export interface VaultForgeSettings {
   // Override if your vault uses different field names.
   typeField: string;
   statusField: string;
-  domainField: string;
   tagsField: string;
   createdField: string;
   updatedField: string;
@@ -35,8 +34,8 @@ export interface VaultForgeSettings {
   patchBackupEnabled: boolean;        // back up files before modifying
                                       // backups go to System/VaultForge/Patches/Backups/
   patchGenerateManifest: boolean;     // write a restore manifest alongside backups
-                                      // manifest goes to System/VaultForge/Patches/
-  patchDefaultFile: string;           // System/Exports/vault-patch.yaml
+                                      // manifest goes to System/VaultForge/Patches/Reports/
+  patchDefaultFile: string;           // System/VaultForge/Patches/vault-patch.md
   patchAutoLintAfterApply: boolean;   // run lint after patch applies
   patchAutoMaintenanceAfterApply: boolean;
 
@@ -56,7 +55,6 @@ export const DEFAULT_SETTINGS: VaultForgeSettings = {
   // Identity
   typeField: "type",
   statusField: "status",
-  domainField: "domain",
   tagsField: "tags",
   createdField: "created",
   updatedField: "updated",
@@ -75,7 +73,7 @@ export const DEFAULT_SETTINGS: VaultForgeSettings = {
   // Patch
   patchBackupEnabled: true,
   patchGenerateManifest: true,
-  patchDefaultFile: "System/Exports/vault-patch.yaml",
+  patchDefaultFile: "System/VaultForge/Patches/vault-patch.md",
   patchAutoLintAfterApply: true,
   patchAutoMaintenanceAfterApply: false,
 

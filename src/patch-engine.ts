@@ -1,7 +1,7 @@
 // src/patch-engine.ts
 // Vault Forge patch engine.
 //
-// Port of Invoke-VaultPatch.ps1 — reads a vault-patch.yaml file,
+// Port of Invoke-VaultPatch.ps1 — reads a vault-patch.md or legacy YAML file,
 // resolves target files, and applies each operation.
 //
 // Operations supported:
@@ -117,7 +117,13 @@ export interface PatchFile {
 // ── Main engine ──────────────────────────────────────────────────────────────
 
 /**
- * Reads and parses a vault-patch.yaml file.
+ * Reads and parses a patch file.
+ * Preferred format:
+ *   - Markdown note containing a fenced YAML block
+ *
+ * Legacy format:
+ *   - Raw .yaml / .yml file
+ *
  * Returns null if the file cannot be found or parsed.
  */
 export async function loadPatchFile(
@@ -125,11 +131,13 @@ export async function loadPatchFile(
   patchFilePath: string
 ): Promise<PatchFile | null> {
   const file = app.vault.getAbstractFileByPath(normalizePath(patchFilePath));
+
   if (!(file instanceof TFile)) {
     return null;
   }
 
   let raw: string;
+
   try {
     raw = await app.vault.read(file);
   } catch (e) {
@@ -138,11 +146,21 @@ export async function loadPatchFile(
   }
 
   try {
-    const parsed = parseYaml(raw) as Record<string, unknown>;
+    const yamlText = extractPatchYaml(raw, patchFilePath);
+
+    if (!yamlText.trim()) {
+      console.warn(`[VaultForge] Patch file contains no YAML payload: ${patchFilePath}`);
+      return null;
+    }
+
+    const parsed = parseYaml(yamlText) as Record<string, unknown>;
+
     const meta = (parsed?.meta ?? {}) as PatchMeta;
+
     const operations = Array.isArray(parsed?.operations)
       ? (parsed.operations as PatchOperation[])
       : [];
+
     return { meta, operations };
   } catch (e) {
     console.warn(`[VaultForge] Could not parse patch YAML:`, e);
@@ -702,6 +720,18 @@ async function applyImportNote(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractPatchYaml(raw: string, patchFilePath: string): string {
+  const lowerPath = patchFilePath.toLowerCase();
+
+  if (!lowerPath.endsWith(".md")) {
+    return raw;
+  }
+
+  const match = raw.match(/```ya?ml\s*\r?\n([\s\S]*?)```/i);
+
+  return match?.[1]?.trim() ?? "";
+}
 
 function resolveFieldValue(op: PatchOperation, file: TFile): unknown {
   const hasLiteralValue = "value" in op && op.value !== undefined;

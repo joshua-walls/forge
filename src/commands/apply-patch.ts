@@ -9,7 +9,7 @@
 //   5. Show result notice
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
-import { App, Modal, Notice, Setting, normalizePath } from "obsidian";
+import { App, Modal, Notice, Setting, TFile, normalizePath } from "obsidian";
 import type VaultForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import {
@@ -24,6 +24,7 @@ import {
   writePatchReport,
 } from "../patch-manifest";
 import { runVaultLint } from "./run-lint";
+import { ensureFolder, todayString } from "../utils/files";
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -31,13 +32,24 @@ export async function runApplyPatch(plugin: VaultForgePlugin): Promise<void> {
   const { app, settings } = plugin;
   const paths = getVaultPaths(settings);
 
-  // Load patch file
-  const patchFile = await loadPatchFile(app, paths.patchFile);
+  // Load patch file. If the default patch note does not exist yet,
+  // create a schema-valid template so the user has a real note to edit.
+  let patchFile = await loadPatchFile(app, paths.patchFile);
 
   if (!patchFile) {
+    const created = await createPatchTemplateIfMissing(app, paths.patchFile);
+
+    if (created) {
+      new Notice(
+        `Vault Forge: Created patch note at ${paths.patchFile}. Add operations, then run Apply Vault Patch again.`,
+        7000
+      );
+      return;
+    }
+
     new Notice(
-      `Vault Forge: Patch file not found at ${paths.patchFile}`,
-      5000
+      `Vault Forge: Patch file not found or has no YAML block at ${paths.patchFile}`,
+      7000
     );
     return;
   }
@@ -100,6 +112,53 @@ export async function runApplyPatch(plugin: VaultForgePlugin): Promise<void> {
       await runVaultLint(plugin);
     }
   }).open();
+}
+
+async function createPatchTemplateIfMissing(
+  app: App,
+  patchPath: string
+): Promise<boolean> {
+  const normalizedPath = normalizePath(patchPath);
+  const existing = app.vault.getAbstractFileByPath(normalizedPath);
+
+  if (existing instanceof TFile) return false;
+
+  const folder = normalizedPath.includes("/")
+    ? normalizedPath.substring(0, normalizedPath.lastIndexOf("/"))
+    : "";
+
+  if (folder) await ensureFolder(app, folder);
+
+  const today = todayString();
+  const content = [
+    "---",
+    "type: procedure",
+    "status: draft",
+    "tags:",
+    "  - tool/vault-forge",
+    `created: ${today}`,
+    `updated: ${today}`,
+    "ai_private: false",
+    "review_cycle: never",
+    "---",
+    "",
+    "# Vault Patch",
+    "",
+    "Patch file for Vault Forge.",
+    "",
+    "## Patch",
+    "",
+    "```yaml",
+    "meta:",
+    "  description: Manual vault patch",
+    "",
+    "operations: []",
+    "```",
+    "",
+  ].join("\n");
+
+  await app.vault.create(normalizedPath, content);
+  return true;
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────

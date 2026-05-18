@@ -5,3 +5,4 @@ data.json
 .env
 dist/
 coverage/
+*.zip

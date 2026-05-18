@@ -1,16 +1,16 @@
 // src/patch-manifest.ts
-// Writes the restore manifest JSON and patch report note after a patch run.
+// Writes the restore manifest JSON, archives the applied patch note,
+// and writes the patch report note after a patch run.
 //
-// Restore manifest: System/VaultForge/Patches/{runId}-patch-manifest.json
-//   Simple JSON — file path + backup path for each changed file.
-//   Used by Restore Patch Run command (Milestone 7).
+// Restore manifest:
+//   System/VaultForge/Patches/Reports/{runId}-patch-manifest.json
 //
-// Patch report: System/VaultForge/Patches/{runId}-patch-report.md
-//   Human-readable note summarising the run.
-//   Queryable via Dataview. Archived alongside the manifest.
+// Patch report:
+//   System/VaultForge/Patches/Reports/{runId}-patch-report-apply.md
+//   System/Exports/{runId}-patch-report-dry-run.md
 //
-// Archived patch YAML: System/VaultForge/Patches/{runId}-vault-patch.yaml
-//   Copy of the patch file that was applied.
+// Archived patch note:
+//   System/VaultForge/Patches/Applied/{runId}-vault-patch.md
 
 import { App, TFile, normalizePath } from "obsidian";
 import type { VaultForgeSettings } from "./settings";
@@ -34,7 +34,7 @@ export async function writeRestoreManifest(
   if (result.dryRun) return;
 
   const paths = getVaultPaths(settings);
-  await ensureFolder(app, paths.patches);
+  await ensureFolder(app, paths.patchReports);
 
   const manifest = {
     run_id: result.runId,
@@ -46,7 +46,7 @@ export async function writeRestoreManifest(
   };
 
   const manifestPath = normalizePath(
-    `${paths.patches}/${result.runId}-patch-manifest.json`
+    `${paths.patchReports}/${result.runId}-patch-manifest.json`
   );
 
   await app.vault.create(manifestPath, JSON.stringify(manifest, null, 2));
@@ -55,7 +55,7 @@ export async function writeRestoreManifest(
 // ── Archive patch file ────────────────────────────────────────────────────────
 
 /**
- * Copies the applied patch YAML into the Patches archive folder.
+ * Moves the applied patch note into the Applied archive folder.
  */
 export async function archivePatchFile(
   app: App,
@@ -65,22 +65,22 @@ export async function archivePatchFile(
   if (result.dryRun) return;
 
   const paths = getVaultPaths(settings);
-  await ensureFolder(app, paths.patches);
+  await ensureFolder(app, paths.patchApplied);
 
   const sourceFile = app.vault.getAbstractFileByPath(
     normalizePath(result.patchFile)
   );
+
   if (!(sourceFile instanceof TFile)) return;
 
+  const sourceExt = sourceFile.extension || "md";
   const archivePath = normalizePath(
-    `${paths.patches}/${result.runId}-vault-patch.yaml`
+    `${paths.patchApplied}/${result.runId}-vault-patch.${sourceExt}`
   );
 
-  // Don't archive if it would overwrite (shouldn't happen with timestamp IDs)
   if (app.vault.getAbstractFileByPath(archivePath)) return;
 
-  const content = await app.vault.read(sourceFile);
-  await app.vault.create(archivePath, content);
+  await app.vault.rename(sourceFile, archivePath);
 }
 
 // ── Report note ───────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ export async function archivePatchFile(
 /**
  * Writes a human-readable patch report note.
  * For dry runs, writes to System/Exports/ as a preview.
- * For apply runs, writes to System/VaultForge/Patches/.
+ * For apply runs, writes to System/VaultForge/Patches/Reports/.
  */
 export async function writePatchReport(
   app: App,
@@ -97,7 +97,7 @@ export async function writePatchReport(
 ): Promise<string> {
   const paths = getVaultPaths(settings);
 
-  const folder = result.dryRun ? paths.exports : paths.patches;
+  const folder = result.dryRun ? paths.exports : paths.patchReports;
   await ensureFolder(app, folder);
 
   const mode = result.dryRun ? "dry-run" : "apply";
@@ -107,13 +107,14 @@ export async function writePatchReport(
 
   const changed = result.results.filter((r) => r.status === "changed");
   const skipped = result.results.filter((r) => r.status === "skipped");
-  const errors  = result.results.filter((r) => r.status === "error");
+  const errors = result.results.filter((r) => r.status === "error");
 
   const today = todayString();
 
   const content = buildReportNote(result, changed, skipped, errors, today, mode);
 
   const existing = app.vault.getAbstractFileByPath(reportPath);
+
   if (existing instanceof TFile) {
     await app.vault.modify(existing, content);
   } else {
@@ -166,30 +167,37 @@ function buildReportNote(
 
   if (errors.length > 0) {
     lines.push("## Errors", "");
+
     for (const r of errors) {
       lines.push(`- \`[${r.op}]\` \`${r.file}\` — ${r.detail}`);
     }
+
     lines.push("");
   }
 
   if (changed.length > 0) {
     lines.push("## Changed", "");
-    // Group by op
+
     const byOp = groupBy(changed, (r) => r.op);
+
     for (const [op, items] of Object.entries(byOp)) {
       lines.push(`### ${op}`, "");
+
       for (const r of items) {
         lines.push(`- \`${r.file}\` — ${r.detail}`);
       }
+
       lines.push("");
     }
   }
 
   if (skipped.length > 0) {
     lines.push("## Skipped", "");
+
     for (const r of skipped) {
       lines.push(`- \`[${r.op}]\` \`${r.file}\` — ${r.detail}`);
     }
+
     lines.push("");
   }
 
@@ -199,8 +207,11 @@ function buildReportNote(
 function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
   return arr.reduce<Record<string, T[]>>((acc, item) => {
     const k = key(item);
+
     if (!acc[k]) acc[k] = [];
+
     acc[k].push(item);
+
     return acc;
   }, {});
 }

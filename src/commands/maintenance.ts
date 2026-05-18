@@ -153,12 +153,12 @@ async function trimPatchReportNotes(
   dryRun: boolean
 ): Promise<MaintenanceResult[]> {
   const paths = getVaultPaths(settings);
-  const files = getMarkdownFiles(app, paths.patches)
+  const files = getMarkdownFiles(app, paths.patchReports)
     .filter((f) => f.name.includes("-patch-report-"))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (files.length <= settings.patchReportRetentionCount) {
-    return [{ task: "patch_reports", target: paths.patches, status: "skipped",
+    return [{ task: "patch_reports", target: paths.patchReports, status: "skipped",
       detail: `${files.length} patch report notes, within retention limit of ${settings.patchReportRetentionCount}` }];
   }
 

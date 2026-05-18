@@ -1,8 +1,6 @@
 // src/vault-paths.ts
 // Resolves all standard vault paths from settings.
 // Every command imports this — never builds paths independently.
-// Direct port of Shared/Core/Get-VaultPaths.ps1, adapted for the
-// Obsidian plugin API (no filesystem — uses vault-relative paths).
 
 import type { VaultForgeSettings } from "./settings";
 
@@ -14,7 +12,9 @@ export interface VaultPaths {
   vaultForge: string;
   configMd: string;
   patches: string;
-  patchBackups: string;      // System/VaultForge/Patches/Backups/
+  patchApplied: string;
+  patchBackups: string;
+  patchReports: string;
   indexDefinitions: string;
 
   // Exports
@@ -52,7 +52,9 @@ export function getVaultPaths(settings: VaultForgeSettings): VaultPaths {
     vaultForge,
     configMd: `${vaultForge}/config.md`,
     patches: s.patchesFolder,
+    patchApplied: `${s.patchesFolder}/Applied`,
     patchBackups: `${s.patchesFolder}/Backups`,
+    patchReports: `${s.patchesFolder}/Reports`,
     indexDefinitions: `${vaultForge}/Indexes`,
 
     // Exports
@@ -113,9 +115,6 @@ export function matchesGlob(path: string, pattern: string): boolean {
   const normPath = normalisePath(path).toLowerCase();
   const normPattern = normalisePath(pattern).toLowerCase();
 
-  // Convert glob to regex:
-  // **/ → matches zero or more path segments
-  // *   → matches any chars except /
   const regexStr =
     "^" +
     normPattern

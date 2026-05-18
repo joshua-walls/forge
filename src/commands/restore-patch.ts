@@ -1,7 +1,7 @@
 // src/commands/restore-patch.ts
 // Restore Patch Run command.
 //
-// Reads all *-patch-manifest.json files from System/VaultForge/Patches/.
+// Reads all *-patch-manifest.json files from System/VaultForge/Patches/Reports/.
 // Presents a list of past patch runs.
 // On selection, restores each file from its .bak backup.
 
@@ -33,7 +33,7 @@ export async function runRestorePatch(plugin: VaultForgePlugin): Promise<void> {
 
   // Find all manifest files
   const manifestFiles = app.vault.getFiles().filter(
-    (f) => f.path.startsWith(paths.patches) && f.name.endsWith("-patch-manifest.json")
+    (f) => f.path.startsWith(paths.patchReports) && f.name.endsWith("-patch-manifest.json")
   ).sort((a, b) => b.name.localeCompare(a.name)); // newest first
 
   if (manifestFiles.length === 0) {
