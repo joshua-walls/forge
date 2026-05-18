@@ -7,7 +7,7 @@
 //   - Dynamic dropdowns populated from schema field names
 //   - Falls back to text inputs if schema not yet loaded
 
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, TAbstractFile, TFile, TFolder } from "obsidian";
 import type VaultForgePlugin from "./main";
 
 export class VaultForgeSettingsTab extends PluginSettingTab {
@@ -420,5 +420,61 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
             })
         );
     }
+  }
+}
+
+class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
+  constructor(
+    app: App,
+    private onChooseFolder: (folder: TFolder) => void
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a folder...");
+  }
+
+  getItems(): TFolder[] {
+    const folders: TFolder[] = [];
+
+    const walk = (file: TAbstractFile) => {
+      if (file instanceof TFolder) {
+        folders.push(file);
+        for (const child of file.children) {
+          walk(child);
+        }
+      }
+    };
+
+    walk(this.app.vault.getRoot());
+    return folders;
+  }
+
+  getItemText(folder: TFolder): string {
+    return folder.path || "/";
+  }
+
+  onChooseItem(folder: TFolder): void {
+    this.onChooseFolder(folder);
+  }
+}
+
+class MarkdownFileSuggestModal extends FuzzySuggestModal<TFile> {
+  constructor(
+    app: App,
+    private onChooseFile: (file: TFile) => void
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a markdown note...");
+  }
+
+  getItems(): TFile[] {
+    return this.app.vault.getMarkdownFiles();
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.onChooseFile(file);
   }
 }
