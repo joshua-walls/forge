@@ -1,16 +1,10 @@
 // src/settings-tab.ts
 // Settings UI for Vault Forge.
 // Renders in Obsidian's Settings → Vault Forge panel.
-//
-// Field Identity section now supports:
-//   - Load from Schema button — detects field names from schema.md
-//   - Dynamic dropdowns populated from schema field names
-//   - Falls back to text inputs if schema not yet loaded
 
 import {
   App,
   FuzzySuggestModal,
-  Notice,
   PluginSettingTab,
   Setting,
   TAbstractFile,
@@ -18,6 +12,7 @@ import {
   TFolder,
 } from "obsidian";
 import type VaultForgePlugin from "./main";
+import { installVaultForgeDocumentation } from "./docs";
 
 export class VaultForgeSettingsTab extends PluginSettingTab {
   plugin: VaultForgePlugin;
@@ -31,83 +26,20 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // ── Field Identity ──────────────────────────────────────────────
-    containerEl.createEl("h2", { text: "Field Identity" });
-    containerEl.createEl("p", {
-      text: "Which frontmatter fields carry semantic meaning in your vault. Use Load from Schema to auto-detect from schema.md.",
-      cls: "setting-item-description",
-    });
-
-    // Load from Schema button
+    // ── Documentation ──────────────────────────────────────────────
     new Setting(containerEl)
-      .setName("Load from Schema")
-      .setDesc("Auto-detect field names from schema.md and update the fields below.")
+      .setName("Install Documentation")
+      .setDesc(
+        "Writes vault-native docs into your Vault Forge folder — command reference, schema guide, patch examples, and troubleshooting. Skips notes that already exist."
+      )
       .addButton((btn) => {
-        btn.setButtonText("Load from Schema").onClick(async () => {
-          await this.plugin.schemaCache.refresh();
-          const detected = this.plugin.schemaCache.detectIdentityFields(this.plugin.settings);
-
-          if (Object.keys(detected).length === 0) {
-            new Notice("Vault Forge: Could not load schema.md — check the schema path in System Paths.", 5000);
-            return;
-          }
-
-          Object.assign(this.plugin.settings, detected);
-          await this.plugin.saveSettings();
-          this.display(); // re-render with updated values
-          new Notice("Vault Forge: Field identity updated from schema.", 3000);
-        });
+        btn
+          .setButtonText("Install Docs")
+          .setCta()
+          .onClick(async () => {
+            await installVaultForgeDocumentation(this.plugin.app, this.plugin.settings);
+          });
       });
-
-    // Get field names for dropdowns
-    const fieldNames = this.plugin.schemaCache.getFieldNames();
-    const hasSchema = fieldNames.length > 0;
-
-    this.renderIdentityField(
-      containerEl,
-      "Type field",
-      "Frontmatter field that identifies what a note is.",
-      "typeField",
-      fieldNames,
-      hasSchema
-    );
-
-    this.renderIdentityField(
-      containerEl,
-      "Status field",
-      "Frontmatter field for note status.",
-      "statusField",
-      fieldNames,
-      hasSchema
-    );
-
-    this.renderIdentityField(
-      containerEl,
-      "Tags field",
-      "Frontmatter field for tags.",
-      "tagsField",
-      fieldNames,
-      hasSchema
-    );
-
-    this.renderIdentityField(
-      containerEl,
-      "Created field",
-      "Frontmatter field for creation date.",
-      "createdField",
-      fieldNames,
-      hasSchema
-    );
-
-    this.renderIdentityField(
-      containerEl,
-      "Updated field",
-      "Frontmatter field for last modified date.",
-      "updatedField",
-      fieldNames,
-      hasSchema
-    );
-
 
     // ── System Paths ────────────────────────────────────────────────
     containerEl.createEl("h2", { text: "System Paths" });
@@ -252,6 +184,18 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl)
+      .setName("Lint file links")
+      .setDesc("Wrap file paths in [[wikilinks]] in lint run notes so you can navigate directly to affected files.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.lintFileLinks)
+          .onChange(async (value) => {
+            this.plugin.settings.lintFileLinks = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     // ── Maintenance ───────────────────────────────────────────────────
     containerEl.createEl("h2", { text: "Maintenance" });
 
@@ -389,52 +333,9 @@ export class VaultForgeSettingsTab extends PluginSettingTab {
           }).open();
         })
       );
+
   }
 
-  private renderIdentityField(
-    containerEl: HTMLElement,
-    name: string,
-    desc: string,
-    settingKey: keyof import("./settings").VaultForgeSettings,
-    fieldNames: string[],
-    hasSchema: boolean
-  ): void {
-    const currentValue = String(this.plugin.settings[settingKey] ?? "");
-
-    if (hasSchema) {
-      // Render as dropdown with schema field names
-      new Setting(containerEl)
-        .setName(name)
-        .setDesc(desc)
-        .addDropdown((dd) => {
-          // Add a blank option in case the current value isn't in the schema
-          if (!fieldNames.includes(currentValue)) {
-            dd.addOption(currentValue, `${currentValue} (custom)`);
-          }
-          for (const field of fieldNames) {
-            dd.addOption(field, field);
-          }
-          dd.setValue(currentValue);
-          dd.onChange(async (value) => {
-            (this.plugin.settings as any)[settingKey] = value;
-            await this.plugin.saveSettings();
-          });
-        });
-    } else {
-      // Fallback to text input if schema not loaded
-      new Setting(containerEl)
-        .setName(name)
-        .setDesc(`${desc} (Load from Schema to see available fields)`)
-        .addText((text) =>
-          text
-            .setValue(currentValue)
-            .onChange(async (value) => {
-              (this.plugin.settings as any)[settingKey] = value.trim() || currentValue;
-              await this.plugin.saveSettings();
-            })
-        );
-    }
-  }
 }
 
 class FolderSuggestModal extends FuzzySuggestModal<TFolder> {

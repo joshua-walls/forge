@@ -57,10 +57,17 @@ export class SchemaCache {
 
   /**
    * Updates settings reference (called when settings change).
+   * Only invalidates the cache if the schema path changed — non-path settings
+   * (lint toggles, retention counts, etc.) don't affect the cached schema, so
+   * there is no reason to clear a valid cache when they change.
    */
   updateSettings(settings: VaultForgeSettings): void {
+    const oldPath = `${this.settings.schemaNoteFolder}/${this.settings.schemaNoteFile}`;
+    const newPath = `${settings.schemaNoteFolder}/${settings.schemaNoteFile}`;
     this.settings = settings;
-    this.invalidate();
+    if (oldPath !== newPath) {
+      this.invalidate();
+    }
   }
 
   // ── Schema field helpers ────────────────────────────────────────────────────
@@ -141,53 +148,4 @@ export class SchemaCache {
     }
   }
 
-  /**
-   * Detects which settings field (typeField, statusField, etc.) maps to
-   * which schema field name, based on common field type patterns.
-   * Used by the Load from Schema button in settings.
-   */
-  detectIdentityFields(settings: VaultForgeSettings): Partial<VaultForgeSettings> {
-    if (!this.cache) return {};
-
-    const allFields = [...this.cache.required_fields, ...this.cache.optional_fields];
-    const result: Partial<VaultForgeSettings> = {};
-
-    // Find enum fields that look like type/status
-    const enumFields = allFields.filter((f) => f.type === "enum");
-    const listFields  = allFields.filter((f) => f.type === "list");
-    const dateFields  = allFields.filter((f) => f.type === "date");
-    const boolFields  = allFields.filter((f) => f.type === "boolean");
-
-    // Type field — enum with the most values, or named "type"/"kind"/"noteType"
-    const typeField = allFields.find((f) =>
-      ["type", "kind", "notetype", "note_type", "category"].includes(f.name.toLowerCase())
-    ) ?? enumFields.sort((a, b) => (b.values?.length ?? 0) - (a.values?.length ?? 0))[0];
-    if (typeField) result.typeField = typeField.name;
-
-    // Status field — enum named "status"/"state"
-    const statusField = enumFields.find((f) =>
-      ["status", "state", "stage"].includes(f.name.toLowerCase())
-    );
-    if (statusField) result.statusField = statusField.name;
-
-    // Tags field — list field named "tags"/"tag"/"labels"
-    const tagsField = listFields.find((f) =>
-      ["tags", "tag", "labels", "keywords"].includes(f.name.toLowerCase())
-    );
-    if (tagsField) result.tagsField = tagsField.name;
-
-    // Created field — date named "created"/"date_created"/"created_at"
-    const createdField = dateFields.find((f) =>
-      ["created", "date_created", "created_at", "date"].includes(f.name.toLowerCase())
-    );
-    if (createdField) result.createdField = createdField.name;
-
-    // Updated field — date named "updated"/"modified"/"last_modified"
-    const updatedField = dateFields.find((f) =>
-      ["updated", "modified", "last_modified", "updated_at"].includes(f.name.toLowerCase())
-    );
-    if (updatedField) result.updatedField = updatedField.name;
-
-    return result;
-  }
 }

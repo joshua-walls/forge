@@ -313,6 +313,19 @@ class VaultRepairModal extends Modal {
     const paths = getVaultPaths(this.plugin.settings);
     const today = todayString();
 
+    // Warn if patch file already has content — don't silently overwrite
+    const existingPatch = this.app.vault.getAbstractFileByPath(paths.patchFile);
+    if (existingPatch instanceof TFile) {
+      const existing = await this.app.vault.read(existingPatch);
+      const hasOps = existing.includes("op:") || existing.includes("operations:");
+      if (hasOps) {
+        new Notice(
+          "Vault Forge: Overwriting existing patch file — previous operations will be replaced.",
+          5000
+        );
+      }
+    }
+
     const patch = {
       meta: {
         generated_at: new Date().toISOString(),

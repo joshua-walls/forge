@@ -10,7 +10,6 @@ export interface VaultPaths {
 
   // VaultForge system
   vaultForge: string;
-  configMd: string;
   patches: string;
   patchApplied: string;
   patchBackups: string;
@@ -50,7 +49,6 @@ export function getVaultPaths(settings: VaultForgeSettings): VaultPaths {
 
     // VaultForge system
     vaultForge,
-    configMd: `${vaultForge}/config.md`,
     patches: s.patchesFolder,
     patchApplied: `${s.patchesFolder}/Applied`,
     patchBackups: `${s.patchesFolder}/Backups`,

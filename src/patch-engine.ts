@@ -20,7 +20,7 @@
 // The engine collects all results and returns a PatchRunResult
 // which the command uses to write the report and manifest.
 
-import { App, TFile, normalizePath, parseYaml } from "obsidian";
+import { App, TFile, normalizePath, parseYaml, stringifyYaml } from "obsidian";
 import type { VaultForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import {
@@ -698,14 +698,10 @@ async function applyImportNote(
     if (fmMatch) body = fmMatch[1];
 
     const sorted = sortFrontmatterFields(fm);
-    const yaml = Object.keys(sorted).length > 0
-      ? `---\n${app.metadataCache ? "" : ""}${JSON.stringify(sorted)}\n---\n${body}`
-      : body;
-
-    // Use parseYaml/stringifyYaml properly
-    const { stringifyYaml } = await import("obsidian");
     const yamlStr = stringifyYaml(sorted).trimEnd();
-    const finalContent = `---\n${yamlStr}\n---\n${body}`;
+    const finalContent = Object.keys(sorted).length > 0
+      ? `---\n${yamlStr}\n---\n${body}`
+      : body;
 
     await app.vault.create(destPath, finalContent);
     await app.vault.delete(sourceFile);

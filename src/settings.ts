@@ -4,20 +4,8 @@
 // Stored in .obsidian/plugins/vault-forge/data.json via Obsidian's
 // loadData() / saveData() API. Never stored in vault notes.
 //
-// config.md (System/VaultForge/config.md) is the human-readable
-// mirror of these settings, written by the plugin whenever settings
-// change. It is never hand-edited — always regenerated from data.json.
 
 export interface VaultForgeSettings {
-  // ── Identity ──────────────────────────────────────────────────────
-  // Which frontmatter fields carry semantic meaning.
-  // Override if your vault uses different field names.
-  typeField: string;
-  statusField: string;
-  tagsField: string;
-  createdField: string;
-  updatedField: string;
-
   // ── System paths ──────────────────────────────────────────────────
   // All paths are relative to vault root.
   systemFolder: string;        // System/
@@ -42,6 +30,7 @@ export interface VaultForgeSettings {
   // ── Lint settings ─────────────────────────────────────────────────
   lintStrictMode: boolean;     // treat warnings as errors
   lintRunRetentionCount: number; // how many lint run notes to keep
+  lintFileLinks: boolean;      // wrap file paths in [[wikilinks]] in lint run notes
 
   // ── Maintenance settings ──────────────────────────────────────────
   backupRetentionDays: number;
@@ -52,13 +41,6 @@ export interface VaultForgeSettings {
 }
 
 export const DEFAULT_SETTINGS: VaultForgeSettings = {
-  // Identity
-  typeField: "type",
-  statusField: "status",
-  tagsField: "tags",
-  createdField: "created",
-  updatedField: "updated",
-
   // System paths
   systemFolder: "System",
   vaultForgeFolder: "System/VaultForge",
@@ -80,6 +62,7 @@ export const DEFAULT_SETTINGS: VaultForgeSettings = {
   // Lint
   lintStrictMode: false,
   lintRunRetentionCount: 20,
+  lintFileLinks: false,
 
   // Maintenance
   backupRetentionDays: 14,

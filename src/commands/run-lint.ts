@@ -25,7 +25,12 @@ import { runVaultRepair } from "./repair";
 export async function runVaultLint(plugin: VaultForgePlugin): Promise<LintRunResult | null> {
   const { app, settings } = plugin;
 
-  new Notice("Vault Forge: Running lint…", 2000);
+  const noteCount = app.vault.getMarkdownFiles().length;
+  const estimatedSeconds = Math.max(3, Math.ceil(noteCount / 200));
+  new Notice(
+    `Vault Forge: Running lint on ${noteCount} notes… (may take ~${estimatedSeconds}s on large vaults)`,
+    estimatedSeconds * 1000
+  );
 
   const result = await runLint(app, settings);
 

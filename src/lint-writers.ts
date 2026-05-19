@@ -133,7 +133,7 @@ export async function writeLintRunNote(
   const notePath = normalizePath(`${paths.lintRuns}/lint-run-${safeTs}.md`);
   const today = todayString();
 
-  const content = buildLintRunNote(run, today);
+  const content = buildLintRunNote(run, today, settings.lintFileLinks);
 
   const existing = app.vault.getAbstractFileByPath(notePath);
   if (existing instanceof TFile) {
@@ -145,7 +145,7 @@ export async function writeLintRunNote(
   return notePath;
 }
 
-function buildLintRunNote(run: LintRunResult, today: string): string {
+function buildLintRunNote(run: LintRunResult, today: string, fileLinks: boolean): string {
   const lines: string[] = [
     "---",
     "type: reference",
@@ -184,11 +184,27 @@ function buildLintRunNote(run: LintRunResult, today: string): string {
   ]) {
     if (items.length === 0) continue;
     lines.push(`## ${label}`, "");
+
+    // Group by rule, then list all affected files under each rule heading
+    const byRule = new Map<string, { files: string[]; message: string }>();
     for (const r of items) {
-      lines.push(`- **[${r.rule}]** \`${r.file}\``);
-      lines.push(`  ${r.message}`);
+      if (!byRule.has(r.rule)) {
+        byRule.set(r.rule, { files: [], message: r.message });
+      }
+      byRule.get(r.rule)!.files.push(r.file);
     }
-    lines.push("");
+
+    for (const [rule, { files, message }] of byRule) {
+      lines.push(`### \`[${rule}]\``);
+      lines.push("");
+      lines.push(message);
+      lines.push("");
+      for (const file of files) {
+        const fileRef = fileLinks ? `[[${file}]]` : `\`${file}\``;
+        lines.push(`- ${fileRef}`);
+      }
+      lines.push("");
+    }
   }
 
   return lines.join("\n");

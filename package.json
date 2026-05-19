@@ -1,6 +1,6 @@
 {
   "name": "vault-forge",
-  "version": "0.2.7",
+  "version": "0.3.9",
   "description": "Vault governance and operations plugin for Obsidian",
   "main": "main.js",
   "scripts": {
