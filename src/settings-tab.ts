@@ -947,7 +947,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     el.createEl("h3", { text: "Template Field Configuration" });
     el.createEl("p", {
       text: "Configure which schema fields appear in generated templates and what value each gets. " +
-            "The type target field always receives the shape name. " +
+            "The type target field always receives the shape name and is excluded here. " +
             "created and updated are set automatically at runtime.",
       cls: "setting-item-description",
     });
@@ -989,6 +989,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         dd.onChange(async (v) => {
           s.shapeTypeTargetField = v;
           await this.plugin.saveSettings();
+          this.display();
         });
       });
   }
@@ -1025,7 +1026,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         : allFields;
 
       // Filter out runtime fields
-      const runtimeFields = new Set(["created", "updated"]);
+      const runtimeFields = new Set(["created", "updated", s.shapeTypeTargetField].filter(Boolean));
       const configurable = ordered.filter((f) => !runtimeFields.has(f.name));
 
       if (configurable.length === 0) {
@@ -1048,7 +1049,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
       // Runtime fields note
       container.createEl("p", {
-        text: "created and updated are set automatically and are not configurable here.",
+        text: "The type target field, created, and updated are set automatically and are not configurable here.",
         cls: "setting-item-description forge-shape-runtime-note",
       });
     });
