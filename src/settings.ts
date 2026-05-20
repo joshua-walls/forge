@@ -64,6 +64,13 @@ export interface ForgeSettings {
   shapesEnabled: boolean;
   shapesFolder: string;              // System/Shapes/
 
+  // Template refinement
+  shapeRefinementEnabled: boolean;
+  shapeTemplatesFolder: string;      // folder where templates are written
+  shapeTypeTargetField: string;      // schema field that receives the shape name (e.g. "type", "kind")
+  shapeTemplateFields: Record<string, { include: boolean; value: unknown }>;
+  // ^ keyed by field name; created/updated are runtime-only, never stored here
+
   // ── General: frontmatter field order ────────────────────────────
   // Controls the canonical sort order applied by writeNote() and the
   // sort_frontmatter patch operation. Fields not in this list are
@@ -126,6 +133,10 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   // Shapes
   shapesEnabled: false,
   shapesFolder: "System/Shapes",
+  shapeRefinementEnabled: false,
+  shapeTemplatesFolder: "System/Templates",
+  shapeTypeTargetField: "type",
+  shapeTemplateFields: {},
 
   // Frontmatter field order
   frontmatterFieldOrder: [],

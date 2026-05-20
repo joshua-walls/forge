@@ -16,6 +16,7 @@ import { runRenameDataviewFolder } from "./commands/utilities";
 import { installVaultForgeDocumentation } from "./docs";
 import { runExportOverview } from "./commands/export-overview";
 import { runExportOntology } from "./commands/export-ontology";
+import { runRefineShapes } from "./commands/refine-shapes";
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -157,6 +158,17 @@ export default class ForgePlugin extends Plugin {
         runExportOntology(this).catch((e: Error) => {
           new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
           console.error("[Forge] export-ontology-index error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "refine-shapes",
+      name: "Refine Shape Templates",
+      callback: () => {
+        runRefineShapes(this).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] refine-shapes error:", e);
         });
       },
     });

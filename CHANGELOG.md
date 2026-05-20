@@ -1,3 +1,26 @@
+# 0.6.0
+
+## Added
+
+- **Vault Shape Engine** — new **Settings → Shapes** tab; enable shape note processing and template refinement
+- **Shape notes** — markdown notes in the configured shapes folder with `type: shape` and a `# Structure` section; the structure body becomes the generated template body
+- **Template refinement** — new command **Refine Shape Templates**; reads each shape note, builds template frontmatter from configured field values, and writes or updates the corresponding template note in the templates folder
+- **Templates folder** — configurable per-vault under Settings → Shapes; defaults to `System/Templates`
+- **Type target field** — configurable schema field that receives the shape name at generation time (e.g. `type`, `kind`, or any schema field)
+- **Template field configurator** — per-field include toggle and explicit value picker for every schema field; enum fields get a dropdown of valid values, boolean fields get a true/false picker, list fields get a CSV input, all others get a text input; fields are ordered by the frontmatter field order setting
+- `created` is preserved on existing templates; `updated` is always stamped at runtime; neither is configurable
+- **Refine Shape Templates** registered as a vault command; also runnable via the Run button in Settings → Shapes
+
+## Changed
+
+- `vault-paths.ts` `templates` path now driven by `shapeTemplatesFolder` setting instead of being hardcoded to `System/Templates`; all existing callers pick this up automatically
+
+## Fixed
+
+- Template body extraction now correctly captures the full `# Structure` section including all subsections and trailing content; previous regex used `\z` (a Perl anchor invalid in JavaScript) causing silent truncation
+
+----
+
 # 0.5.6
 
 ## Added

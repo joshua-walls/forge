@@ -65,7 +65,7 @@ export function getVaultPaths(settings: ForgeSettings): VaultPaths {
 
     // Vault structure
     shapes: s.shapesFolder,
-    templates: `${s.systemFolder}/Templates`,
+    templates: s.shapeTemplatesFolder || `${s.systemFolder}/Templates`,
     inbox: s.inboxFolder,
     dashboards: `${s.systemFolder}/Dashboards`,
 

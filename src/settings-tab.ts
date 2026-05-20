@@ -876,30 +876,307 @@ export class ForgeSettingsTab extends PluginSettingTab {
   // ── Shapes ──────────────────────────────────────────────────────────────
 
   private renderShapes(el: HTMLElement): void {
+    const s = this.plugin.settings;
+
+    // ── Enable ────────────────────────────────────────────────────
     new Setting(el)
       .setName("Enable Vault Shape Engine")
-      .setDesc("Shape-based analysis and reporting. Coming soon.")
+      .setDesc("Enables shape note processing and template refinement.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.shapesEnabled).onChange(async (v) => {
-          this.plugin.settings.shapesEnabled = v;
+        t.setValue(s.shapesEnabled).onChange(async (v) => {
+          s.shapesEnabled = v;
           await this.plugin.saveSettings();
           this.display();
         })
       );
 
+    if (!s.shapesEnabled) return;
+
+    // ── Folders ───────────────────────────────────────────────────
+    el.createEl("h3", { text: "Folders" });
+
     this.renderFolderPicker(
       el,
       "Shapes folder",
-      "Folder containing shape notes for lint validation.",
+      "Folder containing shape notes (type: shape, with a # Structure section).",
       "shapesFolder",
       "System/Shapes"
     );
 
-    const placeholder = el.createDiv({ cls: "forge-coming-soon" });
-    placeholder.createEl("p", {
-      text: "🔜 Vault Shape Engine is coming in a future release.",
+    // ── Template Refinement ───────────────────────────────────────
+    el.createEl("h3", { text: "Template Refinement" });
+    el.createEl("p", {
+      text: "When enabled, the 'Refine Shape Templates' command reads each shape note " +
+            "and writes or updates the corresponding template note.",
       cls: "setting-item-description",
     });
+
+    new Setting(el)
+      .setName("Enable template refinement")
+      .setDesc("Allow the Refine Shape Templates command to create and update template notes.")
+      .addToggle((t) =>
+        t.setValue(s.shapeRefinementEnabled).onChange(async (v) => {
+          s.shapeRefinementEnabled = v;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (!s.shapeRefinementEnabled) return;
+
+    this.renderFolderPicker(
+      el,
+      "Templates folder",
+      "Folder where template notes are written.",
+      "shapeTemplatesFolder",
+      "System/Templates"
+    );
+
+    // ── Run button ────────────────────────────────────────────────
+    new Setting(el)
+      .setName("Run refinement")
+      .setDesc("Process all shape notes and write or update template notes now.")
+      .addButton((btn) =>
+        btn.setButtonText("Refine Shape Templates").setCta().onClick(async () => {
+          const { runRefineShapes } = await import("./commands/refine-shapes");
+          await runRefineShapes(this.plugin);
+        })
+      );
+
+    // ── Field configuration ───────────────────────────────────────
+    el.createEl("h3", { text: "Template Field Configuration" });
+    el.createEl("p", {
+      text: "Configure which schema fields appear in generated templates and what value each gets. " +
+            "The type target field always receives the shape name. " +
+            "created and updated are set automatically at runtime.",
+      cls: "setting-item-description",
+    });
+
+    // Type target field — dropdown of all schema field names
+    this.renderShapeTypeTargetField(el);
+
+    // Per-field configurator — rendered async from schema
+    this.renderShapeFieldConfigurator(el);
+  }
+
+  private renderShapeTypeTargetField(el: HTMLElement): void {
+    const s = this.plugin.settings;
+
+    new Setting(el)
+      .setName("Type target field")
+      .setDesc(
+        "The schema field that receives the shape name when a template is generated. " +
+        "Load schema to populate this dropdown."
+      )
+      .addDropdown(async (dd) => {
+        dd.addOption("", "— load schema to populate —");
+
+        const schema = await loadSchema(this.plugin.app, s);
+        if (schema) {
+          const allFields = [
+            ...schema.required_fields.map((f) => f.name),
+            ...schema.optional_fields.map((f) => f.name),
+          ];
+          for (const name of allFields) {
+            dd.addOption(name, name);
+          }
+          const current = s.shapeTypeTargetField || "type";
+          dd.setValue(allFields.includes(current) ? current : (allFields[0] ?? ""));
+        } else {
+          dd.setValue(s.shapeTypeTargetField || "");
+        }
+
+        dd.onChange(async (v) => {
+          s.shapeTypeTargetField = v;
+          await this.plugin.saveSettings();
+        });
+      });
+  }
+
+  private renderShapeFieldConfigurator(el: HTMLElement): void {
+    const s = this.plugin.settings;
+
+    const container = el.createDiv({ cls: "forge-shape-fields" });
+
+    // Load schema and render field rows
+    loadSchema(this.plugin.app, s).then((schema) => {
+      if (!schema) {
+        container.createEl("p", {
+          text: "Could not load schema. Ensure schema.md exists and is valid.",
+          cls: "setting-item-description",
+        });
+        return;
+      }
+
+      const allFields = [
+        ...schema.required_fields,
+        ...schema.optional_fields,
+      ];
+
+      // Order by frontmatterFieldOrder if set
+      const order = s.frontmatterFieldOrder;
+      const ordered = order.length > 0
+        ? [
+            ...order
+              .map((name) => allFields.find((f) => f.name === name))
+              .filter((f): f is NonNullable<typeof f> => f != null),
+            ...allFields.filter((f) => !order.includes(f.name)),
+          ]
+        : allFields;
+
+      // Filter out runtime fields
+      const runtimeFields = new Set(["created", "updated"]);
+      const configurable = ordered.filter((f) => !runtimeFields.has(f.name));
+
+      if (configurable.length === 0) {
+        container.createEl("p", {
+          text: "No configurable fields found in schema.",
+          cls: "setting-item-description",
+        });
+        return;
+      }
+
+      // Header row
+      const header = container.createDiv({ cls: "forge-shape-field-header" });
+      header.createSpan({ text: "Include", cls: "forge-shape-field-col-include" });
+      header.createSpan({ text: "Field", cls: "forge-shape-field-col-name" });
+      header.createSpan({ text: "Value", cls: "forge-shape-field-col-value" });
+
+      for (const field of configurable) {
+        this.renderShapeFieldRow(container, field, s);
+      }
+
+      // Runtime fields note
+      container.createEl("p", {
+        text: "created and updated are set automatically and are not configurable here.",
+        cls: "setting-item-description forge-shape-runtime-note",
+      });
+    });
+  }
+
+  private renderShapeFieldRow(
+    container: HTMLElement,
+    field: import("./utils/schema").SchemaField,
+    s: import("./settings").ForgeSettings
+  ): void {
+    const fieldName = field.name;
+    const existing = s.shapeTemplateFields[fieldName] ?? { include: false, value: "" };
+
+    const row = container.createDiv({ cls: "forge-shape-field-row" });
+
+    // Include toggle
+    const includeWrap = row.createDiv({ cls: "forge-shape-field-col-include" });
+    const checkbox = includeWrap.createEl("input", { type: "checkbox" });
+    checkbox.checked = existing.include;
+
+    // Field name
+    row.createSpan({ text: fieldName, cls: "forge-shape-field-col-name forge-field-name" });
+
+    // Value control
+    const valueWrap = row.createDiv({ cls: "forge-shape-field-col-value" });
+    const valueControl = this.createShapeFieldValueControl(valueWrap, field, existing.value, existing.include);
+
+    const save = async () => {
+      s.shapeTemplateFields[fieldName] = {
+        include: checkbox.checked,
+        value: valueControl.getValue(),
+      };
+      await this.plugin.saveSettings();
+    };
+
+    checkbox.addEventListener("change", async () => {
+      valueControl.setEnabled(checkbox.checked);
+      await save();
+    });
+    valueControl.setEnabled(existing.include);
+    valueControl.onChanged(save);
+  }
+
+  private createShapeFieldValueControl(
+    container: HTMLElement,
+    field: import("./utils/schema").SchemaField,
+    currentValue: unknown,
+    enabled: boolean
+  ): { getValue: () => unknown; setEnabled: (v: boolean) => void; onChanged: (cb: () => void) => void } {
+    let onChange: (() => void) | null = null;
+    const notify = () => onChange?.();
+
+    if (field.type === "enum" && field.values && field.values.length > 0) {
+      // Dropdown
+      const select = container.createEl("select", { cls: "forge-shape-field-select" });
+      const emptyOpt = select.createEl("option", { value: "", text: "— none —" });
+      for (const val of field.values) {
+        const opt = select.createEl("option", { value: val, text: val });
+        if (val === String(currentValue ?? "")) opt.selected = true;
+      }
+      if (!currentValue) emptyOpt.selected = true;
+
+      select.addEventListener("change", notify);
+
+      return {
+        getValue: () => select.value || "",
+        setEnabled: (v) => { select.disabled = !v; },
+        onChanged: (cb) => { onChange = cb; },
+      };
+    }
+
+    if (field.type === "boolean") {
+      // Boolean dropdown
+      const select = container.createEl("select", { cls: "forge-shape-field-select" });
+      select.createEl("option", { value: "", text: "— none —" });
+      select.createEl("option", { value: "true", text: "true" });
+      select.createEl("option", { value: "false", text: "false" });
+      const strVal = currentValue === true ? "true" : currentValue === false ? "false" : "";
+      select.value = strVal;
+      select.addEventListener("change", notify);
+
+      return {
+        getValue: () => {
+          if (select.value === "true") return true;
+          if (select.value === "false") return false;
+          return "";
+        },
+        setEnabled: (v) => { select.disabled = !v; },
+        onChanged: (cb) => { onChange = cb; },
+      };
+    }
+
+    if (field.type === "list") {
+      // Comma-separated text input — stored as string[], displayed as CSV
+      const input = container.createEl("input", {
+        type: "text",
+        cls: "forge-shape-field-input",
+        attr: { placeholder: "value1, value2" },
+      });
+      const arr = Array.isArray(currentValue) ? (currentValue as string[]).join(", ") : String(currentValue ?? "");
+      input.value = arr;
+      input.addEventListener("input", notify);
+
+      return {
+        getValue: () =>
+          input.value
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean),
+        setEnabled: (v) => { input.disabled = !v; },
+        onChanged: (cb) => { onChange = cb; },
+      };
+    }
+
+    // Default: text input (string, date, version, unknown)
+    const input = container.createEl("input", {
+      type: "text",
+      cls: "forge-shape-field-input",
+      attr: { placeholder: field.type === "date" ? "yyyy-MM-dd" : "" },
+    });
+    input.value = String(currentValue ?? "");
+    input.addEventListener("input", notify);
+
+    return {
+      getValue: () => input.value.trim(),
+      setEnabled: (v) => { input.disabled = !v; },
+      onChanged: (cb) => { onChange = cb; },
+    };
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
@@ -1310,6 +1587,70 @@ export class ForgeSettingsTab extends PluginSettingTab {
       }
       .forge-field-order-add-btn:hover {
         background: var(--background-modifier-hover);
+      }
+      .forge-shape-fields {
+        margin: 8px 0 16px 0;
+        border: 1px solid var(--background-modifier-border);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .forge-shape-field-header {
+        display: grid;
+        grid-template-columns: 48px 180px 1fr;
+        gap: 8px;
+        padding: 6px 12px;
+        background: var(--background-secondary);
+        border-bottom: 1px solid var(--background-modifier-border);
+        font-size: var(--font-ui-smaller);
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      .forge-shape-field-row {
+        display: grid;
+        grid-template-columns: 48px 180px 1fr;
+        gap: 8px;
+        padding: 6px 12px;
+        align-items: center;
+        border-bottom: 1px solid var(--background-modifier-border-hover);
+      }
+      .forge-shape-field-row:last-of-type {
+        border-bottom: none;
+      }
+      .forge-shape-field-col-include {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .forge-shape-field-col-name {
+        font-size: var(--font-ui-small);
+      }
+      .forge-shape-field-col-value {
+        display: flex;
+        align-items: center;
+      }
+      .forge-field-name {
+        font-family: var(--font-monospace);
+        color: var(--text-normal);
+      }
+      .forge-shape-field-select,
+      .forge-shape-field-input {
+        width: 100%;
+        padding: 3px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--background-modifier-border);
+        background: var(--background-primary);
+        color: var(--text-normal);
+        font-size: var(--font-ui-small);
+      }
+      .forge-shape-field-select:disabled,
+      .forge-shape-field-input:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .forge-shape-runtime-note {
+        padding: 8px 12px;
+        border-top: 1px solid var(--background-modifier-border);
+        margin: 0;
       }
     `;
     this.containerEl.appendChild(style);
