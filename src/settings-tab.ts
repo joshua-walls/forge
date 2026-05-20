@@ -567,7 +567,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Export Vault Overview")
-      .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-overview.md in one pass. Inventory is schema-optional; meta requires schema and excludes ai_private notes.")
+      .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-overview.md in one pass. Inventory is schema-optional; meta requires schema.")
       .addButton((btn) =>
         btn.setButtonText("Run").onClick(async () => {
           runExportOverview(this.plugin).catch((e: Error) => {
