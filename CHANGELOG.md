@@ -1,11 +1,9 @@
-```markdown
 # 0.5.5
 
 ## Added
 
 - **Lint inline metadata toggle** — new setting under **Settings → Lint**; when disabled, all inline metadata rules are skipped (`inline_is_schema_field`, `inline_fuzzy_schema`, `inline_fuzzy_inline`, `inline_undocumented`); default on; existing behaviour unchanged
 - `4.Linting.md` updated with inline metadata rule descriptions and toggle guidance
-```
 
 ----
 
