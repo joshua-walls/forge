@@ -100,16 +100,16 @@ System/Forge/
 
 ## Recommended reading order
 
-1. [Start Here](0.START-HERE.md)
-2. [Installation](1.Installation.md)
-3. [Vault Structure](2.Vault-Structure.md)
-4. [Schema](3.Schema.md)
-5. [Linting](4.Linting.md)
-6. [Patches](5.Patches.md)
-7. [Commands](6.Commands.md)
-8. [Settings](7.Settings.md)
-9. [Troubleshooting](8.Troubleshooting.md)
-10. [Export](9.Export.md)
+1. [Start Here](docs/0.START-HERE.md)
+2. [Installation](docs/1.Installation.md)
+3. [Vault Structure](docs/2.Vault-Structure.md)
+4. [Schema](docs/3.Schema.md)
+5. [Linting](docs/4.Linting.md)
+6. [Patches](docs/5.Patches.md)
+7. [Commands](docs/6.Commands.md)
+8. [Settings](docs/7.Settings.md)
+9. [Troubleshooting](docs/8.Troubleshooting.md)
+10. [Export](docs/9.Export.md)
 
 ---
 
