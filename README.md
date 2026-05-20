@@ -98,18 +98,18 @@ System/Forge/
 ├── Patches/
 ```
 
-Recommended reading order:
+## Recommended reading order
 
-1. 0.START-HERE.md
-2. 1.Installation.md
-3. 2.Vault-Structure.md
-4. 3.Schema.md
-5. 4.Linting.md
-6. 5.Patches.md
-7. 6.Commands.md
-8. 7.Settings.md
-9. 8.Troubleshooting.md
-10. 9.Export.md
+1. [Start Here](0.START-HERE.md)
+2. [Installation](1.Installation.md)
+3. [Vault Structure](2.Vault-Structure.md)
+4. [Schema](3.Schema.md)
+5. [Linting](4.Linting.md)
+6. [Patches](5.Patches.md)
+7. [Commands](6.Commands.md)
+8. [Settings](7.Settings.md)
+9. [Troubleshooting](8.Troubleshooting.md)
+10. [Export](9.Export.md)
 
 ---
 
