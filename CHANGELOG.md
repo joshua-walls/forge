@@ -1,3 +1,21 @@
+# 0.7.0
+
+## Added
+
+- **Shape heading validation** — new toggle under **Settings → Shapes → Shape Lint**; when enabled, lint runs validate note heading structure against the corresponding shape template
+- `shape_heading_missing` — heading required by the template is absent from the note; non-strict: `warning`, strict: `error`
+- `shape_heading_order` — template headings are present but in the wrong relative order; always `error`
+- `shape_heading_extra` — heading in the note not found in the template; H1: always `error`, H2+: non-strict: `info`, strict: `warning`
+- `shape_section_empty` — a required section exists but has no content; non-strict: `warning`, strict: `error`
+- `src/commands/shape-lint.ts` — new module; heading extraction, template cache, and all shape lint rule implementations
+
+## Changed
+
+- `lint-engine.ts` — builds a shape heading cache once per lint run before the file loop; passes it into per-file lint; shape rules are only evaluated when `shapeLintEnabled` is true and a matching template exists
+- Shape lint severity follows the existing **Settings → Lint → Strict mode** toggle; no separate strictness setting
+
+----
+
 # 0.6.1
 
 ## Added
