@@ -161,6 +161,18 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
+    new Setting(el)
+      .setName("Lint inline metadata")
+      .setDesc(
+        "Check inline metadata (key:: value patterns) against the schema. Disable to skip all inline metadata rules."
+      )
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.lintInlineMetadata).onChange(async (v) => {
+          this.plugin.settings.lintInlineMetadata = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
     // ── Stale Note Review ─────────────────────────────────────────────
     el.createEl("h3", { text: "Stale Note Review" });
 

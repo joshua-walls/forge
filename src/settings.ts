@@ -20,6 +20,7 @@ export interface ForgeSettings {
   lintStrictMode: boolean;
   lintRunRetentionCount: number;
   lintFileLinks: boolean;
+  lintInlineMetadata: boolean;
 
   // ── Stale review (under Lint tab) ────────────────────────────────
   staleReviewEnabled: boolean;
@@ -76,6 +77,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   lintStrictMode: false,
   lintRunRetentionCount: 20,
   lintFileLinks: false,
+  lintInlineMetadata: true,
 
   // Stale review
   staleReviewEnabled: false,

@@ -85,7 +85,7 @@ export async function runLint(
   const allResults: LintResult[] = [];
 
   for (const file of allFiles) {
-    const fileResults = await lintFile(app, file, schema, validShapes);
+    const fileResults = await lintFile(app, file, schema, validShapes, settings);
     allResults.push(...fileResults);
   }
 
@@ -119,7 +119,8 @@ async function lintFile(
   app: App,
   file: TFile,
   schema: VaultSchema,
-  validShapes: string[]
+  validShapes: string[],
+  settings: ForgeSettings
 ): Promise<LintResult[]> {
   const note = await readNote(app, file);
   const results: LintResult[] = [];
@@ -153,7 +154,9 @@ async function lintFile(
   results.push(...testTagNamespaces(file.path, fm, schema));
 
   // Inline metadata
-  results.push(...testInlineMetadata(file.path, content, schema));
+  if (settings.lintInlineMetadata) {
+    results.push(...testInlineMetadata(file.path, content, schema));
+  }
 
   return results;
 }
