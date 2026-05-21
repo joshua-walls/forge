@@ -44,30 +44,14 @@ function docFolderPlugin() {
             };
           }
 
-          // Recursively collect all .md files under folderPath.
-          // Keys use forward-slash relative paths without .md extension
-          // (e.g. "getting-started/install") so the installer can
-          // recreate the subfolder structure in the vault.
-          const collectFiles = (dir, base = "") => {
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
-            const results = [];
-            for (const entry of entries) {
-              const rel = base ? `${base}/${entry.name}` : entry.name;
-              if (entry.isDirectory()) {
-                results.push(...collectFiles(path.join(dir, entry.name), rel));
-              } else if (entry.isFile() && entry.name.endsWith(".md")) {
-                results.push(rel);
-              }
-            }
-            return results.sort();
-          };
-
-          const files = collectFiles(folderPath);
+          const files = fs.readdirSync(folderPath)
+            .filter((f) => f.endsWith(".md"))
+            .sort();
 
           // Generate: export default { "KEY": "...content..." }
-          const entries = files.map((relativePath) => {
-            const key = relativePath.replace(/\.md$/, "");
-            const content = fs.readFileSync(path.join(folderPath, relativePath), "utf8");
+          const entries = files.map((filename) => {
+            const key = filename.replace(/\.md$/, "");
+            const content = fs.readFileSync(path.join(folderPath, filename), "utf8");
             // Escape backticks and template literals in content
             const escaped = content
               .replace(/\\/g, "\\\\")
