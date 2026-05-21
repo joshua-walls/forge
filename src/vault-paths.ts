@@ -28,6 +28,7 @@ export interface VaultPaths {
   templates: string;
   inbox: string;
   dashboards: string;
+  shapeRepairHistory: string;
 
   // Patch
   patchFile: string;
@@ -68,6 +69,7 @@ export function getVaultPaths(settings: ForgeSettings): VaultPaths {
     templates: s.shapeTemplatesFolder || `${s.systemFolder}/Templates`,
     inbox: s.inboxFolder,
     dashboards: `${s.systemFolder}/Dashboards`,
+    shapeRepairHistory: `${s.exportsFolder}/shape-repair-history.json`,
 
     // Patch
     patchFile: s.patchDefaultFile,

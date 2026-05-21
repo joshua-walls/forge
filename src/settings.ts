@@ -63,7 +63,10 @@ export interface ForgeSettings {
   // ── Shapes settings ─────────────────────────────────────────────
   shapesEnabled: boolean;
   shapesFolder: string;              // System/Shapes/
-  shapeLintEnabled: boolean;         // validate heading structure against templates
+  shapeIncludeSubfolders: boolean;   // walk subfolders when gathering shape notes
+  shapeLintEnabled: boolean;
+  shapeLintScope: "all" | "folder";    // validate all vault notes or selected folders only
+  shapeLintFolders: string[];          // folders to lint when scope is "folder"
 
   // Template refinement
   shapeRefinementEnabled: boolean;
@@ -73,6 +76,14 @@ export interface ForgeSettings {
   shapeUpdatedField: string;         // date field stamped on every write (blank = skip)
   shapeTemplateFields: Record<string, { include: boolean; value: unknown }>;
   // ^ keyed by field name; created/updated are runtime-only, never stored here
+
+  // Shape Repair
+  shapeRepairEnabled: boolean;
+  shapeRepairScope: "all" | "folder";         // repair all vault notes or selected folders only
+  shapeRepairFolders: string[];               // folders to repair when scope is "folder"
+  shapeRepairRunsFolder: string;              // folder where repair run notes are written
+  shapeRepairFileLinks: boolean;              // wrap file paths in [[wikilinks]] in run notes
+  shapeRepairHistoryRetentionCount: number;   // max entries in shape-repair-history.json
 
   // ── General: frontmatter field order ────────────────────────────
   // Controls the canonical sort order applied by writeNote() and the
@@ -136,13 +147,24 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   // Shapes
   shapesEnabled: false,
   shapesFolder: "System/Shapes",
+  shapeIncludeSubfolders: false,
   shapeLintEnabled: false,
+  shapeLintScope: "all",
+  shapeLintFolders: [],
   shapeRefinementEnabled: false,
   shapeTemplatesFolder: "System/Templates",
   shapeTypeTargetField: "type",
   shapeCreatedField: "created",
   shapeUpdatedField: "updated",
   shapeTemplateFields: {},
+
+  // Shape Repair
+  shapeRepairEnabled: false,
+  shapeRepairScope: "all",
+  shapeRepairFolders: [],
+  shapeRepairRunsFolder: "System/Exports/ShapeRepairRuns",
+  shapeRepairFileLinks: false,
+  shapeRepairHistoryRetentionCount: 20,
 
   // Frontmatter field order
   frontmatterFieldOrder: [],

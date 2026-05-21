@@ -2,17 +2,21 @@
 // Shape heading validation — part of the standard lint pass.
 //
 // Rules:
-//   shape_heading_missing  — a heading required by the template is absent from the note
+//   shape_heading_missing  — a heading required by the template is absent from
+//                            the note at the correct level under the correct parent
 //   shape_heading_order    — template headings are present but in the wrong order
-//   shape_heading_extra    — a heading exists in the note that is not in the template
-//                            H1 extra = error (non-strict) / error (strict)
+//                            within their parent section
+//   shape_heading_extra    — a heading exists in the note that is not in the
+//                            template at that level under that parent
+//                            H1 extra = warning (non-strict) / error (strict)
 //                            H2+ extra = info (non-strict) / warning (strict)
-//   shape_section_empty    — a heading required by the template has no content
-//                            non-strict = warning, strict = error
+//   shape_section_empty    — a heading required by the template has no direct
+//                            non-heading content beneath it
+//                            non-strict = info, strict = warning
 //
-// Matching: the note's type target field value (e.g. type: capability) is used
-// to resolve the template filename (e.g. Template, Capability.md).
-// Notes with no matching template are skipped silently.
+// Matching: text + level + parent chain. A heading only satisfies a template
+// node if it has the correct text, the correct level, AND sits under the
+// correct parent heading in the note. This matches the repair engine exactly.
 
 import { App, TFile, TFolder } from "obsidian";
 import type { ForgeSettings } from "../settings";
@@ -22,9 +26,61 @@ import { readNote } from "../utils/frontmatter";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ParsedHeading {
-  level: number;   // 1–6
-  text: string;    // heading text without the # prefix
+  level: number;    // 1–6
+  text: string;     // heading text without the # prefix
   lineIndex: number;
+}
+
+// ── Template tree ─────────────────────────────────────────────────────────────
+//
+// Shared with shape-repair.ts. Exported so both commands use the same tree
+// definition and matching semantics.
+
+export interface TemplateNode {
+  text: string;           // heading text (original casing from template)
+  level: number;          // expected # depth
+  children: TemplateNode[];
+}
+
+/**
+ * Builds a TemplateNode tree from a flat, ordered ParsedHeading list.
+ * Headings are nested by level: a heading is a child of the nearest preceding
+ * heading with a lower level number.
+ */
+export function buildTemplateTree(headings: ParsedHeading[]): TemplateNode[] {
+  const roots: TemplateNode[] = [];
+  const stack: TemplateNode[] = [];
+
+  for (const h of headings) {
+    const node: TemplateNode = { text: h.text, level: h.level, children: [] };
+
+    while (stack.length > 0 && stack[stack.length - 1].level >= h.level) {
+      stack.pop();
+    }
+
+    if (stack.length === 0) {
+      roots.push(node);
+    } else {
+      stack[stack.length - 1].children.push(node);
+    }
+
+    stack.push(node);
+  }
+
+  return roots;
+}
+
+/**
+ * Flattens a TemplateNode tree into a pre-order list.
+ */
+export function flattenTemplateTree(nodes: TemplateNode[]): TemplateNode[] {
+  const result: TemplateNode[] = [];
+  const visit = (n: TemplateNode) => {
+    result.push(n);
+    n.children.forEach(visit);
+  };
+  nodes.forEach(visit);
+  return result;
 }
 
 // ── Template cache ────────────────────────────────────────────────────────────
@@ -39,7 +95,6 @@ export async function buildShapeHeadingCache(
 ): Promise<Map<string, ParsedHeading[]>> {
   const cache = new Map<string, ParsedHeading[]>();
 
-  // Walk the templates folder for Template, *.md files
   const templateFiles: TFile[] = [];
   const walk = (node: import("obsidian").TAbstractFile) => {
     if (node instanceof TFile && node.extension === "md") {
@@ -54,9 +109,7 @@ export async function buildShapeHeadingCache(
   abstractFolder.children.forEach(walk);
 
   for (const file of templateFiles) {
-    // Only process "Template, *.md" files
     if (!file.name.startsWith("Template, ")) continue;
-
     const shapeName = templateFileToShapeName(file.basename);
     const content = await app.vault.read(file);
     const headings = extractHeadings(content);
@@ -69,8 +122,9 @@ export async function buildShapeHeadingCache(
 // ── Per-note shape lint ───────────────────────────────────────────────────────
 
 /**
- * Validates a note's heading structure against its matching template.
- * Returns an empty array if no matching template exists.
+ * Validates a note's heading structure against its matching template using
+ * recursive tree matching. A heading satisfies a template node only when
+ * text, level, AND parent chain all agree.
  */
 export async function lintShapeHeadings(
   app: App,
@@ -82,91 +136,207 @@ export async function lintShapeHeadings(
   const results: LintResult[] = [];
   const strict = settings.lintStrictMode;
 
-  // Read frontmatter to get the type target field value
   const note = await readNote(app, file);
   if (!note || !note.hasFrontmatter) return results;
 
   const typeValue = note.frontmatter[settings.shapeTypeTargetField];
   if (!typeValue || typeof typeValue !== "string") return results;
 
+  // Scope filter
+  if (settings.shapeLintScope === "folder") {
+    const folders = settings.shapeLintFolders ?? [];
+    if (folders.length > 0) {
+      const prefixes = folders.map((f) => f.toLowerCase().replace(/\/?$/, "/"));
+      if (!prefixes.some((p) => file.path.toLowerCase().startsWith(p))) return results;
+    }
+  }
+
   const shapeName = typeValue.trim().toLowerCase();
   const templateHeadings = headingCache.get(shapeName);
   if (!templateHeadings || templateHeadings.length === 0) return results;
 
-  const noteHeadings = extractHeadings(content);
+  const lines = content.split("\n");
+  const { frontmatterLines, bodyLines } = splitFrontmatter(lines);
+  const templateRoots = buildTemplateTree(templateHeadings);
+  const { roots: docRoots } = buildDocSectionTree(bodyLines);
 
-  // ── Check for missing and extra headings ──────────────────────────────────
+  lintLevel(
+    templateRoots,
+    docRoots,
+    bodyLines,
+    file.path,
+    typeValue,
+    strict,
+    results,
+    null
+  );
 
-  const templateTexts = templateHeadings.map((h) => h.text.toLowerCase());
-  const noteTexts = noteHeadings.map((h) => h.text.toLowerCase());
+  return results;
+}
 
-  // Missing: in template but not in note
-  for (const th of templateHeadings) {
-    if (!noteTexts.includes(th.text.toLowerCase())) {
-      const sev: LintSeverity = strict ? "error" : "warning";
+// ── Recursive lint walker ─────────────────────────────────────────────────────
+
+/**
+ * Lints one level of the heading hierarchy.
+ *
+ * For each template node at this level:
+ *   - Look for a matching doc section (text + exact level) in the current scope
+ *   - If missing: emit shape_heading_missing
+ *   - If present but out of order: emit shape_heading_order
+ *   - If present with no direct content: emit shape_section_empty
+ *   - Recurse into children
+ *
+ * Unknown doc sections (not in template at this level): emit shape_heading_extra
+ */
+function lintLevel(
+  templateNodes: TemplateNode[],
+  docSections: DocSection[],
+  bodyLines: string[],
+  filePath: string,
+  typeValue: string,
+  strict: boolean,
+  results: LintResult[],
+  parentText: string | null
+): void {
+  const consumed = new Set<DocSection>();
+
+  // ── Missing and recursion ─────────────────────────────────────────────────
+  for (const tn of templateNodes) {
+    const match = docSections.find(
+      (ds) =>
+        !consumed.has(ds) &&
+        ds.headingText.toLowerCase() === tn.text.toLowerCase() &&
+        ds.headingLevel === tn.level
+    );
+
+    if (!match) {
+      const prefix = "#".repeat(tn.level);
+      const ctx = parentText ? ` under '${parentText}'` : "";
       results.push(newResult(
-        file.path, sev, "shape_heading_missing",
-        `Missing heading: '${th.text}' (required by shape '${typeValue}')`
+        filePath,
+        strict ? "error" : "warning",
+        "shape_heading_missing",
+        `Missing heading: '${prefix} ${tn.text}'${ctx} (required by shape '${typeValue}')`
       ));
+    } else {
+      consumed.add(match);
+
+      // Empty section check — direct content lines only (not children)
+      const directContent = match.contentLines.join("\n").trim();
+      if (directContent.length === 0 && tn.children.length === 0) {
+        results.push(newResult(
+          filePath,
+          strict ? "warning" : "info",
+          "shape_section_empty",
+          `Section '${match.headingText}' is empty (required by shape '${typeValue}')`
+        ));
+      }
+
+      // Recurse into children
+      lintLevel(
+        tn.children,
+        match.children,
+        bodyLines,
+        filePath,
+        typeValue,
+        strict,
+        results,
+        tn.text
+      );
     }
   }
 
-  // Extra: in note but not in template
-  for (const nh of noteHeadings) {
-    if (!templateTexts.includes(nh.text.toLowerCase())) {
-      const sev: LintSeverity = nh.level === 1
-        ? "error"
-        : strict ? "warning" : "info";
-      results.push(newResult(
-        file.path, sev, "shape_heading_extra",
-        `Extra heading: '${nh.text}' (not in shape '${typeValue}' template)`
-      ));
-    }
-  }
+  // ── Order check ───────────────────────────────────────────────────────────
+  // Compare the order matched sections appear in the doc against template order
+  const docOrder = docSections
+    .filter((ds) => consumed.has(ds))
+    .map((ds) => ds.headingText.toLowerCase());
 
-  // ── Check heading order ───────────────────────────────────────────────────
-  // Filter note headings to only those that appear in the template,
-  // then verify their relative order matches the template order.
+  const expectedOrder = templateNodes
+    .map((tn) => tn.text.toLowerCase())
+    .filter((t) => docOrder.includes(t));
 
-  const noteTemplateSubset = noteHeadings
-    .filter((h) => templateTexts.includes(h.text.toLowerCase()))
-    .map((h) => h.text.toLowerCase());
-
-  const expectedOrder = templateHeadings
-    .map((h) => h.text.toLowerCase())
-    .filter((t) => noteTexts.includes(t));
-
-  if (!arraysEqualOrder(noteTemplateSubset, expectedOrder)) {
+  if (!arraysEqualOrder(docOrder, expectedOrder) && expectedOrder.length > 1) {
+    const ctx = parentText ? ` within '${parentText}'` : "";
     results.push(newResult(
-      file.path, "error", "shape_heading_order",
-      `Headings are out of order for shape '${typeValue}'. ` +
+      filePath,
+      strict ? "error" : "warning",
+      "shape_heading_order",
+      `Headings out of order${ctx} for shape '${typeValue}'. ` +
       `Expected: ${expectedOrder.map((t) => `'${t}'`).join(" → ")}`
     ));
   }
 
-  // ── Check for empty sections ──────────────────────────────────────────────
+  // ── Extra headings ────────────────────────────────────────────────────────
+  const unknowns = docSections.filter((ds) => !consumed.has(ds));
+  for (const u of unknowns) {
+    const sev: LintSeverity = u.headingLevel === 1
+      ? strict ? "error" : "warning"
+      : strict ? "warning" : "info";
+    const ctx = parentText ? ` under '${parentText}'` : "";
+    results.push(newResult(
+      filePath,
+      sev,
+      "shape_heading_extra",
+      `Extra heading: '${u.headingText}'${ctx} (not in shape '${typeValue}' template)`
+    ));
 
-  const lines = content.split("\n");
+    // Recurse into unknown children so we catch extras at deeper levels too
+    lintLevel([], u.children, bodyLines, filePath, typeValue, strict, results, u.headingText);
+  }
+}
 
-  for (const th of templateHeadings) {
-    const noteIdx = noteHeadings.findIndex(
-      (h) => h.text.toLowerCase() === th.text.toLowerCase()
-    );
-    if (noteIdx === -1) continue; // already reported as missing
+// ── Document section model ────────────────────────────────────────────────────
 
-    const heading = noteHeadings[noteIdx];
-    const sectionContent = getSectionContent(lines, heading, noteHeadings, noteIdx);
+interface DocSection {
+  headingText: string;
+  headingLevel: number;
+  contentLines: string[];   // direct non-heading content (excluding child sections)
+  children: DocSection[];
+}
 
-    if (sectionContent.trim().length === 0) {
-      const sev: LintSeverity = strict ? "error" : "warning";
-      results.push(newResult(
-        file.path, sev, "shape_section_empty",
-        `Section '${heading.text}' is empty (required by shape '${typeValue}')`
-      ));
-    }
+function buildDocSectionTree(
+  bodyLines: string[]
+): { roots: DocSection[] } {
+  const headings = extractHeadingsFromLines(bodyLines);
+
+  // Build flat section list
+  const flatSections: Array<DocSection & { lineIndex: number }> = [];
+
+  for (let i = 0; i < headings.length; i++) {
+    const h = headings[i];
+
+    // Direct content: lines after heading, before the next heading at any level
+    const nextHeading = headings[i + 1];
+    const contentEnd = nextHeading ? nextHeading.lineIndex : bodyLines.length;
+    const contentLines = bodyLines.slice(h.lineIndex + 1, contentEnd);
+
+    flatSections.push({
+      headingText: h.text,
+      headingLevel: h.level,
+      contentLines,
+      children: [],
+      lineIndex: h.lineIndex,
+    });
   }
 
-  return results;
+  // Nest into tree by level
+  const roots: DocSection[] = [];
+  const stack: Array<DocSection & { lineIndex: number }> = [];
+
+  for (const section of flatSections) {
+    while (stack.length > 0 && stack[stack.length - 1].headingLevel >= section.headingLevel) {
+      stack.pop();
+    }
+    if (stack.length === 0) {
+      roots.push(section);
+    } else {
+      stack[stack.length - 1].children.push(section);
+    }
+    stack.push(section);
+  }
+
+  return { roots };
 }
 
 // ── Heading extraction ────────────────────────────────────────────────────────
@@ -203,11 +373,7 @@ export function extractHeadings(content: string): ParsedHeading[] {
 
     const m = line.match(/^(#{1,6})\s+(.+)$/);
     if (m) {
-      headings.push({
-        level: m[1].length,
-        text: m[2].trim(),
-        lineIndex,
-      });
+      headings.push({ level: m[1].length, text: m[2].trim(), lineIndex });
     }
 
     lineIndex++;
@@ -216,46 +382,39 @@ export function extractHeadings(content: string): ParsedHeading[] {
   return headings;
 }
 
-// ── Section content extraction ────────────────────────────────────────────────
-
-/**
- * Returns the text content of a section — everything between its heading
- * and the next heading of equal or lesser depth (or end of file).
- */
-function getSectionContent(
-  lines: string[],
-  heading: ParsedHeading,
-  allHeadings: ParsedHeading[],
-  headingIdx: number
-): string {
-  const startLine = heading.lineIndex + 1;
-
-  // Find the next heading of equal or lesser depth
-  let endLine = lines.length;
-  for (let i = headingIdx + 1; i < allHeadings.length; i++) {
-    if (allHeadings[i].level <= heading.level) {
-      endLine = allHeadings[i].lineIndex;
-      break;
-    }
+function extractHeadingsFromLines(lines: string[]): ParsedHeading[] {
+  const headings: ParsedHeading[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(#{1,6})\s+(.+)$/);
+    if (m) headings.push({ level: m[1].length, text: m[2].trim(), lineIndex: i });
   }
+  return headings;
+}
 
-  return lines.slice(startLine, endLine).join("\n");
+// ── Frontmatter splitter ──────────────────────────────────────────────────────
+
+function splitFrontmatter(lines: string[]): {
+  frontmatterLines: string[];
+  bodyLines: string[];
+} {
+  if (lines[0]?.trim() !== "---") return { frontmatterLines: [], bodyLines: lines };
+  let closingIdx = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") { closingIdx = i; break; }
+  }
+  if (closingIdx === -1) return { frontmatterLines: [], bodyLines: lines };
+  return {
+    frontmatterLines: lines.slice(0, closingIdx + 1),
+    bodyLines: lines.slice(closingIdx + 1),
+  };
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-/**
- * Converts a template file basename to a shape name.
- * "Template, Capability" → "capability"
- * "Template, Api Spec" → "api spec"
- */
 function templateFileToShapeName(basename: string): string {
   return basename.replace(/^Template,\s*/i, "").trim().toLowerCase();
 }
 
-/**
- * Returns true if two string arrays have identical order.
- */
 function arraysEqualOrder(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((v, i) => v === b[i]);

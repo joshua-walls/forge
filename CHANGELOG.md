@@ -1,3 +1,33 @@
+# 0.9.0
+
+## Added
+
+- **Recursive documentation and examples install support** — bundled `docs/` and `examples/` content can now be organized into subfolders and installed into the matching vault structure under the configured Forge folders
+- **Complete vault-installed documentation set** — added a redesigned documentation tree covering getting started, folder layout, commands, schema reference, vault lint, patch engine, docs installer, maintenance, settings, troubleshooting, exports, ontology indexes, normalization, vault repair, Shapes, Shape lint, Shape repair, and Shape versioning roadmap guidance
+- **Complete examples structure** — added organized example packs for starter schemas, lint cleanup, patch workflows, repair workflows, exports, Shapes, and maintenance routines
+- **Screenshot asset set** — added a canonical documentation/wiki screenshot set under `assets/screenshots/` with stable raw GitHub embed filenames
+- **Relationship index documentation** — expanded ontology/export documentation with user-facing explanations of how relationship indexes help navigation, dashboards, AI workflows, Dataview, and Bases
+- **Docs installer reference** — added documentation for install targets, placeholder substitution, subfolder preservation, no-overwrite behavior, and generated frontmatter handling
+- **Shape workflow documentation** — added dedicated guides for Shapes overview, template refinement, Shape lint, Shape repair, and practical Shape versioning conventions
+
+## Changed
+
+- Reworked README positioning from infrastructure-heavy “vault governance” language toward broader vault consistency, reliability, Dataview/Bases support, and approachable long-term maintenance
+- Restructured bundled docs and examples from flat files into ordered subfolders with `1.`, `2.`, etc. filename prefixes where reading order matters
+- Updated docs to avoid top-level H1 title duplication where Obsidian already displays the note title; section headings now start at `#` inside those notes
+- Replaced deprecated screenshot references with the finalized asset filenames, including `frontmatter-repair-modal.png`, `installed-docs-tree.png`, `patch-dry-run-results.png`, `shape-lint-results.png`, and `ontology-index-export.png`
+- Reframed ontology documentation as practical relationship indexes so the feature is understandable to non-specialist Obsidian users
+- Reframed strict/lint language in user docs to avoid overstating unsupported per-rule strictness behavior
+- Updated manual installation guidance to tell users to click **Reload plugins** after install or update so Obsidian registers the latest plugin files
+
+## Removed
+
+- Removed references to obsolete flat documentation files such as `0.START-HERE.md`, `1.Installation.md`, `2.Vault-Structure.md`, and other pre-restructure doc names
+- Removed or replaced deprecated screenshot names such as `screenshot-main.png`, `screenshot-lint.png`, `screenshot-patch.png`, `screenshot-export.png`, `forge-export-settings.png`, `forge-vault-repair-modal.png`, and `forge-installed-docs-tree.png`
+- Removed documentation references to screenshot assets that are no longer part of the approved repo asset set
+
+----
+
 # 0.7.0
 
 ## Added

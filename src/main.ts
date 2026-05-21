@@ -17,6 +17,7 @@ import { installVaultForgeDocumentation } from "./docs";
 import { runExportOverview } from "./commands/export-overview";
 import { runExportOntology } from "./commands/export-ontology";
 import { runRefineShapes } from "./commands/refine-shapes";
+import { runShapeRepair } from "./commands/shape-repair";
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -24,6 +25,38 @@ export default class ForgePlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    // Inject global Forge modal styles early so they're available regardless
+    // of whether the settings tab has been opened this session.
+    if (!document.getElementById("forge-modal-styles")) {
+      const style = document.createElement("style");
+      style.id = "forge-modal-styles";
+      style.textContent = `
+        .forge-modal .modal-content {
+          display: flex;
+          flex-direction: column;
+          max-height: 75vh;
+          overflow: hidden;
+        }
+        .forge-modal-body {
+          flex: 1;
+          overflow-y: auto;
+          padding-right: 4px;
+          margin-bottom: 4px;
+        }
+        .forge-modal-footer {
+          flex-shrink: 0;
+          padding-top: 10px;
+          border-top: 1px solid var(--background-modifier-border);
+        }
+        .forge-button-row {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+      `;
+      document.head.appendChild(style);
+    }
 
     // Initialise schema cache — vault access deferred until layout ready
     this.schemaCache = new SchemaCache(this.app, this.settings);
@@ -169,6 +202,28 @@ export default class ForgePlugin extends Plugin {
         runRefineShapes(this).catch((e: Error) => {
           new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
           console.error("[Forge] refine-shapes error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "shape-repair",
+      name: "Run Shape Repair",
+      callback: () => {
+        runShapeRepair(this).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] shape-repair error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "shape-repair-dry-run",
+      name: "Run Shape Repair (Dry Run)",
+      callback: () => {
+        runShapeRepair(this, true).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] shape-repair-dry-run error:", e);
         });
       },
     });

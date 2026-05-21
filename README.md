@@ -1,53 +1,118 @@
 # Forge
 
-Schema-driven vault governance for Obsidian.
+Keep your Obsidian vault organized, reliable, and useful as it grows.
 
-Forge helps you lint, validate, normalize, repair, and maintain long-lived Obsidian vaults using structured operations and repeatable workflows.
+Forge helps you maintain consistent metadata, repair structural drift, standardize notes, and build more dependable Dataviews, Bases, dashboards, exports, and automation workflows.
 
-Designed for users who treat their vault like durable infrastructure.
-
----
-
-![Forge Screenshot](assets/screenshot-main.png)
-
-Forge treats vault maintenance as an explicit operational workflow.
+Whether your vault holds projects, research, journals, client work, tasks, notes, or personal systems, Forge helps everything keep working together over time.
 
 ---
 
-## What Forge Does
+![Forge Overview](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/forge-settings-overview.png)
 
-Forge provides operational tooling for Obsidian vault maintenance:
+Most vaults start simple.
+
+Then, slowly:
+
+- fields get renamed
+- tags drift apart
+- templates change
+- old notes stop matching new workflows
+- dashboards miss results
+- Dataview queries become fragile
+- Bases become less useful
+- exports become noisy
+
+Forge helps keep your vault consistent without forcing you into a rigid system.
+
+---
+
+# What Forge Does
+
+Forge provides maintenance and structure tooling for Obsidian vaults:
 
 - Schema validation
 - Vault linting
 - Frontmatter normalization
 - Tag normalization
-- Patch operations
-- Repair workflows
-- Maintenance routines
-- Dataview-safe folder operations
-- Vault-native documentation installation
-- Structured vault exports (inventory, meta, ontology indexes)
-- Dataview dashboard generation
+- Bulk note update workflows
+- Vault repair tools
+- Reusable note structure validation
+- Relationship indexes
+- Vault exports
+- Maintenance workflows
+- Vault-installed documentation
+- Copy-ready examples
 
 Think of it as:
 
-> ESLint + migrations + maintenance tooling for your Obsidian vault.
+> Maintenance tooling for long-lived Obsidian vaults.
+
+Or more simply:
+
+> Forge helps your vault stay clean, consistent, and dependable over time.
 
 ---
 
-## Best Fit
+# Why Consistency Matters
 
-Forge is especially useful for:
+Many Obsidian workflows depend on predictable metadata and structure.
 
-- Large or long-lived vaults
-- Structured PKM systems
-- PARA-style organizations
-- Dataview-heavy workflows
-- Research repositories
-- Shared/team vaults
-- Knowledge engineering workflows
-- Metadata-driven note systems
+That includes:
+
+- Dataview
+- Bases
+- dashboards
+- templates
+- graph relationships
+- automation workflows
+- AI-assisted workflows
+- note queries
+- exports
+
+When metadata is consistent, your tools can find the right notes.
+
+When metadata drifts, your tools become unreliable.
+
+Examples:
+
+- `project` vs `projects`
+- `active` vs `in-progress`
+- `type` vs `note_type`
+- missing frontmatter
+- duplicated tags
+- malformed YAML
+- old templates mixed with new templates
+
+Forge helps keep your vault structure predictable so your queries, Bases, dashboards, and workflows continue working months or years later.
+
+The goal is not rigid control.
+
+The goal is durable consistency.
+
+---
+
+# Who Forge Is For
+
+Forge is useful for anyone whose vault has started to grow beyond manual cleanup.
+
+It works well for:
+
+- personal knowledge systems
+- project vaults
+- research vaults
+- journals
+- writing systems
+- task systems
+- client workspaces
+- team/shared vaults
+- Dataview-heavy vaults
+- Bases-driven workflows
+- AI-assisted note systems
+
+You do not need a perfect vault to use Forge.
+
+Forge is designed for real vaults: uneven, evolving, useful, and alive.
 
 ---
 
@@ -61,13 +126,13 @@ Forge is especially useful for:
 
 ## Manual Installation
 
-Copy the following files into:
+Copy these files into:
 
 ```text
 .obsidian/plugins/forge/
 ```
 
-Files:
+Required files:
 
 ```text
 manifest.json
@@ -75,76 +140,116 @@ main.js
 styles.css
 ```
 
-Then reload Obsidian and enable the plugin.
+Then enable Forge in:
+
+```text
+Settings → Community Plugins
+```
+
+After installation or updates, click:
+
+```text
+Reload plugins
+```
+
+from the command palette so Obsidian reloads Forge and registers the latest plugin files.
 
 ---
 
 # Quick Start
 
-After enabling the plugin, run:
+## 1. Install the Documentation
+
+Run:
 
 ```text
 Forge: Install Documentation
 ```
 
-Forge installs vault-native documentation and examples into your configured Forge folder.
+![Install Documentation](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/install-docs-command.png)
+
+Forge installs a complete documentation and examples system directly into your vault.
 
 Typical structure:
 
 ```text
-System/Forge/
+{{forge}}/
 ├── Docs/
 ├── Examples/
 ├── Patches/
+├── Schemas/
+├── Shapes/
+└── Exports/
 ```
 
-Recommended reading order:
+---
 
-1. 0.START-HERE.md
-2. 1.Installation.md
-3. 2.Vault-Structure.md
-4. 3.Schema.md
-5. 4.Linting.md
-6. 5.Patches.md
-7. 6.Commands.md
-8. 7.Settings.md
-9. 8.Troubleshooting.md
-10. 9.Export.md
+## 2. Open the Start Guide
+
+Read:
+
+```text
+Docs/1. Start Here.md
+```
+
+The installed vault docs are the main Forge documentation.
+
+They include:
+
+- setup walkthroughs
+- schema guides
+- lint workflows
+- repair workflows
+- export documentation
+- shape systems
+- settings references
+- troubleshooting guides
+- operational examples
+- copy-ready templates
+
+The README gives the overview.
+
+The installed docs are the field guide.
 
 ---
 
-# Commands
+## 3. Run Your First Vault Lint
 
-| Command | Purpose |
-|---|---|
-| `Forge: Apply Vault Patch` | Apply structured vault operations from the configured patch note |
-| `Forge: Run Vault Lint` | Validate vault structure against the configured schema |
-| `Forge: Validate Schema` | Validate schema structure and configuration |
-| `Forge: Normalize Tags` | Sort and deduplicate frontmatter tags |
-| `Forge: Normalize Frontmatter` | Reorder frontmatter fields into canonical order |
-| `Forge: Vault Maintenance` | Run maintenance routines for operational files |
-| `Forge: Vault Repair` | Generate repair patches from lint results |
-| `Forge: Restore Patch Run` | Restore files from a previous patch backup manifest |
-| `Forge: Rename Dataview Folder` | Update Dataview folder references after folder changes |
-| `Forge: Install Documentation` | Install vault-native docs and examples |
-| `Forge: Export Vault Overview` | Build vault inventory, meta, and export note in one pass |
-| `Forge: Export Ontology Index` | Build per-type relationship graphs from configured note headings |
+Run:
+
+```text
+Forge: Run Vault Lint
+```
+
+Forge scans your vault for structural inconsistencies such as:
+
+- missing metadata
+- malformed frontmatter
+- inconsistent tags
+- schema violations
+- stale fields
+- shape mismatches
+- structural drift
+
+The results are grouped into actionable categories so you can improve your vault gradually.
 
 ---
 
-# Core Concepts
+# Core Features
 
 ## Schema Validation
 
-Forge validates notes against a configurable schema.
+Schemas define the structure you want your notes to follow.
 
-Schemas define:
+They can describe:
 
-- required metadata
+- required fields
 - allowed values
+- note types
+- review schedules
+- metadata expectations
+- folder rules
 - tag rules
-- lint severity
-- operational expectations
 
 Example:
 
@@ -158,177 +263,301 @@ required_fields:
       - archived
 ```
 
-Schemas provide the structural foundation for linting, repair workflows, normalization, and patch operations.
+Schemas help keep notes predictable.
+
+That makes Dataview queries, Bases, dashboards, exports, and automations easier to trust.
 
 ---
 
 ## Vault Linting
 
-Linting validates notes against the configured schema.
+Forge validates notes against your schemas and structural rules.
 
-Forge can detect:
+Linting can detect:
 
 - missing frontmatter
-- invalid enum values
-- malformed metadata
+- malformed YAML
+- invalid metadata
 - inconsistent tags
+- outdated fields
 - schema violations
-- metadata drift
-- stale notes past their configured review cycle
+- stale review cycles
+- shape mismatches
 
-Linting helps maintain long-term structural consistency across the vault.
+Forge groups findings by severity so you can prioritize structural problems incrementally instead of fixing everything at once.
+
+---
+
+![Vault Lint](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/vault-lint-overview.png)
 
 ---
 
 ## Normalization
 
-Normalization standardizes metadata formatting.
+Normalization keeps metadata formatting clean and predictable.
 
-Examples include:
+Forge can:
 
-- sorting tags
-- deduplicating tags
-- reordering frontmatter
-- standardizing field values
+- sort tags
+- deduplicate tags
+- standardize frontmatter ordering
+- normalize metadata structure
+- reduce formatting drift
 
-This improves Dataview consistency and reduces structural drift over time.
+Small inconsistencies compound over time.
+
+Normalization keeps the vault tidy before small cracks become weird little YAML goblins.
+
+Detailed normalization workflows and before/after examples are included in the installed docs.
 
 ---
 
-## Vault Patches
+## Patch Engine
 
-Patches are explicit vault operations stored as markdown notes.
+Patches are reusable operational workflows stored as markdown notes.
 
-Forge uses patches for:
+They can be used for:
 
-- metadata repair
-- tag normalization
 - vault migrations
+- metadata repair
+- bulk edits
 - note movement
-- repeatable maintenance workflows
+- field updates
+- structural cleanup
 
 Example:
 
-````md
+~~~md
 # Patch
 
 ```yaml
 operations:
   - op: set_field
-    target: "Home.md"
+    target: "Projects/Home.md"
     field: status
     value: active
 ```
-````
+~~~
 
-Patch operations remain reviewable, auditable, and restorable.
+Patch workflows support:
 
----
-
-## Vault Exports
-
-Forge can export structured data about your vault for use in AI sessions, dashboards, and external tooling.
-
-Export commands produce both machine-readable JSON and human-readable Obsidian markdown notes.
-
-`Export Vault Overview` generates three files in one pass:
-
-- `vault-inventory.json` — flat structural index of all notes
-- `vault-meta.json` — aggregate counts by domain, type, and status
-- `vault-export.md` — human-readable summary with inline Dataview fields
-
-`Export Ontology Index` builds per-type relationship graphs by walking a configured heading (e.g. `# Related`) in matched notes. One JSON and one markdown note per selected type.
-
-A Dataview dashboard note is created on the first export run and never overwritten.
+- dry runs
+- backups
+- restore operations
+- conditional execution
 
 ---
 
-# Documentation
+![Patch Operations](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/patch-engine-overview.png)
 
-Forge installs vault-native operational documentation and examples directly into your vault.
+Additional patch walkthroughs and repair workflows are included in the installed docs and examples.
 
-Documentation includes:
+---
 
-- onboarding notes
-- schema documentation
-- linting workflows
-- patch workflows
+## Vault Repair
+
+Forge can generate repair operations from lint findings.
+
+Repair workflows help fix:
+
+- malformed frontmatter
+- invalid fields
+- missing metadata
+- inconsistent tags
+- structural mismatches
+
+Repair actions are previewable and reversible.
+
+Repair walkthroughs and recovery examples are included in the installed docs.
+
+---
+
+## Shapes
+
+Shapes are reusable structural blueprints for note systems.
+
+They help validate organization beyond simple metadata.
+
+Shapes are useful for:
+
+- project workspaces
+- meeting notes
+- research pipelines
+- client records
+- operational runbooks
+- content workflows
+
+Forge supports:
+
+- recursive shape matching
+- shape linting
+- template refinement
+- repair workflows
+- dry runs
+- restore support
+
+Complete shape examples and recursive validation walkthroughs are included in the installed docs.
+
+---
+
+## Relationship Indexes
+
+Forge can build relationship indexes from your notes.
+
+This helps surface how ideas, projects, people, systems, and topics connect across your vault.
+
+Relationship indexes make larger vaults easier to:
+
+- navigate
+- query
+- audit
+- visualize
+- export
+- use with AI workflows
+
+Forge calls these ontology indexes because they map relationships between notes and concepts across the vault.
+
+You do not need to be an ontology expert to use them.
+
+---
+
+![Ontology Index](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/ontology-index-export.png)
+
+---
+
+## Export System
+
+Forge exports structured vault data for dashboards, AI tooling, audits, and external workflows.
+
+`Export Vault Overview` generates:
+
+- `vault-inventory.json`
+- `vault-meta.json`
+- `vault-export.md`
+
+`Export Ontology Index` generates relationship indexes from configured note headings.
+
+Exports are useful for:
+
+- AI context generation
+- vault dashboards
+- metadata audits
+- reporting
+- external integrations
+- archival workflows
+
+---
+
+![Vault Export](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/vault-overview-export.png)
+
+Additional export examples and dashboard walkthroughs are included in the installed docs.
+
+---
+
+# Example Packs
+
+Forge installs organized examples directly into your vault.
+
+Examples include:
+
+- starter schemas
+- lint workflows
+- patch operations
+- repair examples
+- shape systems
 - export workflows
-- troubleshooting guidance
-- operational examples
+- maintenance routines
 
-Documentation intentionally lives inside the vault so it remains:
+The examples are designed to be copied and adapted to your own vault.
 
-- searchable
-- linkable
-- syncable
-- reviewable
+---
+
+![Examples Folder](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/examples-folder-overview.png)
+
+---
+
+# Works Well Alongside
+
+Forge complements tools like:
+
+- Dataview
+- Bases
+- Templater
+- Metadata Menu
+- QuickAdd
+- dashboard notes
+- AI-assisted workflows
+
+Forge focuses on the layer underneath those tools:
+
+> clean, consistent, queryable structure.
+
+---
+
+# Commands
+
+| Command | Purpose |
+|---|---|
+| `Forge: Install Documentation` | Install vault docs and examples |
+| `Forge: Run Vault Lint` | Validate vault structure against schemas and rules |
+| `Forge: Validate Schema` | Validate schema configuration |
+| `Forge: Normalize Tags` | Sort and deduplicate tags |
+| `Forge: Normalize Frontmatter` | Reorder frontmatter consistently |
+| `Forge: Apply Vault Patch` | Execute structured patch operations |
+| `Forge: Vault Repair` | Generate repair operations from lint findings |
+| `Forge: Restore Patch Run` | Restore files from previous patch backups |
+| `Forge: Vault Maintenance` | Run maintenance workflows |
+| `Forge: Rename Dataview Folder` | Safely update Dataview folder references |
+| `Forge: Export Vault Overview` | Generate inventory and metadata exports |
+| `Forge: Export Ontology Index` | Build relationship indexes from note structures |
+
+Detailed command walkthroughs and examples are included in the installed documentation.
+
+---
+
+# Settings
+
+Forge includes dedicated settings sections for:
+
+- General configuration
+- Schema management
+- Vault linting
+- Patch execution
+- Shapes
+- Export configuration
+- Maintenance
+- Advanced operations
+
+Every setting is documented in the installed vault docs.
+
+---
+
+![Forge Settings](https://raw.githubusercontent.com/joshua-walls/obsidian/main/assets/screenshots/settings-general-tab.png)
 
 ---
 
 # Safety Philosophy
 
-Forge is designed for long-term vault maintenance.
+Forge is intentionally conservative.
 
 The plugin emphasizes:
 
-- Predictable operations
-- Structured workflows
-- Explicit reviewable changes
-- Repairability
-- Operational visibility
-- Repeatability
+- explicit operations
+- dry-run workflows
+- reversible changes
+- restore support
+- operational visibility
+- predictable behavior
 
-You remain in control of vault modifications.
+You stay in control of vault modifications.
 
 Recommended practices:
 
 - Use Git for large vaults
-- Backup before major patch operations
+- Backup before major operations
 - Test schemas incrementally
-- Run linting before patching
-
----
-
-# Screenshots
-
-## Vault Lint
-
-Detect schema violations, metadata drift, invalid tags, and structural inconsistencies.
-
-![Lint Results](assets/screenshot-lint.png)
-
----
-
-## Schema Validation
-
-Define explicit metadata contracts and validate vault structure against a canonical schema.
-
-![Schema Validation](assets/screenshot-schema.png)
-
----
-
-## Patch Operations
-
-Apply reviewable vault operations with backups, reports, and restore manifests.
-
-![Patch Operations](assets/screenshot-patch.png)
-
----
-
-## Settings
-
-Configure system paths, lint behavior, patch operations, maintenance retention, and export settings across tabbed sections.
-
-![Settings](assets/screenshot-settings.png)
-
----
-
-## Export
-
-Build structured vault exports and Dataview dashboards from schema-driven configuration.
-
-![Export](assets/screenshot-export.png)
+- Run linting before patch execution
+- Use dry runs before repair workflows
 
 ---
 
@@ -339,23 +568,27 @@ npm install
 npm run build
 ```
 
-Release builds are generated from the plugin root and packaged as release assets.
+Release assets are generated from the plugin root.
 
 ---
 
 # Philosophy
 
-Knowledge systems decay over time.
+Knowledge systems naturally drift over time.
 
-Forge exists to help long-lived Obsidian vaults remain:
+Fields change. Templates evolve. Workflows shift. Old notes stop matching new structures.
 
-- Structured
+Forge exists to help your vault remain:
+
+- Consistent
 - Queryable
 - Repairable
-- Consistent
+- Reliable
 - Maintainable
 
-Treat your vault like durable infrastructure instead of disposable notes.
+Not through rigidity.
+
+Through sustainable structure and practical maintenance over time.
 
 ---
 

@@ -274,7 +274,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setDesc("Number of lint run notes to keep.")
       .addSlider((s) =>
         s
-          .setLimits(5, 100, 5)
+          .setLimits(5, 50, 5)
           .setValue(this.plugin.settings.lintRunRetentionCount)
           .setDynamicTooltip()
           .onChange(async (v) => {
@@ -491,7 +491,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Backup retention (days)")
       .setDesc("Delete patch backup files older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 90, 1).setValue(this.plugin.settings.backupRetentionDays).setDynamicTooltip().onChange(async (v) => {
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.backupRetentionDays = v;
           await this.plugin.saveSettings();
         })
@@ -501,7 +501,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Inbox retention (days)")
       .setDesc("Flag inbox files older than this many days as stale.")
       .addSlider((s) =>
-        s.setLimits(1, 90, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange(async (v) => {
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.inboxRetentionDays = v;
           await this.plugin.saveSettings();
         })
@@ -511,7 +511,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history retention (days)")
       .setDesc("Trim lint history entries older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 365, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).setDynamicTooltip().onChange(async (v) => {
+        s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.lintHistoryRetentionDays = v;
           await this.plugin.saveSettings();
         })
@@ -521,7 +521,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history max entries")
       .setDesc("Hard cap on the number of lint history entries to retain.")
       .addSlider((s) =>
-        s.setLimits(10, 500, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange(async (v) => {
+        s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.lintHistoryMaxEntries = v;
           await this.plugin.saveSettings();
         })
@@ -531,7 +531,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Patch report retention")
       .setDesc("Number of patch report notes to keep.")
       .addSlider((s) =>
-        s.setLimits(5, 100, 5).setValue(this.plugin.settings.patchReportRetentionCount).setDynamicTooltip().onChange(async (v) => {
+        s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.patchReportRetentionCount = v;
           await this.plugin.saveSettings();
         })
@@ -567,7 +567,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Export Vault Overview")
-      .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-overview.md in one pass. Inventory is schema-optional; meta requires schema and excludes ai_private notes.")
+      .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-export.md in one pass. Inventory is schema-optional; meta requires schema and excludes ai_private notes.")
       .addButton((btn) =>
         btn.setButtonText("Run").onClick(async () => {
           runExportOverview(this.plugin).catch((e: Error) => {
@@ -778,6 +778,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const wrap = el.createDiv({ cls: "forge-multiselect" });
     const chipStrip = wrap.createDiv({ cls: "forge-ms-chips" });
 
+    const setCheckedMap = new Map<string, (checked: boolean) => void>();
+
     const renderChips = () => {
       chipStrip.empty();
       selected.forEach((val) => {
@@ -788,6 +790,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           e.stopPropagation();
           const idx = selected.indexOf(val);
           if (idx > -1) selected.splice(idx, 1);
+          setCheckedMap.get(val)?.(false);
           renderChips();
           updateTrigger();
           await this.plugin.saveSettings();
@@ -807,7 +810,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     const panel = wrap.createDiv({ cls: "forge-ms-panel forge-ms-hidden" });
 
-    // Build folder list from vault
     const folders: string[] = [];
     const walk = (node: import("obsidian").TAbstractFile) => {
       if (node instanceof TFolder) {
@@ -827,6 +829,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         box.toggleClass("forge-ms-box-checked", checked);
         box.setText(checked ? "✓" : "");
       };
+      setCheckedMap.set(folderPath, setChecked);
       setChecked(selected.includes(folderPath));
 
       row.addEventListener("click", async () => {
@@ -851,6 +854,218 @@ export class ForgeSettingsTab extends PluginSettingTab {
       panel.toggleClass("forge-ms-hidden", !open);
       triggerIcon.setText(open ? "▴" : "▾");
     });
+
+    const onOutside = (e: MouseEvent) => {
+      if (!wrap.contains(e.target as Node)) {
+        open = false;
+        panel.addClass("forge-ms-hidden");
+        triggerIcon.setText("▾");
+      }
+    };
+    document.addEventListener("click", onOutside);
+
+    const observer = new MutationObserver(() => {
+      if (!document.contains(wrap)) {
+        document.removeEventListener("click", onOutside);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    renderChips();
+    updateTrigger();
+  }
+
+  /** Folder multi-select for shape repair scope — same pattern as renderFolderMultiSelect. */
+  private renderShapeRepairFolderMultiSelect(el: HTMLElement): void {
+    const selected = this.plugin.settings.shapeRepairFolders;
+
+    const wrap = el.createDiv({ cls: "forge-multiselect" });
+    const chipStrip = wrap.createDiv({ cls: "forge-ms-chips" });
+
+    const setCheckedMap = new Map<string, (checked: boolean) => void>();
+
+    const renderChips = () => {
+      chipStrip.empty();
+      selected.forEach((val) => {
+        const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
+        chip.createSpan({ text: val });
+        const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
+        rm.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const idx = selected.indexOf(val);
+          if (idx > -1) selected.splice(idx, 1);
+          setCheckedMap.get(val)?.(false);
+          renderChips();
+          updateTrigger();
+          await this.plugin.saveSettings();
+        });
+      });
+    };
+
+    const trigger = wrap.createDiv({ cls: "forge-ms-trigger" });
+    const triggerLabel = trigger.createSpan({ cls: "forge-ms-trigger-label" });
+    const triggerIcon = trigger.createSpan({ cls: "forge-ms-trigger-icon", text: "▾" });
+
+    const updateTrigger = () => {
+      triggerLabel.setText(
+        selected.length === 0 ? "Add folders…" : `${selected.length} folder(s) selected`
+      );
+    };
+
+    const panel = wrap.createDiv({ cls: "forge-ms-panel forge-ms-hidden" });
+
+    const folders: string[] = [];
+    const walk = (node: import("obsidian").TAbstractFile) => {
+      if (node instanceof TFolder) {
+        if (node.path && node.path !== "/") folders.push(node.path);
+        node.children.forEach(walk);
+      }
+    };
+    walk(this.app.vault.getRoot());
+    folders.sort();
+
+    folders.forEach((folderPath) => {
+      const row = panel.createDiv({ cls: "forge-ms-row" });
+      const box = row.createDiv({ cls: "forge-ms-box" });
+      row.createSpan({ text: folderPath, cls: "forge-ms-row-label" });
+
+      const setChecked = (checked: boolean) => {
+        box.toggleClass("forge-ms-box-checked", checked);
+        box.setText(checked ? "✓" : "");
+      };
+      setCheckedMap.set(folderPath, setChecked);
+      setChecked(selected.includes(folderPath));
+
+      row.addEventListener("click", async () => {
+        const idx = selected.indexOf(folderPath);
+        if (idx > -1) {
+          selected.splice(idx, 1);
+          setChecked(false);
+        } else {
+          selected.push(folderPath);
+          setChecked(true);
+        }
+        renderChips();
+        updateTrigger();
+        await this.plugin.saveSettings();
+      });
+    });
+
+    let open = false;
+    const togglePanel = (e: MouseEvent) => {
+      e.stopPropagation();
+      open = !open;
+      panel.toggleClass("forge-ms-hidden", !open);
+      triggerIcon.setText(open ? "▴" : "▾");
+    };
+    trigger.addEventListener("click", togglePanel);
+
+    const onOutside = (e: MouseEvent) => {
+      if (!wrap.contains(e.target as Node)) {
+        open = false;
+        panel.addClass("forge-ms-hidden");
+        triggerIcon.setText("▾");
+      }
+    };
+    document.addEventListener("click", onOutside);
+
+    const observer = new MutationObserver(() => {
+      if (!document.contains(wrap)) {
+        document.removeEventListener("click", onOutside);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    renderChips();
+    updateTrigger();
+  }
+
+  /** Folder multi-select for shape lint scope. */
+  private renderShapeLintFolderMultiSelect(el: HTMLElement): void {
+    const selected = this.plugin.settings.shapeLintFolders;
+
+    const wrap = el.createDiv({ cls: "forge-multiselect" });
+    const chipStrip = wrap.createDiv({ cls: "forge-ms-chips" });
+
+    const setCheckedMap = new Map<string, (checked: boolean) => void>();
+
+    const renderChips = () => {
+      chipStrip.empty();
+      selected.forEach((val) => {
+        const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
+        chip.createSpan({ text: val });
+        const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
+        rm.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const idx = selected.indexOf(val);
+          if (idx > -1) selected.splice(idx, 1);
+          setCheckedMap.get(val)?.(false);
+          renderChips();
+          updateTrigger();
+          await this.plugin.saveSettings();
+        });
+      });
+    };
+
+    const trigger = wrap.createDiv({ cls: "forge-ms-trigger" });
+    const triggerLabel = trigger.createSpan({ cls: "forge-ms-trigger-label" });
+    const triggerIcon = trigger.createSpan({ cls: "forge-ms-trigger-icon", text: "▾" });
+
+    const updateTrigger = () => {
+      triggerLabel.setText(
+        selected.length === 0 ? "Add folders…" : `${selected.length} folder(s) selected`
+      );
+    };
+
+    const panel = wrap.createDiv({ cls: "forge-ms-panel forge-ms-hidden" });
+
+    const folders: string[] = [];
+    const walk = (node: import("obsidian").TAbstractFile) => {
+      if (node instanceof TFolder) {
+        if (node.path && node.path !== "/") folders.push(node.path);
+        node.children.forEach(walk);
+      }
+    };
+    walk(this.app.vault.getRoot());
+    folders.sort();
+
+    folders.forEach((folderPath) => {
+      const row = panel.createDiv({ cls: "forge-ms-row" });
+      const box = row.createDiv({ cls: "forge-ms-box" });
+      row.createSpan({ text: folderPath, cls: "forge-ms-row-label" });
+
+      const setChecked = (checked: boolean) => {
+        box.toggleClass("forge-ms-box-checked", checked);
+        box.setText(checked ? "✓" : "");
+      };
+      setCheckedMap.set(folderPath, setChecked);
+      setChecked(selected.includes(folderPath));
+
+      row.addEventListener("click", async () => {
+        const idx = selected.indexOf(folderPath);
+        if (idx > -1) {
+          selected.splice(idx, 1);
+          setChecked(false);
+        } else {
+          selected.push(folderPath);
+          setChecked(true);
+        }
+        renderChips();
+        updateTrigger();
+        await this.plugin.saveSettings();
+      });
+    });
+
+    let open = false;
+    const togglePanel = (e: MouseEvent) => {
+      e.stopPropagation();
+      open = !open;
+      panel.toggleClass("forge-ms-hidden", !open);
+      triggerIcon.setText(open ? "▴" : "▾");
+    };
+    trigger.addEventListener("click", togglePanel);
 
     const onOutside = (e: MouseEvent) => {
       if (!wrap.contains(e.target as Node)) {
@@ -903,6 +1118,84 @@ export class ForgeSettingsTab extends PluginSettingTab {
       "System/Shapes"
     );
 
+    new Setting(el)
+      .setName("Include subfolders")
+      .setDesc(
+        "When enabled, shape notes in subfolders of the shapes folder are included " +
+        "in refinement, lint, and repair. Off by default to preserve existing behavior."
+      )
+      .addToggle((t) =>
+        t.setValue(s.shapeIncludeSubfolders ?? false).onChange(async (v) => {
+          s.shapeIncludeSubfolders = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    // ── Field Configuration ───────────────────────────────────────
+    el.createEl("h3", { text: "Template Field Configuration" });
+    el.createEl("p", {
+      text: "Configure which schema fields appear in generated templates and what value each gets. " +
+            "The type target field and configured date fields are excluded — they are set automatically at runtime.",
+      cls: "setting-item-description",
+    });
+
+    this.renderShapeTypeTargetField(el);
+
+    this.renderShapeDateField(
+      el,
+      "Created field",
+      "Schema date field stamped when a template is first created. Set to none to skip.",
+      "shapeCreatedField"
+    );
+
+    this.renderShapeDateField(
+      el,
+      "Updated field",
+      "Schema date field stamped every time a template is written. Set to none to skip.",
+      "shapeUpdatedField"
+    );
+
+    this.renderShapeFieldConfigurator(el);
+
+    // ── Template Refinement ───────────────────────────────────────
+    el.createEl("h3", { text: "Template Refinement" });
+    el.createEl("p", {
+      text: "When enabled, the 'Refine Shape Templates' command reads each shape note " +
+            "and writes or updates the corresponding template note.",
+      cls: "setting-item-description",
+    });
+
+    new Setting(el)
+      .setName("Enable template refinement")
+      .setDesc("Allow the Refine Shape Templates command to create and update template notes.")
+      .addToggle((t) =>
+        t.setValue(s.shapeRefinementEnabled).onChange(async (v) => {
+          s.shapeRefinementEnabled = v;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (s.shapeRefinementEnabled) {
+      this.renderFolderPicker(
+        el,
+        "Templates folder",
+        "Folder where template notes are written.",
+        "shapeTemplatesFolder",
+        "System/Templates"
+      );
+
+      new Setting(el)
+        .setName("Run refinement")
+        .setDesc("Process all shape notes and write or update template notes now.")
+        .addButton((btn) =>
+          btn.setButtonText("Refine Shape Templates").setCta().onClick(async () => {
+            const { runRefineShapes } = await import("./commands/refine-shapes");
+            await runRefineShapes(this.plugin);
+          })
+        );
+    }
+
     // ── Shape Lint ────────────────────────────────────────────────
     el.createEl("h3", { text: "Shape Lint" });
     el.createEl("p", {
@@ -925,73 +1218,121 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
-    // ── Template Refinement ───────────────────────────────────────
-    el.createEl("h3", { text: "Template Refinement" });
+    if (s.shapeLintEnabled) {
+      new Setting(el)
+        .setName("Lint scope")
+        .setDesc("Validate all notes in the vault, or limit to selected folders only.")
+        .addDropdown((dd) => {
+          dd.addOption("all", "All vault notes");
+          dd.addOption("folder", "Selected folders only");
+          dd.setValue(s.shapeLintScope ?? "all");
+          dd.onChange(async (v) => {
+            s.shapeLintScope = v as "all" | "folder";
+            await this.plugin.saveSettings();
+            this.display();
+          });
+        });
+
+      if (s.shapeLintScope === "folder") {
+        new Setting(el)
+          .setName("Lint folders")
+          .setDesc("Only notes in these folders will be evaluated for shape heading validation.");
+        this.renderShapeLintFolderMultiSelect(el);
+      }
+    }
+
+    // ── Shape Repair ──────────────────────────────────────────────
+    el.createEl("h3", { text: "Shape Repair" });
     el.createEl("p", {
-      text: "When enabled, the 'Refine Shape Templates' command reads each shape note " +
-            "and writes or updates the corresponding template note.",
+      text: "When enabled, the 'Run Shape Repair' command corrects heading drift in notes " +
+            "by adding missing headings and reordering sections to match the template. " +
+            "No content is ever deleted. A backup is written before each file is modified.",
       cls: "setting-item-description",
     });
 
     new Setting(el)
-      .setName("Enable template refinement")
-      .setDesc("Allow the Refine Shape Templates command to create and update template notes.")
+      .setName("Enable shape repair")
+      .setDesc("Allow the Run Shape Repair command to modify notes.")
       .addToggle((t) =>
-        t.setValue(s.shapeRefinementEnabled).onChange(async (v) => {
-          s.shapeRefinementEnabled = v;
+        t.setValue(s.shapeRepairEnabled).onChange(async (v) => {
+          s.shapeRepairEnabled = v;
           await this.plugin.saveSettings();
           this.display();
         })
       );
 
-    if (!s.shapeRefinementEnabled) return;
+    if (s.shapeRepairEnabled) {
+      new Setting(el)
+        .setName("Repair scope")
+        .setDesc("Repair all notes in the vault, or limit to selected folders only.")
+        .addDropdown((dd) => {
+          dd.addOption("all", "All vault notes");
+          dd.addOption("folder", "Selected folders only");
+          dd.setValue(s.shapeRepairScope ?? "all");
+          dd.onChange(async (v) => {
+            s.shapeRepairScope = v as "all" | "folder";
+            await this.plugin.saveSettings();
+            this.display();
+          });
+        });
 
-    this.renderFolderPicker(
-      el,
-      "Templates folder",
-      "Folder where template notes are written.",
-      "shapeTemplatesFolder",
-      "System/Templates"
-    );
+      if (s.shapeRepairScope === "folder") {
+        new Setting(el)
+          .setName("Repair folders")
+          .setDesc("Notes in these folders will be evaluated for shape repair.");
+        this.renderShapeRepairFolderMultiSelect(el);
+      }
 
-    // ── Run button ────────────────────────────────────────────────
-    new Setting(el)
-      .setName("Run refinement")
-      .setDesc("Process all shape notes and write or update template notes now.")
-      .addButton((btn) =>
-        btn.setButtonText("Refine Shape Templates").setCta().onClick(async () => {
-          const { runRefineShapes } = await import("./commands/refine-shapes");
-          await runRefineShapes(this.plugin);
-        })
+      this.renderFolderPicker(
+        el,
+        "Repair runs folder",
+        "Folder where shape repair run notes are written.",
+        "shapeRepairRunsFolder",
+        "System/Exports/ShapeRepairRuns"
       );
 
-    // ── Field configuration ───────────────────────────────────────
-    el.createEl("h3", { text: "Template Field Configuration" });
-    el.createEl("p", {
-      text: "Configure which schema fields appear in generated templates and what value each gets. " +
-            "The type target field and configured date fields are excluded — they are set automatically at runtime.",
-      cls: "setting-item-description",
-    });
+      new Setting(el)
+        .setName("Repair file links")
+        .setDesc(
+          "Wrap file paths in [[wikilinks]] in repair run notes so you can navigate directly to affected files."
+        )
+        .addToggle((t) =>
+          t.setValue(s.shapeRepairFileLinks).onChange(async (v) => {
+            s.shapeRepairFileLinks = v;
+            await this.plugin.saveSettings();
+          })
+        );
 
-    // Type target field — dropdown of all schema field names
-    this.renderShapeTypeTargetField(el);
+      new Setting(el)
+        .setName("Repair history retention")
+        .setDesc("Maximum number of repair run entries to keep in shape-repair-history.json.")
+        .addSlider((sl) =>
+          sl
+            .setLimits(5, 50, 5)
+            .setValue(s.shapeRepairHistoryRetentionCount)
+            .setDynamicTooltip()
+            .onChange(async (v) => {
+              s.shapeRepairHistoryRetentionCount = v;
+              await this.plugin.saveSettings();
+            })
+        );
 
-    // Created / updated field pickers — date fields from schema
-    this.renderShapeDateField(
-      el,
-      "Created field",
-      "Schema date field stamped when a template is first created. Set to none to skip.",
-      "shapeCreatedField"
-    );
-
-    this.renderShapeDateField(
-      el,
-      "Updated field",
-      "Schema date field stamped every time a template is written. Set to none to skip.",
-      "shapeUpdatedField"
-    );
-
-    this.renderShapeFieldConfigurator(el);
+      new Setting(el)
+        .setName("Run shape repair")
+        .setDesc("Add missing headings and reorder sections to match templates now.")
+        .addButton((btn) =>
+          btn.setButtonText("Dry Run").onClick(async () => {
+            const { runShapeRepair } = await import("./commands/shape-repair");
+            await runShapeRepair(this.plugin, true);
+          })
+        )
+        .addButton((btn) =>
+          btn.setButtonText("Run Shape Repair").setCta().onClick(async () => {
+            const { runShapeRepair } = await import("./commands/shape-repair");
+            await runShapeRepair(this.plugin, false);
+          })
+        );
+    }
   }
 
   private renderShapeTypeTargetField(el: HTMLElement): void {
@@ -1495,6 +1836,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
         border-bottom: 1px solid var(--background-modifier-border);
         margin-bottom: 16px;
         flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--background-primary);
+        padding-top: 12px;
+        margin-top: -12px;
       }
       .forge-tab-btn {
         padding: 4px 12px;

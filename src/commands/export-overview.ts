@@ -216,6 +216,7 @@ function buildExportNote(
     `total_private_notes:: ${totalPrivate}`,
     "",
     `> Generated ${inventory.generated_at}`,
+    "> Machine-readable data: `vault-inventory.json`, `vault-meta.json`",
     "",
     `## All Notes by ${domainLabel}`,
     "",
@@ -249,13 +250,6 @@ function buildExportNote(
       "",
     );
   }
-
-  lines.push(
-    "---",
-    "",
-    "Machine-readable data: `vault-inventory.json`, `vault-meta.json`",
-    "",
-  );
 
   return lines.join("\n");
 }

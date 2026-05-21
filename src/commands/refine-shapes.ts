@@ -84,9 +84,18 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
     return { results, created, updated, skipped, errors, ranAt: localTimestamp() };
   }
 
-  const shapeFiles = shapesFolder.children.filter(
-    (f): f is TFile => f instanceof TFile && f.extension === "md"
-  );
+  // Gather shape files — optionally recursive
+  const shapeFiles: TFile[] = [];
+  const gatherShapes = (folder: TFolder) => {
+    for (const child of folder.children) {
+      if (child instanceof TFile && child.extension === "md") {
+        shapeFiles.push(child);
+      } else if (child instanceof TFolder && settings.shapeIncludeSubfolders) {
+        gatherShapes(child);
+      }
+    }
+  };
+  gatherShapes(shapesFolder);
 
   for (const shapeFile of shapeFiles) {
     const result = await processShape(plugin, shapeFile, paths.templates);

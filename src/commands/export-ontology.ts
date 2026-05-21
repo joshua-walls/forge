@@ -146,7 +146,7 @@ export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIn
   }
 
   const total = indexes.reduce((sum, idx) => sum + idx.total_notes, 0);
-  new Notice(`Forge: Ontology export complete — ${total} nodes across [${[...recordsByValue.keys()].join(", ")}].`, 6000);
+  new Notice(`Forge: Ontology export complete — ${total} notes across [${[...recordsByValue.keys()].join(", ")}].`, 6000);
   return indexes;
 }
 
@@ -229,12 +229,12 @@ function buildOntologyNote(index: OntologyIndex, today: string, domainLabel: str
     `node_type:: ${index.node_type}`, `total_notes:: ${index.total_notes}`,
     `total_private_notes:: ${index.total_private_notes}`,
     `relationship_heading:: ${index.relationship_heading}`, "",
-    `> Generated ${index.generated_at_utc} — ${index.total_notes} nodes.`,
+    `> Generated ${index.generated_at_utc} — ${index.total_notes} notes.`,
     `> Relationship heading: \`# ${index.relationship_heading}\``,
     `> Machine-readable data: \`${index.node_type}-index.json\``, "",
     "# Relationship Keys Observed", "",
     allKeys.size > 0 ? [...allKeys].sort().map((k) => `- ${k}`).join("\n") : "_No relationship sections found._",
-    "", "# Nodes", "",
+    "", "# Notes", "",
     `| Name | ${statusLabel} | ${domainLabel} | Relationships |`,
     "|------|--------|--------|---------------|",
     ...index.items.map((n) => {

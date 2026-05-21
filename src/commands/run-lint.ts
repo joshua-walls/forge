@@ -154,6 +154,7 @@ class LintResultsModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
+    this.modalEl.addClass("forge-modal");
 
     const r = this.result;
     const failed =
@@ -166,7 +167,9 @@ class LintResultsModal extends Modal {
         : "✅ Vault Lint — Passed",
     });
 
-    const summaryEl = contentEl.createDiv("forge-lint-summary");
+    const body = contentEl.createDiv("forge-modal-body");
+
+    const summaryEl = body.createDiv("forge-lint-summary");
 
     summaryEl.createEl("div", {
       text: `${r.errors.length} errors`,
@@ -187,26 +190,26 @@ class LintResultsModal extends Modal {
     });
 
     if (r.errors.length > 0) {
-      contentEl.createEl("h3", { text: "Errors" });
+      body.createEl("h3", { text: "Errors" });
 
       for (const group of groupLintItems(r.errors)) {
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: `[${group.rule}]`,
           cls: "forge-lint-rule",
         });
 
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: group.summary,
           cls: "forge-lint-message",
         });
 
         for (const reason of group.reasons) {
-          contentEl.createEl("h4", {
+          body.createEl("h4", {
             text: reason.label,
             cls: "forge-lint-reason",
           });
 
-          const list = contentEl.createEl("ul", {
+          const list = body.createEl("ul", {
             cls: "forge-lint-list",
           });
 
@@ -220,26 +223,26 @@ class LintResultsModal extends Modal {
     }
 
     if (r.warnings.length > 0) {
-      contentEl.createEl("h3", { text: "Warnings" });
+      body.createEl("h3", { text: "Warnings" });
 
       for (const group of groupLintItems(r.warnings)) {
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: `[${group.rule}]`,
           cls: "forge-lint-rule",
         });
 
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: group.summary,
           cls: "forge-lint-message",
         });
 
         for (const reason of group.reasons) {
-          contentEl.createEl("h4", {
+          body.createEl("h4", {
             text: reason.label,
             cls: "forge-lint-reason",
           });
 
-          const list = contentEl.createEl("ul", {
+          const list = body.createEl("ul", {
             cls: "forge-lint-list",
           });
 
@@ -253,26 +256,26 @@ class LintResultsModal extends Modal {
     }
 
     if (r.infos.length > 0) {
-      contentEl.createEl("h3", { text: "Info" });
+      body.createEl("h3", { text: "Info" });
 
       for (const group of groupLintItems(r.infos)) {
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: `[${group.rule}]`,
           cls: "forge-lint-rule",
         });
 
-        contentEl.createEl("div", {
+        body.createEl("div", {
           text: group.summary,
           cls: "forge-lint-message",
         });
 
         for (const reason of group.reasons) {
-          contentEl.createEl("h4", {
+          body.createEl("h4", {
             text: reason.label,
             cls: "forge-lint-reason",
           });
 
-          const list = contentEl.createEl("ul", {
+          const list = body.createEl("ul", {
             cls: "forge-lint-list",
           });
 
@@ -285,8 +288,9 @@ class LintResultsModal extends Modal {
       }
     }
 
-    // Buttons
-    const buttonRow = contentEl.createDiv("forge-button-row");
+    // Pinned footer
+    const footer = contentEl.createDiv("forge-modal-footer");
+    const buttonRow = footer.createDiv("forge-button-row");
 
     const viewBtn = buttonRow.createEl("button", {
       text: "View Lint Run Note",
