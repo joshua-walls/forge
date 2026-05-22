@@ -135,7 +135,7 @@ echo "Release complete 🚀"
 # =========================================
 echo "Creating draft release..."
 if ! gh release create "v${VERSION}" \
-  "dist/${ZIP_NAME}" \
+  dist/* \
   --title "Forge v${VERSION}" \
   --draft \
   --notes-file RELEASE_NOTES.md; then
