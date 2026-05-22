@@ -10,4 +10,5 @@ coverage/
 *.tar
 *.gz
 *.7z
-package.sh
+release.sh
+RELEASE_NOTES.md

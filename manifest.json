@@ -1,9 +1,9 @@
 {
   "id": "forge",
   "name": "Forge",
-  "version": "0.9.0",
+  "version": "0.9.2",
   "minAppVersion": "1.5.11",
-  "description": "Vault governance and operations \u2014 lint, patch, normalize, repair, and maintain a schema-driven Obsidian vault.",
+  "description": "Define the structure your vault should have, then let Forge enforce it. Lint for drift, normalize metadata, and apply auditable bulk changes with confidence.",
   "author": "Joshua Walls",
   "authorUrl": "https://github.com/joshua-walls",
   "isDesktopOnly": false
