@@ -10,3 +10,4 @@ coverage/
 *.tar
 *.gz
 *.7z
+package.sh
