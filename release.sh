@@ -96,7 +96,7 @@ ZIP_NAME="${PLUGIN_ID}-${VERSION}.zip"
 rm -f "$ZIP_NAME"
 
 cd dist
-zip -r "../${ZIP_NAME}" .
+zip -r "${ZIP_NAME}" .
 cd ..
 
 echo ""
@@ -113,7 +113,7 @@ CURRENT_BRANCH=$(git branch --show-current)
 echo ""
 echo "Current branch: $CURRENT_BRANCH"
 
-git checkout -b "$BRANCH_NAME"
+git checkout -B "$BRANCH_NAME"
 
 echo "Created git branch: $BRANCH_NAME"
 
@@ -126,6 +126,24 @@ git commit -m "release: v${VERSION}"
 
 git push -u origin "$BRANCH_NAME"
 
+echo ""
+echo "Pushed branch: $BRANCH_NAME"
+echo "Release complete 🚀"
+
+# =========================================
+# GitHub Draft Release
+# =========================================
+echo "Creating draft release..."
+if ! gh release create "v${VERSION}" \
+  "dist/${ZIP_NAME}" \
+  --title "Forge v${VERSION}" \
+  --draft \
+  --notes-file RELEASE_NOTES.md; then
+  echo "Draft release failed — aborting."
+  exit 1
+fi
+
+echo "Draft release created: Forge v${VERSION}"
 echo ""
 echo "Pushed branch: $BRANCH_NAME"
 echo "Release complete 🚀"

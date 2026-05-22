@@ -1,7 +1,7 @@
 {
   "name": "forge",
   "version": "0.9.1",
-  "description": "Vault governance and operations plugin for Obsidian",
+  "description": "Define your vault's structure and let Forge enforce it — lint, normalize, patch, and maintain with confidence.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
