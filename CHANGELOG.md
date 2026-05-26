@@ -1,3 +1,20 @@
+# 1.1.0
+
+## Added
+
+- Vault Health Dashboard custom Obsidian view with manual refresh, cached results, summary metrics, schema health, active lint issue listing, ontology metrics, maintenance history, and section-level health indicators.
+- Dashboard service/cache layer backed by `System/Forge/health-dashboard.json`.
+- Reusable lint, schema, ontology, patch-history, and dashboard composition services for dashboard consumption and future workflow orchestration.
+- Commands: Open Vault Health Dashboard and Refresh Vault Health Dashboard.
+- In-dashboard actions for Run Vault Lint, Validate Schema, and Open schema.md.
+
+## Changed
+
+- Vault Lint, Validate Schema, Export Ontology Index, and Apply Vault Patch now update dashboard-visible service cache state as part of their normal command flow.
+- Open dashboard views now refresh from the latest cached state after supported Forge commands complete.
+
+---
+
 # 1.0.0
 
 ## Breaking Changes

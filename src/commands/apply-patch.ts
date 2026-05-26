@@ -85,6 +85,7 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
     await writeRestoreManifest(app, settings, applyResult);
     await archivePatchFile(app, settings, applyResult);
     const reportPath = await writePatchReport(app, settings, applyResult);
+    await plugin.patchHistoryService.readHistory("patch-history");
 
     const changed = applyResult.results.filter((r) => r.status === "changed").length;
     const errors  = applyResult.results.filter((r) => r.status === "error").length;
@@ -110,6 +111,8 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
     // Auto-lint after patch apply
     if (settings.patchAutoLintAfterApply) {
       await runVaultLint(plugin);
+    } else {
+      await plugin.recomposeHealthDashboard();
     }
   }).open();
 }

@@ -11,7 +11,7 @@
 import { App, Modal, Notice, TFile } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { validateSchemaNote, SchemaValidationIssue } from "../utils/schema";
+import { SchemaValidationIssue } from "../utils/schema";
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -29,20 +29,19 @@ export async function runValidateSchema(plugin: ForgePlugin): Promise<void> {
     return;
   }
 
-  let raw: string;
   try {
-    raw = await app.vault.read(file);
+    await app.vault.read(file);
   } catch (e) {
     new Notice("Forge: Could not read schema.md.", 5000);
     return;
   }
 
-  const issues = validateSchemaNote(raw, settings);
-
-  // Refresh cache on successful validation so all commands get updated field list
-  if (!issues.some((i) => i.severity === "error")) {
-    await plugin.schemaCache.refresh();
-  }
+  const result = await plugin.schemaService.validate("validate-schema");
+  const issues = result.violations.map((issue) => ({
+    severity: issue.severity === "critical" ? "error" : "warning",
+    message: issue.message,
+  })) as SchemaValidationIssue[];
+  await plugin.recomposeHealthDashboard();
 
   new ValidateSchemaModal(app, plugin, issues, paths.schemaMd).open();
 }

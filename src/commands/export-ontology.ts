@@ -146,6 +146,8 @@ export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIn
   }
 
   const total = indexes.reduce((sum, idx) => sum + idx.total_notes, 0);
+  await plugin.ontologyService.collectMetrics("export-ontology-index");
+  await plugin.recomposeHealthDashboard();
   new Notice(`Forge: Ontology export complete — ${total} notes across [${[...recordsByValue.keys()].join(", ")}].`, 6000);
   return indexes;
 }

@@ -1,10 +1,19 @@
 // src/main.ts
 // Forge — Obsidian plugin entry point.
 
-import { Plugin, Notice } from "obsidian";
+import { Plugin, Notice, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, ForgeSettings } from "./settings";
 import { ForgeSettingsTab } from "./settings-tab";
 import { SchemaCache } from "./schema-cache";
+import { LintService } from "./lint_service";
+import { SchemaService } from "./schema_service";
+import { OntologyService } from "./ontology_service";
+import { PatchHistoryService } from "./patch_history_service";
+import { DashboardService } from "./dashboard_service";
+import {
+  FORGE_HEALTH_DASHBOARD_VIEW,
+  ForgeHealthDashboardView,
+} from "./dashboard_view";
 import { MigrationNoticeModal } from "./migration-notice";
 import { runApplyPatch } from "./commands/apply-patch";
 import { runVaultLint } from "./commands/run-lint";
@@ -23,6 +32,11 @@ import { runShapeRepair } from "./commands/shape-repair";
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   schemaCache: SchemaCache;
+  lintService: LintService;
+  schemaService: SchemaService;
+  ontologyService: OntologyService;
+  patchHistoryService: PatchHistoryService;
+  dashboardService: DashboardService;
 
   async onload(): Promise<void> {
     // Check for an existing data.json before loadSettings() creates it.
@@ -53,6 +67,21 @@ export default class ForgePlugin extends Plugin {
 
     // Initialise schema cache — vault access deferred until layout ready
     this.schemaCache = new SchemaCache(this.app, this.settings);
+    this.lintService = new LintService(this.app, this.settings);
+    this.schemaService = new SchemaService(this.app, this.settings, this.schemaCache);
+    this.ontologyService = new OntologyService(this.app, this.settings);
+    this.patchHistoryService = new PatchHistoryService(this.app, this.settings);
+    this.dashboardService = new DashboardService(this.app, this.settings, {
+      lintService: this.lintService,
+      schemaService: this.schemaService,
+      ontologyService: this.ontologyService,
+      patchHistoryService: this.patchHistoryService,
+    });
+
+    this.registerView(
+      FORGE_HEALTH_DASHBOARD_VIEW,
+      (leaf: WorkspaceLeaf) => new ForgeHealthDashboardView(leaf, this)
+    );
 
     // Register commands and settings tab immediately — these don't need vault access
     this.addCommand({
@@ -221,7 +250,44 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
-        this.addSettingTab(new ForgeSettingsTab(this.app, this));
+    this.addCommand({
+      id: "open-vault-health-dashboard",
+      name: "Open Vault Health Dashboard",
+      callback: () => {
+        this.openHealthDashboard().catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] open-vault-health-dashboard error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "refresh-vault-health-dashboard",
+      name: "Refresh Vault Health Dashboard",
+      callback: () => {
+        this.dashboardService.refreshSnapshot()
+          .then(() => new Notice("Forge: Vault Health Dashboard refreshed.", 4000))
+          .catch((e: Error) => {
+            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+            console.error("[Forge] refresh-vault-health-dashboard error:", e);
+          });
+      },
+    });
+
+    this.addCommand({
+      id: "export-dashboard-snapshot",
+      name: "Export Dashboard Snapshot",
+      callback: () => {
+        this.dashboardService.exportSnapshot()
+          .then((path) => new Notice(`Forge: Dashboard snapshot exported to ${path}`, 6000))
+          .catch((e: Error) => {
+            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+            console.error("[Forge] export-dashboard-snapshot error:", e);
+          });
+      },
+    });
+
+    this.addSettingTab(new ForgeSettingsTab(this.app, this));
 
     // Defer all vault file access until the workspace layout is ready.
     // On iOS, the vault adapter is not fully mounted when onload() fires
@@ -243,6 +309,35 @@ export default class ForgePlugin extends Plugin {
     console.log("Forge unloaded");
   }
 
+  async openHealthDashboard(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    if (leaves.length > 0) {
+      this.app.workspace.revealLeaf(leaves[0]);
+      return;
+    }
+
+    const leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({
+      type: FORGE_HEALTH_DASHBOARD_VIEW,
+      active: true,
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  async recomposeHealthDashboard(): Promise<void> {
+    try {
+      await this.dashboardService.composeSnapshotFromLatest();
+      const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+      for (const leaf of leaves) {
+        if (leaf.view instanceof ForgeHealthDashboardView) {
+          await leaf.view.reloadFromCache();
+        }
+      }
+    } catch (e) {
+      console.warn("[Forge] Could not recompose health dashboard:", e);
+    }
+  }
+
   async loadSettings(): Promise<void> {
     const loaded = (await this.loadData()) ?? {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
@@ -260,6 +355,18 @@ export default class ForgePlugin extends Plugin {
     await this.saveData(this.settings);
     if (this.schemaCache) {
       this.schemaCache.updateSettings(this.settings);
+    }
+    if (this.lintService) this.lintService = new LintService(this.app, this.settings);
+    if (this.schemaService) this.schemaService = new SchemaService(this.app, this.settings, this.schemaCache);
+    if (this.ontologyService) this.ontologyService = new OntologyService(this.app, this.settings);
+    if (this.patchHistoryService) this.patchHistoryService = new PatchHistoryService(this.app, this.settings);
+    if (this.dashboardService) {
+      this.dashboardService = new DashboardService(this.app, this.settings, {
+        lintService: this.lintService,
+        schemaService: this.schemaService,
+        ontologyService: this.ontologyService,
+        patchHistoryService: this.patchHistoryService,
+      });
     }
   }
 }

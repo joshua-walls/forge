@@ -11,8 +11,7 @@
 
 import { App, Modal, Notice, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
-import { runLint, LintRunResult } from "../lint-engine";
+import { LintRunResult } from "../lint-engine";
 import {
   writeLintReportJson,
   appendLintHistory,
@@ -32,7 +31,7 @@ export async function runVaultLint(plugin: ForgePlugin): Promise<LintRunResult |
     estimatedSeconds * 1000
   );
 
-  const result = await runLint(app, settings);
+  const result = await plugin.lintService.runLint("run-vault-lint");
 
   if (!result) {
     new Notice(
@@ -46,6 +45,7 @@ export async function runVaultLint(plugin: ForgePlugin): Promise<LintRunResult |
   await writeLintReportJson(app, settings, result);
   await appendLintHistory(app, settings, result);
   const runNotePath = await writeLintRunNote(app, settings, result);
+  await plugin.recomposeHealthDashboard();
 
   // Show results modal
   new LintResultsModal(app, plugin, result, runNotePath).open();

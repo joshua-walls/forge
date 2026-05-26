@@ -5,9 +5,10 @@
 // Presents a list of past patch runs.
 // On selection, restores each file from its .bak backup.
 
-import { App, Modal, Notice, TFile } from "obsidian";
+import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
+import { ensureFolder } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,10 +32,22 @@ export async function runRestorePatch(plugin: ForgePlugin): Promise<void> {
   const { app, settings } = plugin;
   const paths = getVaultPaths(settings);
 
-  // Find all manifest files
-  const manifestFiles = app.vault.getFiles().filter(
-    (f) => f.path.startsWith(paths.patchReports) && f.name.endsWith("-patch-manifest.json")
-  ).sort((a, b) => b.name.localeCompare(a.name)); // newest first
+  // Find all manifest files. Current manifests live in Reports; legacy
+  // manifests may live directly in the patch folder.
+  const manifestFolders = [paths.patchReports, paths.patches].map((path) =>
+    normalizePath(path).replace(/\/$/, "")
+  );
+  const seen = new Set<string>();
+  const manifestFiles = app.vault.getFiles().filter((f) => {
+    if (!f.name.endsWith("-patch-manifest.json")) return false;
+    if (seen.has(f.path)) return false;
+
+    const isManifest = manifestFolders.some((folder) =>
+      f.path.startsWith(folder + "/")
+    );
+    if (isManifest) seen.add(f.path);
+    return isManifest;
+  }).sort((a, b) => b.name.localeCompare(a.name)); // newest first
 
   if (manifestFiles.length === 0) {
     new Notice("Forge: No patch manifests found. Apply a patch with backups enabled first.", 6000);
@@ -156,21 +169,27 @@ class RestorePatchModal extends Modal {
     let failed = 0;
 
     for (const change of manifest.changes) {
-      const backupFile = app.vault.getAbstractFileByPath(change.backup);
-      if (!(backupFile instanceof TFile)) {
+      const backupPath = normalizePath(change.backup);
+      const targetPath = normalizePath(change.file);
+
+      if (!(await app.vault.adapter.exists(backupPath))) {
         console.warn(`[Forge] Backup not found: ${change.backup}`);
         failed++;
         continue;
       }
 
       try {
-        const backupContent = await app.vault.read(backupFile);
-        const targetFile = app.vault.getAbstractFileByPath(change.file);
+        const backupContent = await app.vault.adapter.read(backupPath);
+        const targetFile = app.vault.getAbstractFileByPath(targetPath);
 
         if (targetFile instanceof TFile) {
           await app.vault.modify(targetFile, backupContent);
         } else {
-          await app.vault.create(change.file, backupContent);
+          const folder = targetPath.includes("/")
+            ? targetPath.substring(0, targetPath.lastIndexOf("/"))
+            : "";
+          if (folder) await ensureFolder(app, folder);
+          await app.vault.create(targetPath, backupContent);
         }
 
         restored++;

@@ -1,131 +1,30 @@
-#!/usr/bin/env zsh
+name: Tag Release
 
-set -e
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
 
-# =========================================
-# Params
-# =========================================
-# Usage: ./release.sh -version <version> [-publish true|false]
-# Example: ./release.sh -version 1.0.0
-#          ./release.sh -version 1.0.0 -publish true
+jobs:
+  tag:
+    if: "github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')"
+    runs-on: ubuntu-latest
 
-VERSION=""
-PUBLISH=false
-PLUGIN_ID="forge"
+    permissions:
+      contents: write
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -version) VERSION="$2"; shift 2 ;;
-    -publish) PUBLISH="$2"; shift 2 ;;
-    *) echo "Unknown parameter: $1"; echo "Usage: ./release.sh -version <version> [-publish true|false]"; exit 1 ;;
-  esac
-done
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-if [[ -z "$VERSION" ]]; then
-  echo "Missing required parameter: -version"
-  echo "Usage: ./release.sh -version <version> [-publish true|false]"
-  exit 1
-fi
+      - name: Extract version from branch name
+        id: version
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          VERSION="${BRANCH#release/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-# =========================================
-# Verify dependencies
-# =========================================
-for cmd in git jq; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "Missing dependency: $cmd"
-    exit 1
-  fi
-done
-
-# =========================================
-# Guard: must be on main (publish only)
-# =========================================
-if [[ "$PUBLISH" == true ]]; then
-  CURRENT_BRANCH=$(git branch --show-current)
-  if [[ "$CURRENT_BRANCH" != "main" ]]; then
-    echo "Must be on main before cutting a release branch. Currently on: $CURRENT_BRANCH"
-    exit 1
-  fi
-
-  # Only fail on dirty files that are NOT ones this script will own
-  UNEXPECTED=$(git status --porcelain | grep -v '^\(M\| M\)\s*\(package\.json\|manifest\.json\|versions\.json\|main\.js\)' || true)
-  if [[ -n "$UNEXPECTED" ]]; then
-    echo "Working tree has unexpected changes. Commit or stash before releasing:"
-    echo "$UNEXPECTED"
-    exit 1
-  fi
-fi
-
-# =========================================
-# Update package.json
-# =========================================
-TMP=$(mktemp)
-jq --arg v "$VERSION" '.version = $v' package.json > "$TMP"
-mv "$TMP" package.json
-echo "Updated package.json -> $VERSION"
-
-# =========================================
-# Update manifest.json
-# =========================================
-TMP=$(mktemp)
-jq --arg v "$VERSION" '.version = $v' manifest.json > "$TMP"
-mv "$TMP" manifest.json
-echo "Updated manifest.json -> $VERSION"
-
-# =========================================
-# Update versions.json
-# =========================================
-MIN_APP_VERSION=$(jq -r '.minAppVersion' manifest.json)
-
-if jq -e --arg v "$VERSION" 'has($v)' versions.json > /dev/null 2>&1; then
-  echo "versions.json already has $VERSION — skipping."
-else
-  TMP=$(mktemp)
-  jq --arg v "$VERSION" \
-     --arg min "$MIN_APP_VERSION" \
-     '. + {($v): $min}' \
-     versions.json > "$TMP"
-  mv "$TMP" versions.json
-  echo "Updated versions.json -> $VERSION"
-fi
-
-# =========================================
-# Build
-# =========================================
-npm install
-npm run build
-echo "Build complete."
-
-if [[ "$PUBLISH" != true ]]; then
-  echo ""
-  echo "Local build finished. Run with -publish true to push and cut a release branch."
-  exit 0
-fi
-
-# =========================================
-# Create release branch
-# =========================================
-BRANCH_NAME="release/${VERSION}"
-
-git checkout -b "$BRANCH_NAME"
-echo "Created branch: $BRANCH_NAME"
-
-# =========================================
-# Commit release files
-# =========================================
-git add package.json manifest.json versions.json main.js
-
-if git diff --cached --quiet; then
-  echo "Nothing to commit — release files unchanged."
-else
-  git commit -m "release: v${VERSION}"
-fi
-
-git push -u origin "$BRANCH_NAME"
-
-echo ""
-echo "Branch pushed: $BRANCH_NAME"
-echo ""
-echo "Next steps:"
-echo "  1. Open a PR from $BRANCH_NAME -> main"
-echo "  2. Merge the PR — CI will automatically tag $VERSION and cut the GitHub Release"
+      - name: Create and push tag
+        run: |
+          git tag ${{ steps.version.outputs.version }}
+          git push origin ${{ steps.version.outputs.version }}
