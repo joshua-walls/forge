@@ -1,3 +1,25 @@
+# 1.2.0
+
+## Added
+
+- Operation-level Patch Restore for new patch manifests. Forge now records changed patch operations with target, before value, after value, and reverse action data.
+- Selective restore workflow for patch runs with operation manifests, including per-operation status, conflict detection, and checkbox selection.
+- Patch restore reports for operation-level restores.
+
+## Changed
+
+- Patch manifests now write `manifest_version: 2` and preserve legacy `changes` backup entries while adding an `operations` array.
+- New patch applies no longer create full-file `.bak` backups for operation-manifest restore.
+- Restore Patch Run keeps legacy full-file restore fallback for old manifests, but labels it clearly as full-file backup restore.
+- Patch history can surface changed operation counts from v2 manifests.
+
+## Safety
+
+- Operation-level restore only reverses an operation when the current value still matches the value written by the original patch.
+- Conflicted operations are skipped by default to preserve unrelated edits made after patch apply.
+
+---
+
 # 1.1.0
 
 ## Added

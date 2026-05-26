@@ -22,27 +22,30 @@ import type { PatchRunResult } from "./patch-engine";
 
 /**
  * Writes the restore manifest JSON file.
- * Only written when backups are enabled and patchGenerateManifest is true.
+ * Written when patchGenerateManifest is true. New manifests use operation-level
+ * restore data; legacy backup entries are preserved only when present.
  */
 export async function writeRestoreManifest(
   app: App,
   settings: ForgeSettings,
   result: PatchRunResult
 ): Promise<void> {
-  if (!settings.patchBackupEnabled || !settings.patchGenerateManifest) return;
-  if (result.manifest.length === 0) return;
+  if (!settings.patchGenerateManifest) return;
+  if (result.manifest.length === 0 && result.operations.length === 0) return;
   if (result.dryRun) return;
 
   const paths = getVaultPaths(settings);
   await ensureFolder(app, paths.patchReports);
 
   const manifest = {
+    manifest_version: 2,
     run_id: result.runId,
     patch_file: result.patchFile,
     description: result.description,
     applied_at: result.appliedAt,
     schema_version: result.schemaVersion,
     changes: result.manifest,
+    operations: result.operations,
   };
 
   const manifestPath = normalizePath(

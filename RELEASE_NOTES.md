@@ -1,99 +1,52 @@
-# Forge 1.1.0
+# Forge 1.2.0
 
-Forge 1.1.0 adds the Vault Health Dashboard, a read-only operational view for Forge vault governance. It brings lint status, schema health, ontology metrics, patch history, and maintenance visibility into one native Obsidian surface.
+Forge 1.2.0 adds operation-level Patch Restore. Restore now works from structured patch operation data instead of relying only on full-file `.bak` replacement.
 
 ---
 
 ## What changed
 
-### Vault Health Dashboard
+### Operation-level restore manifests
 
-Forge now includes a custom Obsidian view for vault health. The dashboard opens in the workspace like a native panel and is designed for fast operational review instead of generated markdown output.
+Confirmed patch runs now write `manifest_version: 2` restore manifests. New manifests include an `operations` array with:
 
-The dashboard includes:
+- operation id
+- operation index
+- operation type
+- file path before and after
+- restore target
+- before value
+- after value
+- reverse action
 
-- Health summary
-- Dedicated schema health section
-- Active lint issues
-- Ontology metrics
-- Maintenance history
-- Section-level health indicators
-- Manual refresh controls
-- Direct action buttons for lint and schema validation
+This gives Forge enough data to reverse individual patch operations.
 
-The dashboard is read-only. It does not repair files, normalize metadata, apply patches, or modify vault notes.
+### Selective Patch Restore
 
-### Schema health
+`Forge: Restore Patch Run` now distinguishes between newer operation manifests and legacy backup-only manifests.
 
-Schema validation now has its own dashboard section because schema health determines whether the rest of Forge can be trusted.
+For operation manifests, Forge shows each reversible operation with its file, label, status, and before/after summary. Users can select which reversible operations to restore.
 
-The Schema Health section shows:
+### Conflict-aware safety
 
-- Valid, warning, invalid, or not-yet-validated state
-- Last validation timestamp
-- Error and warning counts
-- Schema path
-- **Validate Schema** button
-- **Open schema.md** button
+Before restoring an operation, Forge checks the current vault state. Restore proceeds only when the current value still matches the value written by the original patch.
 
-Schema validation issues are no longer mixed into Active Issues. Active Issues is focused on lint findings, while schema problems are surfaced in the Schema Health section.
+If a user edited that field, tag list, frontmatter order, or moved path after the patch ran, Forge marks the operation as conflicted and skips it by default.
 
-### Service-backed health data
+### Legacy fallback
 
-Forge now has reusable service layers for the systems the dashboard reads:
+Older manifests still restore through the existing full-file backup path. Forge now labels these as legacy full-file restores and shows a stronger overwrite warning.
 
-- Lint service
-- Schema validation service
-- Ontology metrics service
-- Patch history service
-- Dashboard composition service
+New patch applies no longer create full-file `.bak` backups. Operation-level manifests are the restore source going forward.
 
-These services return structured data instead of relying on command UI side effects. Existing commands remain the user-facing entry points, while the dashboard consumes service results.
+### Restore reports
 
-### Dashboard cache
+Operation-level restores write a patch restore report with restored, conflicted, skipped, and error counts.
 
-The latest dashboard-visible results are cached at:
+---
 
-```text
-System/Forge/health-dashboard.json
-```
+## Scope notes
 
-The cache stores the latest known results for lint, schema validation, ontology metrics, patch history, and the composed dashboard snapshot. This lets the dashboard open quickly and display the most recent available state before a manual refresh is run.
+Plain note moves are reversible. Move operations that also rewrite or strip frontmatter are not marked as operation-restorable in this version because reversing only the path would not fully reverse the operation.
 
-### Manual refresh and command-driven updates
-
-Forge 1.1.0 does not add background watchers, scheduled scans, file-system daemons, or continuous validation.
-
-The dashboard can be refreshed manually with:
-
-```text
-Forge: Refresh Vault Health Dashboard
-```
-
-Individual Forge commands also update their dashboard sections when they run:
-
-- **Forge: Run Vault Lint** updates Health Summary and Active Issues
-- **Forge: Validate Schema** updates Schema Health
-- **Forge: Export Ontology Index** updates Ontology Metrics
-- **Forge: Apply Vault Patch** updates Maintenance History
-
-If the dashboard is open, it refreshes from the latest cached state after these commands complete.
-
-### New commands
-
-Forge 1.1.0 adds two dashboard commands:
-
-- **Forge: Open Vault Health Dashboard**
-- **Forge: Refresh Vault Health Dashboard**
-
-The dashboard also includes in-view buttons for common actions:
-
-- **Run Vault Lint**
-- **Validate Schema**
-- **Open schema.md**
-
-### Existing command integration
-
-Dashboard integration is additive. Existing command modals, notices, reports, generated files, and command behavior remain intact.
-
-Forge commands now publish structured results that the dashboard can read, but the dashboard does not replace the existing command workflows.
+Existing backups remain useful as legacy recovery artifacts, but new normal restore behavior is operation-level and conflict-aware.
