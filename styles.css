@@ -814,7 +814,7 @@
 
 .forge-health-metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
 }
 
@@ -1009,7 +1009,7 @@
 
 @container (max-width: 720px) {
   .forge-health-metric-grid {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 }
 
@@ -1019,7 +1019,7 @@
   }
 
   .forge-health-metric-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .forge-health-issue-group-header {
@@ -1051,6 +1051,12 @@
 
   .forge-health-table td:last-child {
     text-align: left;
+  }
+}
+
+@container (max-width: 280px) {
+  .forge-health-metric-grid {
+    grid-template-columns: 1fr;
   }
 }
 
