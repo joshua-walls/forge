@@ -5,7 +5,7 @@
 //   1. Load patch file from settings.patchDefaultFile
 //   2. Run dry-run pass — collect what would change
 //   3. Show modal: summary of changes, errors, confirm/cancel
-//   4. On confirm: apply patch, write backups, write manifest, write report
+//   4. On confirm: apply patch, write operation manifest, write report
 //   5. Show result notice
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
@@ -260,10 +260,10 @@ class PatchConfirmModal extends Modal {
       });
     }
 
-    // Backup notice
-    if (this.plugin.settings.patchBackupEnabled && changed.length > 0) {
+    // Restore manifest notice
+    if (this.plugin.settings.patchGenerateManifest && changed.length > 0) {
       contentEl.createEl("p", {
-        text: `Backups will be written to ${this.plugin.settings.patchBackupFolder || this.plugin.settings.patchesFolder + '/Backups'}/`,
+        text: "Operation-level restore data will be written for this patch run.",
         cls: "forge-backup-notice",
       });
     }

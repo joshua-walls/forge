@@ -9,12 +9,14 @@ import {
 } from "./dashboard_types";
 
 interface PatchManifest {
+  manifest_version?: number;
   run_id?: string;
   patch_file?: string;
   description?: string;
   applied_at?: string;
   schema_version?: string;
   changes?: unknown[];
+  operations?: unknown[];
 }
 
 export class PatchHistoryService {
@@ -72,6 +74,7 @@ export class PatchHistoryService {
           description: parsed.description ?? "",
           applied_at: parsed.applied_at ?? "",
           changed_files: Array.isArray(parsed.changes) ? parsed.changes.length : 0,
+          changed_operations: Array.isArray(parsed.operations) ? parsed.operations.length : undefined,
           patch_file: parsed.patch_file,
           schema_version: parsed.schema_version,
         });

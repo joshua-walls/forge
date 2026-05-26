@@ -66,6 +66,7 @@ export interface PatchRunSummary {
   description: string;
   applied_at: string;
   changed_files: number;
+  changed_operations?: number;
   patch_file?: string;
   schema_version?: string;
 }

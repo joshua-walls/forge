@@ -21,11 +21,9 @@
 
 import { App, TFile, normalizePath, parseYaml, stringifyYaml } from "obsidian";
 import type { ForgeSettings } from "./settings";
-import { getVaultPaths } from "./vault-paths";
 import {
   readNote,
   writeNote,
-  backupNote,
   sortFrontmatterFields,
   isFieldPresent,
 } from "./utils/frontmatter";
@@ -54,11 +52,43 @@ export interface PatchOpResult {
   file: string;
   status: PatchOpStatus;
   detail: string;
+  change?: PatchOperationChange;
 }
 
 export interface PatchManifestEntry {
   file: string;
   backup: string;
+}
+
+export type PatchRestoreTarget =
+  | { kind: "frontmatter_field"; field: string }
+  | { kind: "frontmatter_tags" }
+  | { kind: "frontmatter_order" }
+  | { kind: "note_move" };
+
+export type PatchRestoreValue =
+  | { exists: true; value: unknown }
+  | { exists: false };
+
+export type PatchReverseAction =
+  | { kind: "set_field"; field: string; value?: unknown; delete_if_missing_before: boolean }
+  | { kind: "set_tags"; value: string[] }
+  | { kind: "set_frontmatter_order"; keys: string[] }
+  | { kind: "move_note"; from: string; to: string };
+
+export interface PatchOperationChange {
+  id: string;
+  op_index: number;
+  op: string;
+  file_before: string;
+  file_after: string;
+  status: "changed";
+  label: string;
+  target: PatchRestoreTarget;
+  before: PatchRestoreValue;
+  after: PatchRestoreValue;
+  reverse: PatchReverseAction;
+  backup?: string;
 }
 
 export interface PatchRunResult {
@@ -70,6 +100,7 @@ export interface PatchRunResult {
   dryRun: boolean;
   results: PatchOpResult[];
   manifest: PatchManifestEntry[];
+  operations: PatchOperationChange[];
 }
 
 export interface PatchMeta {
@@ -183,37 +214,16 @@ export async function applyPatch(
   patchFilePath: string,
   dryRun: boolean
 ): Promise<PatchRunResult> {
-  const paths = getVaultPaths(settings);
   const runId = safeTimestamp();
   const appliedAt = localTimestamp();
   const results: PatchOpResult[] = [];
   const manifest: PatchManifestEntry[] = [];
-
-  // Track which files have been backed up this run to avoid duplicates
-  const backedUp = new Set<string>();
-
-  /**
-   * Backs up a file once per patch run if backups are enabled.
-   * Returns the backup path or null.
-   */
-  async function maybeBackup(file: TFile): Promise<string | null> {
-    if (!settings.patchBackupEnabled || dryRun) return null;
-    if (backedUp.has(file.path)) {
-      // Already backed up this run — find the existing entry
-      const existing = manifest.find((e) => e.file === file.path);
-      return existing?.backup ?? null;
-    }
-
-    const backupPath = await backupNote(app, file, paths.patchBackups);
-    if (backupPath) {
-      backedUp.add(file.path);
-      manifest.push({ file: file.path, backup: backupPath });
-    }
-    return backupPath;
-  }
+  const operations: PatchOperationChange[] = [];
+  let operationSeq = 0;
 
   // ── Process each operation ───────────────────────────────────────
-  for (const op of patchFile.operations) {
+  for (let opIndex = 0; opIndex < patchFile.operations.length; opIndex++) {
+    const op = patchFile.operations[opIndex];
     const opName = op.op ?? "<unknown>";
 
     // Resolve target files
@@ -270,9 +280,13 @@ export async function applyPatch(
           };
       }
 
-      // Back up changed files
       if (result.status === "changed") {
-        await maybeBackup(file);
+        if (result.change) {
+          operationSeq++;
+          result.change.id = makeOperationId(operationSeq);
+          result.change.op_index = opIndex;
+          operations.push(result.change);
+        }
       }
 
       results.push(result);
@@ -288,6 +302,7 @@ export async function applyPatch(
     dryRun,
     results,
     manifest,
+    operations,
   };
 }
 
@@ -346,7 +361,12 @@ async function applySetField(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("set_field", file, `Set '${fieldName}': ${currentStr} → ${newStr}`);
+  return opChanged(
+    "set_field",
+    file,
+    `Set '${fieldName}': ${currentStr} → ${newStr}`,
+    fieldChange("set_field", file.path, file.path, fieldName, currentValue, newValue)
+  );
 }
 
 async function applyRemoveField(
@@ -366,12 +386,19 @@ async function applyRemoveField(
     return opSkipped("remove_field", file, `Field '${fieldName}' not present`);
   }
 
+  const beforeValue = note.frontmatter[fieldName];
+
   if (!dryRun) {
     delete note.frontmatter[fieldName];
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("remove_field", file, `Removed field '${fieldName}'`);
+  return opChanged(
+    "remove_field",
+    file,
+    `Removed field '${fieldName}'`,
+    fieldChange("remove_field", file.path, file.path, fieldName, beforeValue, undefined)
+  );
 }
 
 async function applyAddTag(
@@ -399,7 +426,12 @@ async function applyAddTag(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("add_tag", file, `Added tag '${tag}'`);
+  return opChanged(
+    "add_tag",
+    file,
+    `Added tag '${tag}'`,
+    tagsChange("add_tag", file.path, file.path, current, normalizeTags(updated), `Add tag '${tag}'`)
+  );
 }
 
 async function applyRemoveTag(
@@ -427,7 +459,12 @@ async function applyRemoveTag(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("remove_tag", file, `Removed tag '${tag}'`);
+  return opChanged(
+    "remove_tag",
+    file,
+    `Removed tag '${tag}'`,
+    tagsChange("remove_tag", file.path, file.path, current, normalizeTags(updated), `Remove tag '${tag}'`)
+  );
 }
 
 async function applyReplaceTagOp(
@@ -467,7 +504,12 @@ async function applyReplaceTagOp(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("replace_tag", file, `Replaced tag '${oldTag}' → '${newTagVal}'`);
+  return opChanged(
+    "replace_tag",
+    file,
+    `Replaced tag '${oldTag}' → '${newTagVal}'`,
+    tagsChange("replace_tag", file.path, file.path, current, normalizeTags(updated), `Replace tag '${oldTag}'`)
+  );
 }
 
 async function applyNormalizeTags(
@@ -495,7 +537,12 @@ async function applyNormalizeTags(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("normalize_tags", file, "Normalized tags");
+  return opChanged(
+    "normalize_tags",
+    file,
+    "Normalized tags",
+    tagsChange("normalize_tags", file.path, file.path, current, normalized, "Normalize tags")
+  );
 }
 
 async function applyComputeField(
@@ -515,6 +562,7 @@ async function applyComputeField(
   if (!note) return opError("compute_field", file, "Could not read file");
 
   const fm = note.frontmatter;
+  const beforeValue = fm[fieldName];
   const whenMissing = op.when_missing ?? false;
 
   if (whenMissing && isFieldPresent(fm, fieldName)) {
@@ -573,7 +621,12 @@ async function applyComputeField(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("compute_field", file, `Computed '${fieldName}': '${currentVal}' → '${newValue}'`);
+  return opChanged(
+    "compute_field",
+    file,
+    `Computed '${fieldName}': '${currentVal}' → '${newValue}'`,
+    fieldChange("compute_field", file.path, file.path, fieldName, beforeValue, newValue)
+  );
 }
 
 async function applySortFrontmatter(
@@ -591,8 +644,10 @@ async function applySortFrontmatter(
   }
 
   const sorted = sortFrontmatterFields(note.frontmatter, fieldOrder);
-  const originalKeys = Object.keys(note.frontmatter).join(",");
-  const sortedKeys = Object.keys(sorted).join(",");
+  const beforeKeys = Object.keys(note.frontmatter);
+  const afterKeys = Object.keys(sorted);
+  const originalKeys = beforeKeys.join(",");
+  const sortedKeys = afterKeys.join(",");
 
   if (originalKeys === sortedKeys) {
     return opSkipped("sort_frontmatter", file, "Frontmatter already in correct order");
@@ -603,7 +658,12 @@ async function applySortFrontmatter(
     await writeNote(app, note, fieldOrder);
   }
 
-  return opChanged("sort_frontmatter", file, "Sorted frontmatter fields");
+  return opChanged(
+    "sort_frontmatter",
+    file,
+    "Sorted frontmatter fields",
+    frontmatterOrderChange(file.path, beforeKeys, afterKeys)
+  );
 }
 
 async function applyMoveNote(
@@ -672,7 +732,12 @@ async function applyMoveNote(
     }
   }
 
-  return opChanged("move_note", file, `Moved → ${destPath}`);
+  return opChanged(
+    "move_note",
+    file,
+    `Moved → ${destPath}`,
+    op.strip_frontmatter || op.frontmatter ? undefined : moveNoteChange(file.path, destPath)
+  );
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -753,8 +818,13 @@ function formatDate(date: Date, format: string): string {
   return todayString();
 }
 
-function opChanged(op: string, file: TFile, detail: string): PatchOpResult {
-  return { op, file: file.path, status: "changed", detail };
+function opChanged(
+  op: string,
+  file: TFile,
+  detail: string,
+  change?: PatchOperationChange
+): PatchOpResult {
+  return { op, file: file.path, status: "changed", detail, change };
 }
 
 function opSkipped(op: string, file: TFile, detail: string): PatchOpResult {
@@ -764,4 +834,106 @@ function opSkipped(op: string, file: TFile, detail: string): PatchOpResult {
 function opError(op: string, file: TFile | string, detail: string): PatchOpResult {
   const filePath = typeof file === "string" ? file : file.path;
   return { op, file: filePath, status: "error", detail };
+}
+
+function makeOperationId(seq: number): string {
+  return `op-${String(seq).padStart(5, "0")}`;
+}
+
+function restoreValue(value: unknown): PatchRestoreValue {
+  return value === undefined
+    ? { exists: false }
+    : { exists: true, value: cloneValue(value) };
+}
+
+function cloneValue<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function fieldChange(
+  op: string,
+  fileBefore: string,
+  fileAfter: string,
+  field: string,
+  before: unknown,
+  after: unknown
+): PatchOperationChange {
+  return {
+    id: "",
+    op_index: -1,
+    op,
+    file_before: fileBefore,
+    file_after: fileAfter,
+    status: "changed",
+    label: `${op} ${field}`,
+    target: { kind: "frontmatter_field", field },
+    before: restoreValue(before),
+    after: restoreValue(after),
+    reverse: {
+      kind: "set_field",
+      field,
+      value: before === undefined ? undefined : cloneValue(before),
+      delete_if_missing_before: before === undefined,
+    },
+  };
+}
+
+function tagsChange(
+  op: string,
+  fileBefore: string,
+  fileAfter: string,
+  before: string[],
+  after: string[],
+  label: string
+): PatchOperationChange {
+  return {
+    id: "",
+    op_index: -1,
+    op,
+    file_before: fileBefore,
+    file_after: fileAfter,
+    status: "changed",
+    label,
+    target: { kind: "frontmatter_tags" },
+    before: restoreValue([...before]),
+    after: restoreValue([...after]),
+    reverse: { kind: "set_tags", value: [...before] },
+  };
+}
+
+function frontmatterOrderChange(
+  filePath: string,
+  beforeKeys: string[],
+  afterKeys: string[]
+): PatchOperationChange {
+  return {
+    id: "",
+    op_index: -1,
+    op: "sort_frontmatter",
+    file_before: filePath,
+    file_after: filePath,
+    status: "changed",
+    label: "Sort frontmatter fields",
+    target: { kind: "frontmatter_order" },
+    before: restoreValue([...beforeKeys]),
+    after: restoreValue([...afterKeys]),
+    reverse: { kind: "set_frontmatter_order", keys: [...beforeKeys] },
+  };
+}
+
+function moveNoteChange(fileBefore: string, fileAfter: string): PatchOperationChange {
+  return {
+    id: "",
+    op_index: -1,
+    op: "move_note",
+    file_before: fileBefore,
+    file_after: fileAfter,
+    status: "changed",
+    label: `Move note to ${fileAfter}`,
+    target: { kind: "note_move" },
+    before: restoreValue(fileBefore),
+    after: restoreValue(fileAfter),
+    reverse: { kind: "move_note", from: fileAfter, to: fileBefore },
+  };
 }
