@@ -1,3 +1,11 @@
+# 1.3.3
+
+## Fixed
+
+- Vault Health Dashboard relationship type counts now come from `schema.md` `ontology.relationships` instead of exported ontology records.
+
+---
+
 # 1.3.2
 
 ## Changed
