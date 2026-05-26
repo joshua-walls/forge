@@ -685,6 +685,7 @@
 .forge-health-dashboard {
   padding: 14px 16px;
   overflow-y: auto;
+  container-type: inline-size;
 }
 
 .forge-health-header {
@@ -693,11 +694,13 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .forge-health-header h2 {
   color: var(--color-yellow);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .forge-health-subtitle,
@@ -721,6 +724,7 @@
   padding: 4px 10px;
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .forge-health-pill.is-good {
@@ -747,10 +751,13 @@
   justify-content: space-between;
   gap: 10px;
   margin: 0 0 8px 0;
+  flex-wrap: wrap;
 }
 
 .forge-health-section-header h3 {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .forge-health-section-status {
@@ -760,6 +767,7 @@
   line-height: 1.2;
   padding: 3px 8px;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .forge-health-section-status.is-good {
@@ -791,6 +799,12 @@
   margin: 0 0 10px 0;
 }
 
+.forge-health-section-actions button,
+.forge-health-issue-controls button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .forge-health-inline-summary {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
@@ -800,7 +814,7 @@
 
 .forge-health-metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 8px;
 }
 
@@ -809,6 +823,7 @@
   border-radius: 6px;
   padding: 9px 10px;
   background: var(--background-secondary);
+  min-width: 0;
 }
 
 .forge-health-metric-value {
@@ -821,6 +836,7 @@
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 
 .forge-health-issue-list {
@@ -886,6 +902,7 @@
   font-size: var(--font-ui-smaller);
   line-height: 1.2;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .forge-health-issue-group-count.is-critical {
@@ -960,11 +977,14 @@
 .forge-health-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .forge-health-table td {
   border-bottom: 1px solid var(--background-modifier-border);
   padding: 6px 4px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .forge-health-table td:last-child {
@@ -984,5 +1004,65 @@
 
   .forge-health-actions {
     justify-content: flex-start;
+  }
+}
+
+@container (max-width: 720px) {
+  .forge-health-metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@container (max-width: 520px) {
+  .forge-health-dashboard {
+    padding: 12px;
+  }
+
+  .forge-health-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-health-issue-group-header {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .forge-health-issue-group-count {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .forge-health-table,
+  .forge-health-table tbody,
+  .forge-health-table tr,
+  .forge-health-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .forge-health-table tr {
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 6px 0;
+  }
+
+  .forge-health-table td {
+    border-bottom: 0;
+    padding: 2px 0;
+  }
+
+  .forge-health-table td:last-child {
+    text-align: left;
+  }
+}
+
+@container (max-width: 360px) {
+  .forge-health-section-actions,
+  .forge-health-issue-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .forge-health-section-actions button,
+  .forge-health-issue-controls button {
+    width: 100%;
   }
 }
