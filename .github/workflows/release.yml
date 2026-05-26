@@ -1,9 +1,22 @@
 name: Release
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag"
+        required: true
+        type: string
+
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - '*.*.*'
 
 permissions:
   contents: write
@@ -15,8 +28,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve tag
+        id: release_ref
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release_ref.outputs.tag }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -43,6 +67,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_ref.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: |
             main.js
