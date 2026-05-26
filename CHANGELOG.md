@@ -1,3 +1,12 @@
+# 1.3.2
+
+## Changed
+
+- Refined Vault Health Dashboard responsive layout for narrow and wide Obsidian panes.
+- Restored compact metric card wrapping on mobile and small dashboard widths.
+
+---
+
 # 1.3.1
 
 ## Changed
