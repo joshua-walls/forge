@@ -2,6 +2,7 @@ import { App, TFile, normalizePath } from "obsidian";
 import type { ForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import { readNote } from "./utils/frontmatter";
+import { loadSchema } from "./utils/schema";
 import { DashboardCache } from "./dashboard_cache";
 import {
   DASHBOARD_CACHE_SCHEMA_VERSION,
@@ -21,6 +22,7 @@ export class OntologyService {
     const started = Date.now();
     const paths = getVaultPaths(this.settings);
     const markdownFiles = this.app.vault.getMarkdownFiles();
+    const schema = await loadSchema(this.app, this.settings);
 
     const folderCoverage: Record<string, number> = {};
     const tagDistribution: Record<string, number> = {};
@@ -46,7 +48,7 @@ export class OntologyService {
       duration_ms: Date.now() - started,
       shape_count: countMarkdownInFolder(markdownFiles, paths.shapes),
       template_count: countMarkdownInFolder(markdownFiles, paths.templates),
-      relationship_type_count: await this.countRelationshipTypes(paths.exports),
+      relationship_type_count: Object.keys(schema?.ontology?.relationships ?? {}).length,
       folder_coverage: sortRecord(folderCoverage),
       tag_distribution: sortRecord(tagDistribution),
       orphaned_entities: null,
@@ -62,33 +64,6 @@ export class OntologyService {
 
   async latest(): Promise<OntologyMetricsResult | null> {
     return (await this.cache.read()).latest_ontology_result;
-  }
-
-  private async countRelationshipTypes(exportsFolder: string): Promise<number> {
-    const keys = new Set<string>();
-    const prefix = normalizePath(exportsFolder).replace(/\/$/, "");
-
-    const files = this.app.vault.getFiles().filter(
-      (file) => file.path.startsWith(prefix + "/") && file.name.endsWith("-index.json")
-    );
-
-    for (const file of files) {
-      try {
-        const raw = await this.app.vault.read(file);
-        const parsed = JSON.parse(raw);
-        const items = Array.isArray(parsed.items) ? parsed.items : [];
-        for (const item of items) {
-          const relationships = item?.relationships;
-          if (relationships && typeof relationships === "object") {
-            Object.keys(relationships).forEach((key) => keys.add(key));
-          }
-        }
-      } catch {
-        // Ignore malformed historical exports.
-      }
-    }
-
-    return keys.size;
   }
 }
 
