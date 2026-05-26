@@ -1,8 +1,6 @@
 // src/commands/refine-shapes.ts
 // Vault Shape Engine — template refinement.
 //
-// Port of Invoke-TemplateRefinement.ps1.
-//
 // For each shape note in shapesFolder (type == shape, has a # Structure section):
 //   1. Derives a template filename from the shape filename.
 //   2. Builds template frontmatter from shapeTemplateFields config +
@@ -10,7 +8,9 @@
 //   3. If the template already exists, preserves `created`.
 //   4. Writes the # Structure body (with headings promoted one level)
 //      as the template body.
-//   5. Reports: created / updated / skipped.
+//   5. If shapeInjectRelationships is enabled, injects relationship headings
+//      from schema.ontology.relationships for types this shape participates in.
+//   6. Reports: created / updated / skipped.
 
 import { Notice, TFile, TFolder } from "obsidian";
 import type ForgePlugin from "../main";
@@ -18,6 +18,7 @@ import { getVaultPaths } from "../vault-paths";
 import { readNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { stringifyYaml } from "obsidian";
+import { VaultSchema, SchemaRelationship } from "../utils/schema";
 
 export interface RefinementResult {
   shape: string;
@@ -75,16 +76,18 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
   let skipped = 0;
   let errors = 0;
 
-  // Ensure templates folder exists
   await ensureFolder(app, paths.templates);
 
-  // Load all .md files from shapes folder
   const shapesFolder = app.vault.getAbstractFileByPath(paths.shapes);
   if (!(shapesFolder instanceof TFolder)) {
     return { results, created, updated, skipped, errors, ranAt: localTimestamp() };
   }
 
-  // Gather shape files — optionally recursive
+  // Load schema once for the whole run if relationship injection is enabled
+  const schema = settings.shapeInjectRelationships
+    ? (plugin.schemaCache.peek() ?? await plugin.schemaCache.refresh())
+    : null;
+
   const shapeFiles: TFile[] = [];
   const gatherShapes = (folder: TFolder) => {
     for (const child of folder.children) {
@@ -98,7 +101,7 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
   gatherShapes(shapesFolder);
 
   for (const shapeFile of shapeFiles) {
-    const result = await processShape(plugin, shapeFile, paths.templates);
+    const result = await processShape(plugin, shapeFile, paths.templates, schema);
     results.push(result);
     if (result.status === "created") created++;
     else if (result.status === "updated") updated++;
@@ -114,10 +117,11 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
 async function processShape(
   plugin: ForgePlugin,
   shapeFile: TFile,
-  templatesFolder: string
+  templatesFolder: string,
+  schema: VaultSchema | null
 ): Promise<RefinementResult> {
   const { app, settings } = plugin;
-  const shapeName = shapeFile.basename; // e.g. "meeting"
+  const shapeName = shapeFile.basename;
 
   const templateFileName = shapeToTemplateName(shapeName);
   const templatePath = `${templatesFolder}/${templateFileName}`;
@@ -127,21 +131,23 @@ async function processShape(
     return error(shapeName, templateFileName, "Could not read shape note");
   }
 
-  // Must be type: shape (or no type — treat as shape if in shapes folder)
   const noteType = note.frontmatter["type"];
   if (noteType && String(noteType).toLowerCase() !== "shape") {
     return skipped(shapeName, templateFileName, `type is '${noteType}', not 'shape'`);
   }
 
-  // Extract # Structure section
   const structure = getSectionBody(note.body, "Structure");
   if (!structure) {
     return skipped(shapeName, templateFileName, "No # Structure section found");
   }
 
-  const body = promoteHeadings(structure).trim();
+  let body = promoteHeadings(structure).trim();
 
-  // Build frontmatter
+  // Inject relationship headings if enabled and schema is loaded
+  if (schema && settings.shapeInjectRelationships) {
+    body = injectRelationshipHeadings(body, shapeName, schema, settings);
+  }
+
   const today = todayString();
   const existingTemplate = app.vault.getAbstractFileByPath(templatePath);
   const existingCreated = (existingTemplate instanceof TFile && settings.shapeCreatedField)
@@ -149,12 +155,9 @@ async function processShape(
     : null;
 
   const fm = buildTemplateFrontmatter(settings, shapeName, today, existingCreated);
-
-  // Serialize
   const yaml = stringifyYaml(fm).trimEnd();
   const newContent = `---\n${yaml}\n---\n\n${body}\n`;
 
-  // Write
   if (existingTemplate instanceof TFile) {
     const existingContent = await app.vault.read(existingTemplate);
     if (existingContent === newContent) {
@@ -168,6 +171,204 @@ async function processShape(
   }
 }
 
+// ── Relationship injection ────────────────────────────────────────────────────
+
+/**
+ * Injects schema relationship headings into the template body.
+ *
+ * For each relationship in schema.ontology.relationships:
+ *   - Flexible: include if shapeName is in allowed_between
+ *   - Directional: include only if shapeName is in sources (not targets)
+ *
+ * Inject mode: finds the existing parent heading in the body and adds any
+ *   missing subheadings under it in schema declaration order.
+ *   Falls back to append if the parent heading is not found.
+ *
+ * Append mode: appends the full parent heading + subheadings at the end.
+ */
+function injectRelationshipHeadings(
+  body: string,
+  shapeName: string,
+  schema: VaultSchema,
+  settings: import("../settings").ForgeSettings
+): string {
+  const {
+    shapeRelationshipHeading,
+    shapeRelationshipHeadingLevel,
+    shapeRelationshipPosition,
+  } = settings;
+
+  const parentLevel = shapeRelationshipHeadingLevel;
+  const subLevel = parentLevel + 1;
+  const parentPrefix = "#".repeat(parentLevel);
+  const subPrefix = "#".repeat(subLevel);
+
+  // Collect participating relationships in schema order
+  const participatingRelationships = getParticipatingRelationships(
+    shapeName,
+    schema.ontology.relationships
+  );
+
+  if (participatingRelationships.length === 0) return body;
+
+  const parentHeadingLine = `${parentPrefix} ${shapeRelationshipHeading}`;
+
+  if (shapeRelationshipPosition === "inject") {
+    return injectIntoExistingHeading(
+      body,
+      parentHeadingLine,
+      participatingRelationships,
+      subPrefix,
+      parentPrefix
+    );
+  } else {
+    return appendRelationshipSection(
+      body,
+      parentHeadingLine,
+      participatingRelationships,
+      subPrefix
+    );
+  }
+}
+
+interface RelationshipEntry {
+  heading: string;
+  description: string;
+}
+
+/**
+ * Returns heading + description pairs for relationships where shapeName participates
+ * as a valid source (or flexible member), in schema declaration order.
+ */
+function getParticipatingRelationships(
+  shapeName: string,
+  relationships: Record<string, SchemaRelationship>
+): RelationshipEntry[] {
+  const entries: RelationshipEntry[] = [];
+  const name = shapeName.toLowerCase();
+
+  for (const rel of Object.values(relationships)) {
+    if (rel.direction === "flexible") {
+      const members = rel.allowed_between ?? [];
+      if (members.map((m) => m.toLowerCase()).includes(name)) {
+        entries.push({ heading: rel.template_heading, description: rel.description ?? "" });
+      }
+    } else if (rel.direction === "directional") {
+      const sources = rel.sources ?? [];
+      if (sources.map((s) => s.toLowerCase()).includes(name)) {
+        entries.push({ heading: rel.template_heading, description: rel.description ?? "" });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Finds the parent heading in the body and injects any missing subheadings
+ * under it in schema order, after any existing subheadings.
+ * Falls back to append if the parent heading is not found.
+ */
+function injectIntoExistingHeading(
+  body: string,
+  parentHeadingLine: string,
+  entries: RelationshipEntry[],
+  subPrefix: string,
+  parentPrefix: string
+): string {
+  const lines = body.split("\n");
+  const parentPattern = new RegExp(
+    `^${parentPrefix.replace(/#/g, "\\#")}\\s+${escapeRegex(
+      parentHeadingLine.replace(/^#+\s+/, "")
+    )}\\s*$`
+  );
+
+  const parentIdx = lines.findIndex((l) => parentPattern.test(l));
+
+  if (parentIdx === -1) {
+    return appendRelationshipSection(body, parentHeadingLine, entries, subPrefix);
+  }
+
+  const parentDepth = parentPrefix.length;
+  let sectionEnd = lines.length;
+  for (let i = parentIdx + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^(#+)\s/);
+    if (m && m[1].length <= parentDepth) {
+      sectionEnd = i;
+      break;
+    }
+  }
+
+  // Collect already-present subheadings within the section
+  const existingSubHeadings = new Set<string>();
+  for (let i = parentIdx + 1; i < sectionEnd; i++) {
+    const m = lines[i].match(new RegExp(`^${subPrefix.replace(/#/g, "\\#")}\\s+(.+)\\s*$`));
+    if (m) existingSubHeadings.add(m[1].trim());
+  }
+
+  // Build lines to inject — only missing ones, in schema order, with description
+  const toInject: string[] = [];
+  for (const entry of entries) {
+    if (!existingSubHeadings.has(entry.heading)) {
+      toInject.push(`${subPrefix} ${entry.heading}`);
+      if (entry.description) {
+        toInject.push("", entry.description);
+      }
+      toInject.push(""); // blank line after each section before next heading
+    }
+  }
+
+  if (toInject.length === 0) return body;
+
+  let insertAt = parentIdx + 1;
+  for (let i = sectionEnd - 1; i > parentIdx; i--) {
+    if (lines[i].match(new RegExp(`^${subPrefix.replace(/#/g, "\\#")}\\s+`))) {
+      insertAt = i + 1;
+      break;
+    }
+  }
+
+  // If inserting immediately after the parent heading, lead with a blank line
+  const leadingBlank =
+    insertAt === parentIdx + 1 && (lines[insertAt] ?? "") !== "" ? [""] : [];
+
+  const result = [
+    ...lines.slice(0, insertAt),
+    ...leadingBlank,
+    ...toInject,
+    ...lines.slice(insertAt),
+  ];
+
+  return result.join("\n");
+}
+
+/**
+ * Appends the parent heading and all subheadings at the end of the body.
+ * If the parent heading already exists, only appends missing subheadings under it.
+ */
+function appendRelationshipSection(
+  body: string,
+  parentHeadingLine: string,
+  entries: RelationshipEntry[],
+  subPrefix: string
+): string {
+  const subLines: string[] = [];
+  for (const entry of entries) {
+    subLines.push(`${subPrefix} ${entry.heading}`);
+    if (entry.description) {
+      subLines.push("", entry.description);
+    }
+    subLines.push(""); // blank line after each section before next heading
+  }
+  // Blank line between parent heading and first subheading for readability
+  const section = [parentHeadingLine, "", ...subLines].join("\n");
+  return body ? `${body}\n\n${section}` : section;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // ── Frontmatter builder ───────────────────────────────────────────────────────
 
 function buildTemplateFrontmatter(
@@ -178,7 +379,6 @@ function buildTemplateFrontmatter(
 ): Record<string, unknown> {
   const { shapeTypeTargetField, shapeCreatedField, shapeUpdatedField, shapeTemplateFields, frontmatterFieldOrder } = settings;
 
-  // Start with configured field values (included fields only)
   const base: Record<string, unknown> = {};
   for (const [fieldName, config] of Object.entries(shapeTemplateFields)) {
     if (config.include) {
@@ -186,10 +386,8 @@ function buildTemplateFrontmatter(
     }
   }
 
-  // Type target field always set to shape name
   base[shapeTypeTargetField] = shapeName;
 
-  // Runtime date fields — only stamp if configured
   if (shapeCreatedField) {
     base[shapeCreatedField] = existingCreated ?? today;
   }
@@ -197,7 +395,6 @@ function buildTemplateFrontmatter(
     base[shapeUpdatedField] = today;
   }
 
-  // Sort into frontmatterFieldOrder
   const order = frontmatterFieldOrder.length > 0 ? frontmatterFieldOrder : Object.keys(base);
   const sorted: Record<string, unknown> = {};
 
@@ -206,7 +403,6 @@ function buildTemplateFrontmatter(
       sorted[field] = base[field];
     }
   }
-  // Append anything not in the order list
   for (const key of Object.keys(base)) {
     if (!Object.prototype.hasOwnProperty.call(sorted, key)) {
       sorted[key] = base[key];
@@ -218,30 +414,20 @@ function buildTemplateFrontmatter(
 
 // ── Markdown helpers ──────────────────────────────────────────────────────────
 
-/**
- * Extracts the body of a top-level markdown section by heading name.
- * Returns null if the section is not found.
- * Port of Get-SectionBody from Invoke-TemplateRefinement.ps1.
- */
 function getSectionBody(body: string, heading: string): string | null {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Match from "# Heading\n" to the next top-level "# " heading or end of string.
-  // \z is not valid in JS — use (?=^#\s) with the m flag, and fall back to end via
-  // a two-pass approach: find the section start, then slice to next H1 or EOF.
   const lines = body.split("\n");
-  const startPattern = new RegExp(`^#\\s+${escaped}\\s*$`);
+  const startPattern = new RegExp(`^#\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
 
   let startIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (startPattern.test(lines[i])) {
-      startIdx = i + 1; // line after the heading
+      startIdx = i + 1;
       break;
     }
   }
 
   if (startIdx === -1) return null;
 
-  // Find the next top-level H1 (single #) after startIdx
   let endIdx = lines.length;
   for (let i = startIdx; i < lines.length; i++) {
     if (/^#\s+/.test(lines[i])) {
@@ -253,10 +439,6 @@ function getSectionBody(body: string, heading: string): string | null {
   return lines.slice(startIdx, endIdx).join("\n").trim();
 }
 
-/**
- * Promotes all headings by one level (## → #, ### → ##, etc.).
- * Port of Promote-MarkdownHeadings from Invoke-TemplateRefinement.ps1.
- */
 function promoteHeadings(content: string): string {
   return content
     .split("\n")
@@ -270,12 +452,6 @@ function promoteHeadings(content: string): string {
 
 // ── Name derivation ───────────────────────────────────────────────────────────
 
-/**
- * Converts a shape filename base to a template filename.
- * "meeting" → "Template, Meeting.md"
- * "api-spec" → "Template, Api Spec.md"
- * Port of Convert-PatternFileNameToTemplateFileName.
- */
 function shapeToTemplateName(shapeName: string): string {
   const title = shapeName
     .split(/[-_ ]+/)

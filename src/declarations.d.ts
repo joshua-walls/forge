@@ -13,3 +13,9 @@ declare module "forge:examples" {
   const examples: Record<string, string>;
   export default examples;
 }
+
+// Raw .md files imported directly — bundled as text strings by esbuild.
+declare module "*.md" {
+  const content: string;
+  export default content;
+}

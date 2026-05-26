@@ -4,92 +4,119 @@
 // Stored in .obsidian/plugins/forge/data.json via Obsidian's
 // loadData() / saveData() API. Never stored in vault notes.
 //
+// Field pointer settings (e.g. exportTypeField) store a field name that
+// resolves against the loaded schema. The settings tab renders these as
+// schema-driven dropdowns rather than free-text inputs.
 
-export type StaleReviewCycle = "daily" | "weekly" | "monthly" | "quarterly" | "custom";
+export type FieldPointerLocation = "frontmatter" | "inline";
+
+export interface FieldPointer {
+  location: FieldPointerLocation;
+  field: string;
+}
 
 export interface ForgeSettings {
   // ── System paths ──────────────────────────────────────────────────
   // All paths are relative to vault root.
-  systemFolder: string;        // System/
-  forgeFolder: string;    // System/Forge/
+  systemFolder: string;
+  forgeFolder: string;
 
-  // ── Lint paths + settings ─────────────────────────────────────────
-  schemaNoteFolder: string;    // System/Registry/
-  schemaNoteFile: string;      // schema.md
-  lintRunsFolder: string;      // System/Exports/LintReports/
+  // ── Schema ────────────────────────────────────────────────────────
+  schemaNoteFolder: string;
+  schemaNoteFile: string;
+  // Where the schema version field lives and which field it is.
+  // Settings tab renders a location picker + schema-driven dropdown.
+  schemaVersionLocation: FieldPointerLocation;
+  schemaVersionField: string;
+
+  // ── Lint ──────────────────────────────────────────────────────────
+  lintRunsFolder: string;
   lintStrictMode: boolean;
   lintRunRetentionCount: number;
   lintFileLinks: boolean;
   lintInlineMetadata: boolean;
+  lintRepairThreshold: "errors_only" | "errors_and_warnings";
 
-  // ── Stale review (under Lint tab) ────────────────────────────────
+  // ── Stale review ──────────────────────────────────────────────────
   staleReviewEnabled: boolean;
-  staleReviewCycleField: string;   // frontmatter field containing the cycle value
-  staleReviewUpdatedField: string; // frontmatter field containing last-updated date
-  staleReviewFilterField: string;  // which schema field to use for in-scope filtering
-  staleReviewStatuses: string[];   // valid values of that field to include
+  // Schema-driven dropdowns — location picker + field dropdown.
+  staleReviewCycleLocation: FieldPointerLocation;
+  staleReviewCycleField: string;
+  staleReviewUpdatedLocation: FieldPointerLocation;
+  staleReviewUpdatedField: string;
+  staleReviewFilterLocation: FieldPointerLocation;
+  staleReviewFilterField: string;
+  staleReviewStatuses: string[];   // valid values of filter field to include
 
-  // ── Patch settings ────────────────────────────────────────────────
-  patchesFolder: string;           // System/Forge/Patches/
-  inboxFolder: string;             // System/Inbox/
-  patchDefaultFile: string;        // System/Forge/Patches/vault-patch.md
+  // ── Patch ─────────────────────────────────────────────────────────
+  patchesFolder: string;
+  inboxFolder: string;
+  patchDefaultFile: string;
   patchBackupEnabled: boolean;
-  patchBackupFolder: string;       // selectable; default System/Forge/Patches/Backups/
+  patchBackupFolder: string;
   patchGenerateManifest: boolean;
   patchAutoLintAfterApply: boolean;
   patchAutoMaintenanceAfterApply: boolean;
 
-  // ── Maintenance settings ──────────────────────────────────────────
+  // ── Maintenance ───────────────────────────────────────────────────
   backupRetentionDays: number;
   inboxRetentionDays: number;
   lintHistoryRetentionDays: number;
   lintHistoryMaxEntries: number;
   patchReportRetentionCount: number;
 
-  // ── Export settings ───────────────────────────────────────────────
+  // ── Export ────────────────────────────────────────────────────────
   exportEnabled: boolean;
-  exportsFolder: string;               // System/Exports/
-  exportRelationshipHeading: string;   // e.g. "Related"  (without the # — script adds it)
-  exportFilterField: string;           // schema field to filter on, e.g. "type"
-  exportFilterValues: string[];        // selected values for that field, e.g. ["capability","method"]
-  exportPrivateEnabled: boolean;       // whether to treat a field as a private-note signal
-  exportPrivateField: string;          // frontmatter field that signals a private note
-  exportDomainField: string;           // frontmatter field to use as domain (blank = parent folder)
-  exportTypeField: string;             // frontmatter field to use as type (blank = 'type')
-  exportStatusField: string;           // frontmatter field to use as status (blank = 'status')
-  exportDashboardName: string;         // dashboard note filename (blank = 'vault-dashboard')
-  exportExcludeFolders: string[];      // folders to exclude from ontology export (any depth)
+  exportsFolder: string;
+  exportRelationshipHeading: string;
+  // Schema-driven dropdowns — frontmatter only (no location picker needed).
+  exportFilterField: string;
+  exportFilterValues: string[];
+  exportPrivateEnabled: boolean;
+  exportPrivateField: string;        // frontmatter dropdown
+  exportDomainField: string;         // frontmatter dropdown
+  exportTypeField: string;           // frontmatter dropdown
+  exportStatusField: string;         // frontmatter dropdown
+  exportDashboardName: string;
+  exportExcludeFolders: string[];
 
-  // ── Shapes settings ─────────────────────────────────────────────
+  // ── Shapes ────────────────────────────────────────────────────────
   shapesEnabled: boolean;
-  shapesFolder: string;              // System/Shapes/
-  shapeIncludeSubfolders: boolean;   // walk subfolders when gathering shape notes
+  shapesFolder: string;
+  shapeIncludeSubfolders: boolean;
   shapeLintEnabled: boolean;
-  shapeLintScope: "all" | "folder";    // validate all vault notes or selected folders only
-  shapeLintFolders: string[];          // folders to lint when scope is "folder"
-
-  // Template refinement
+  shapeLintScope: "all" | "folder";
+  shapeLintFolders: string[];
   shapeRefinementEnabled: boolean;
-  shapeTemplatesFolder: string;      // folder where templates are written
-  shapeTypeTargetField: string;      // schema field that receives the shape name (e.g. "type", "kind")
-  shapeCreatedField: string;         // date field stamped on create (blank = skip)
-  shapeUpdatedField: string;         // date field stamped on every write (blank = skip)
+  shapeTemplatesFolder: string;
+  shapeTypeTargetField: string;      // frontmatter dropdown
+  shapeCreatedField: string;         // frontmatter dropdown
+  shapeUpdatedField: string;         // frontmatter dropdown
   shapeTemplateFields: Record<string, { include: boolean; value: unknown }>;
-  // ^ keyed by field name; created/updated are runtime-only, never stored here
 
-  // Shape Repair
+  // ── Shape Repair ──────────────────────────────────────────────────
+  shapeInjectRelationships: boolean;
+  shapeRelationshipHeading: string;
+  shapeRelationshipHeadingLevel: number;   // 1=H1, 2=H2, 3=H3
+  shapeRelationshipPosition: "inject" | "append";
+
   shapeRepairEnabled: boolean;
-  shapeRepairScope: "all" | "folder";         // repair all vault notes or selected folders only
-  shapeRepairFolders: string[];               // folders to repair when scope is "folder"
-  shapeRepairRunsFolder: string;              // folder where repair run notes are written
-  shapeRepairFileLinks: boolean;              // wrap file paths in [[wikilinks]] in run notes
-  shapeRepairHistoryRetentionCount: number;   // max entries in shape-repair-history.json
+  shapeRepairScope: "all" | "folder";
+  shapeRepairFolders: string[];
+  shapeRepairRunsFolder: string;
+  shapeRepairFileLinks: boolean;
+  shapeRepairHistoryRetentionCount: number;
 
-  // ── General: frontmatter field order ────────────────────────────
-  // Controls the canonical sort order applied by writeNote() and the
-  // sort_frontmatter patch operation. Fields not in this list are
-  // appended alphabetically after the ordered fields.
+  // ── General ───────────────────────────────────────────────────────
+  // Canonical sort order for frontmatter fields. Fields not in this list
+  // are appended alphabetically after the ordered fields.
   frontmatterFieldOrder: string[];
+
+  // ── Plugin metadata ───────────────────────────────────────────────
+  // Tracks the last version Forge was loaded as. Used to detect upgrades
+  // and show version-specific notices once. Written on every load after
+  // any notice is handled. Absent on installs that pre-date this field.
+  lastInstalledVersion: string | undefined;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -97,19 +124,27 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   systemFolder: "System",
   forgeFolder: "System/Forge",
 
-  // Lint
+  // Schema
   schemaNoteFolder: "System/Registry",
   schemaNoteFile: "schema.md",
+  schemaVersionLocation: "inline",
+  schemaVersionField: "version",
+
+  // Lint
   lintRunsFolder: "System/Exports/LintReports",
   lintStrictMode: false,
   lintRunRetentionCount: 20,
   lintFileLinks: false,
   lintInlineMetadata: true,
+  lintRepairThreshold: "errors_only",
 
   // Stale review
   staleReviewEnabled: false,
+  staleReviewCycleLocation: "frontmatter",
   staleReviewCycleField: "review_cycle",
+  staleReviewUpdatedLocation: "frontmatter",
   staleReviewUpdatedField: "updated",
+  staleReviewFilterLocation: "frontmatter",
   staleReviewFilterField: "status",
   staleReviewStatuses: [],
 
@@ -158,6 +193,12 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   shapeUpdatedField: "updated",
   shapeTemplateFields: {},
 
+  // Relationship injection
+  shapeInjectRelationships: false,
+  shapeRelationshipHeading: "Related",
+  shapeRelationshipHeadingLevel: 1,
+  shapeRelationshipPosition: "append",
+
   // Shape Repair
   shapeRepairEnabled: false,
   shapeRepairScope: "all",
@@ -166,6 +207,9 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   shapeRepairFileLinks: false,
   shapeRepairHistoryRetentionCount: 20,
 
-  // Frontmatter field order
+  // General
   frontmatterFieldOrder: [],
+
+  // Plugin metadata
+  lastInstalledVersion: undefined,
 };

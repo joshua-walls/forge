@@ -11,4 +11,3 @@ coverage/
 *.gz
 *.7z
 release.sh
-RELEASE_NOTES.md

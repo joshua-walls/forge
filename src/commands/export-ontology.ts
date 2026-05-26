@@ -59,7 +59,7 @@ export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIn
     return null;
   }
 
-  const schemaVersion = plugin.schemaCache.peek()?.meta?.version ?? "unknown";
+  const schemaVersion = plugin.schemaCache.peek()?.version ?? "unknown";
   const relHeading    = settings.exportRelationshipHeading?.trim() || "Related";
 
   // Ensure inventory — auto-run if missing

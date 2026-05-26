@@ -10,7 +10,17 @@
 
 import { App } from "obsidian";
 import type { ForgeSettings } from "./settings";
-import { loadSchema, VaultSchema } from "./utils/schema";
+import {
+  loadSchema,
+  VaultSchema,
+  SchemaField,
+  SchemaInlineField,
+  allFrontmatterFields,
+  getFrontmatterField,
+  inlineFieldNameSet,
+  conditionallyRequiredInlineFields,
+  reviewCycleDays,
+} from "./utils/schema";
 import { todayString } from "./utils/files";
 
 export class SchemaCache {
@@ -23,109 +33,120 @@ export class SchemaCache {
     this.settings = settings;
   }
 
-  /**
-   * Returns the cached schema, loading it first if not yet loaded.
-   */
+  /** Returns the cached schema, loading it first if not yet loaded. */
   async get(): Promise<VaultSchema | null> {
-    if (!this.cache) {
-      await this.refresh();
-    }
+    if (!this.cache) await this.refresh();
     return this.cache;
   }
 
-  /**
-   * Forces a fresh load from schema.md.
-   * Called after Validate Schema or settings changes.
-   */
+  /** Forces a fresh load from schema.md. */
   async refresh(): Promise<VaultSchema | null> {
     this.cache = await loadSchema(this.app, this.settings);
     return this.cache;
   }
 
-  /**
-   * Returns the cached schema without loading — may be null.
-   */
+  /** Returns the cached schema without loading — may be null. */
   peek(): VaultSchema | null {
     return this.cache;
   }
 
-  /**
-   * Clears the cache — next get() will reload.
-   */
+  /** Clears the cache — next get() will reload. */
   invalidate(): void {
     this.cache = null;
   }
 
   /**
-   * Updates settings reference (called when settings change).
-   * Only invalidates the cache if the schema path changed — non-path settings
-   * (lint toggles, retention counts, etc.) don't affect the cached schema, so
-   * there is no reason to clear a valid cache when they change.
+   * Updates settings reference. Only invalidates the cache if the schema
+   * path changed — non-path settings don't affect the cached schema.
    */
   updateSettings(settings: ForgeSettings): void {
     const oldPath = `${this.settings.schemaNoteFolder}/${this.settings.schemaNoteFile}`;
     const newPath = `${settings.schemaNoteFolder}/${settings.schemaNoteFile}`;
     this.settings = settings;
-    if (oldPath !== newPath) {
-      this.invalidate();
-    }
+    if (oldPath !== newPath) this.invalidate();
   }
 
-  // ── Schema field helpers ────────────────────────────────────────────────────
+  // ── Field accessors ───────────────────────────────────────────────────────
 
-  /**
-   * Returns all field names from required + optional fields.
-   */
-  getFieldNames(): string[] {
+  /** All frontmatter fields — required and optional combined. */
+  getAllFrontmatterFields(): SchemaField[] {
     if (!this.cache) return [];
-    return [
-      ...this.cache.required_fields.map((f) => f.name),
-      ...this.cache.optional_fields.map((f) => f.name),
-    ];
+    return allFrontmatterFields(this.cache);
+  }
+
+  /** All frontmatter field names — for dropdowns and validation. */
+  getFrontmatterFieldNames(): string[] {
+    return this.getAllFrontmatterFields().map((f) => f.name);
+  }
+
+  /** All inline field names — for dropdowns and validation. */
+  getInlineFieldNames(): string[] {
+    if (!this.cache) return [];
+    return this.cache.inline.allowed.map((f) => f.name);
   }
 
   /**
-   * Returns all enum-type field names — these should have lowercased values.
-   * Used by Normalize Frontmatter to replace the hardcoded field list.
+   * Field names by location — used to populate schema-driven dropdowns
+   * in the settings tab based on the user's chosen FieldPointerLocation.
    */
+  getFieldNamesByLocation(location: "frontmatter" | "inline"): string[] {
+    return location === "frontmatter"
+      ? this.getFrontmatterFieldNames()
+      : this.getInlineFieldNames();
+  }
+
+  /** All enum-type frontmatter field names. */
   getEnumFieldNames(): string[] {
-    if (!this.cache) return [];
-    return [
-      ...this.cache.required_fields.filter((f) => f.type === "enum").map((f) => f.name),
-      ...this.cache.optional_fields.filter((f) => f.type === "enum").map((f) => f.name),
-    ];
+    return this.getAllFrontmatterFields()
+      .filter((f) => f.type === "enum")
+      .map((f) => f.name);
   }
 
-  /**
-   * Returns allowed values for a specific field, or null if not an enum.
-   */
+  /** Allowed values for a specific frontmatter enum field, or null if not an enum. */
   getEnumValues(fieldName: string): string[] | null {
     if (!this.cache) return null;
-    const all = [...this.cache.required_fields, ...this.cache.optional_fields];
-    const field = all.find((f) => f.name === fieldName);
+    const field = getFrontmatterField(this.cache, fieldName);
     if (!field || field.type !== "enum" || !field.values) return null;
     return field.values;
   }
 
-  /**
-   * Returns the field type for a given field name, or null if not found.
-   */
+  /** Field type for a given frontmatter field name, or null if not found. */
   getFieldType(fieldName: string): string | null {
     if (!this.cache) return null;
-    const all = [...this.cache.required_fields, ...this.cache.optional_fields];
-    const field = all.find((f) => f.name === fieldName);
-    return field?.type ?? null;
+    return getFrontmatterField(this.cache, fieldName)?.type ?? null;
+  }
+
+  /** All inline fields with a required_when constraint. */
+  getConditionallyRequiredInlineFields(): SchemaInlineField[] {
+    if (!this.cache) return [];
+    return conditionallyRequiredInlineFields(this.cache);
+  }
+
+  /** O(1) inline field name lookup set. */
+  getInlineFieldNameSet(): Set<string> {
+    if (!this.cache) return new Set();
+    return inlineFieldNameSet(this.cache);
   }
 
   /**
-   * Returns a reasonable default value for a field based on its type and name.
-   * Used by Vault Repair to pre-populate fields.
+   * Day count for a given review_cycle value.
+   * Returns null for "never", undefined if value not found in values_meta.
+   */
+  getReviewCycleDays(value: string): number | null | undefined {
+    if (!this.cache) return undefined;
+    return reviewCycleDays(this.cache, value);
+  }
+
+  // ── Default value resolution ──────────────────────────────────────────────
+
+  /**
+   * Returns a reasonable default value for a frontmatter field.
+   * Used by Shape Repair to pre-populate missing fields.
    */
   getDefaultValue(fieldName: string): unknown {
     const type = this.getFieldType(fieldName);
     const values = this.getEnumValues(fieldName);
 
-    // Name-based smart defaults
     switch (fieldName) {
       case "created":
       case "updated":
@@ -139,7 +160,6 @@ export class SchemaCache {
         return values?.includes("active") ? "active" : values?.[0] ?? "";
     }
 
-    // Type-based fallbacks
     switch (type) {
       case "boolean": return false;
       case "enum":    return values?.[0] ?? "";
@@ -148,5 +168,4 @@ export class SchemaCache {
       default:        return "";
     }
   }
-
 }

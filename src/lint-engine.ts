@@ -1,10 +1,10 @@
 // src/lint-engine.ts
 // Forge lint engine.
 //
-// Port of Invoke-VaultLint.ps1 — validates all vault markdown files
-// against schema.md rules. Read-only — never modifies files.
+// Validates all vault markdown files against schema.md rules.
+// Read-only — never modifies files.
 //
-// Rules implemented (matching PowerShell source exactly):
+// Rules implemented:
 //   no_frontmatter         — file has no frontmatter block
 //   required_field         — required field missing
 //   enum_value             — field value not in allowed enum list
@@ -13,14 +13,15 @@
 //   type_mismatch          — field value is wrong type
 //   tag_namespace          — tag has no namespace (no slash)
 //   unknown_tag_namespace  — tag namespace not in allowed_namespaces
-//   required_when          — field required when another field has a value
+//   forbidden_namespace    — tag uses a namespace in forbidden_namespaces
+//   required_when          — inline field required when frontmatter field has a value
 //   forbidden_when         — field forbidden when another field has a value
 //   tag_consistency        — field value should have matching tag
-//   invalid_shape_ref    — patterns field references unknown pattern
-//   inline_is_schema_field — inline metadata key matches a schema field
+//   invalid_shape_ref      — shapes field references unknown shape
+//   inline_is_schema_field — inline metadata key matches a schema frontmatter field
 //   inline_fuzzy_schema    — inline key looks like a typo of a schema field
 //   inline_fuzzy_inline    — inline key looks like a typo of a known inline field
-//   inline_undocumented    — inline key not in schema inline_fields list
+//   inline_undocumented    — inline key not in schema inline.allowed list
 //   stale_note             — note's review cycle has elapsed
 //   shape_heading_missing  — heading required by template is absent
 //   shape_heading_order    — template headings present but in wrong order
@@ -30,14 +31,27 @@
 import { App, TFile } from "obsidian";
 import type { ForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
-import { VaultSchema, SchemaField, loadSchema } from "./utils/schema";
+import {
+  VaultSchema,
+  SchemaField,
+  SchemaInlineField,
+  loadSchema,
+  allFrontmatterFields,
+  inlineFieldNameSet,
+  conditionallyRequiredInlineFields,
+  reviewCycleDays,
+} from "./utils/schema";
 import { getTags } from "./utils/tags";
-import { buildExemptList, localTimestamp, getMarkdownFiles, isExempt, safeTimestamp, todayString } from "./utils/files";
+import {
+  buildExemptList,
+  localTimestamp,
+  getMarkdownFiles,
+  isExempt,
+} from "./utils/files";
 import { readNote, isFieldPresent, getFmString } from "./utils/frontmatter";
-import { ensureFolder } from "./utils/files";
 import { buildShapeHeadingCache, lintShapeHeadings, ParsedHeading } from "./commands/shape-lint";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type LintSeverity = "error" | "warning" | "info";
 
@@ -63,12 +77,8 @@ export interface LintRunResult {
   infos: LintResult[];
 }
 
-// ── Main entry point ─────────────────────────────────────────────────────────
+// ── Main entry point ──────────────────────────────────────────────────────────
 
-/**
- * Runs the full vault lint pass.
- * Read-only — never modifies files.
- */
 export async function runLint(
   app: App,
   settings: ForgeSettings
@@ -79,15 +89,12 @@ export async function runLint(
   const paths = getVaultPaths(settings);
   const exemptPaths = buildExemptList(schema.exempt_paths, paths.forge);
 
-
   const allFiles = getMarkdownFiles(app).filter(
     (f) => !isExempt(f.path, exemptPaths)
   );
 
-  // Load valid pattern names for pattern field validation
   const validShapes = getValidShapeNames(app, paths.shapes);
 
-  // Build shape heading cache once — used by shape lint for every file
   const shapeHeadingCache = settings.shapeLintEnabled
     ? await buildShapeHeadingCache(app, settings)
     : new Map<string, ParsedHeading[]>();
@@ -99,18 +106,19 @@ export async function runLint(
     allResults.push(...fileResults);
   }
 
-  // Stale note review — runs after per-file lint, uses settings not schema
-  if (settings.staleReviewEnabled &&
-      settings.staleReviewCycleField &&
-      settings.staleReviewUpdatedField) {
-    const staleResults = await runStaleReview(app, allFiles, settings);
+  if (
+    settings.staleReviewEnabled &&
+    settings.staleReviewCycleField &&
+    settings.staleReviewUpdatedField
+  ) {
+    const staleResults = await runStaleReview(app, allFiles, schema, settings);
     allResults.push(...staleResults);
   }
 
   const envelope: LintRunEnvelope = {
     vault_path: (app.vault.adapter as any).basePath ?? "",
     timestamp: localTimestamp(),
-    schema_version: schema.meta.version,
+    schema_version: schema.version,
     notes_scanned: allFiles.length,
   };
 
@@ -123,7 +131,7 @@ export async function runLint(
   };
 }
 
-// ── Per-file lint ────────────────────────────────────────────────────────────
+// ── Per-file lint ─────────────────────────────────────────────────────────────
 
 async function lintFile(
   app: App,
@@ -136,7 +144,6 @@ async function lintFile(
   const note = await readNote(app, file);
   const results: LintResult[] = [];
 
-  // No frontmatter
   if (!note || !note.hasFrontmatter) {
     results.push(newResult(file.path, "error", "no_frontmatter", "No frontmatter block found"));
     return results;
@@ -145,16 +152,16 @@ async function lintFile(
   const fm = note.frontmatter;
   const content = await app.vault.read(file);
 
-  // Required fields
-  results.push(...testRequiredFields(file.path, fm, schema.required_fields));
-  results.push(...testBasicTypeFields(file.path, fm, schema.required_fields));
-  results.push(...testEnumFields(file.path, fm, schema.required_fields));
-  results.push(...testDateFields(file.path, fm, schema.required_fields));
-  results.push(...testConditionalRules(file.path, fm, schema.required_fields));
-  results.push(...testFieldTagConsistency(file.path, fm, schema.required_fields));
+  // Required frontmatter fields
+  results.push(...testRequiredFields(file.path, fm, schema.frontmatter.required));
+  results.push(...testBasicTypeFields(file.path, fm, schema.frontmatter.required));
+  results.push(...testEnumFields(file.path, fm, schema.frontmatter.required));
+  results.push(...testDateFields(file.path, fm, schema.frontmatter.required));
+  results.push(...testConditionalRules(file.path, fm, schema.frontmatter.required));
+  results.push(...testFieldTagConsistency(file.path, fm, schema.frontmatter.required));
 
-  // Optional fields — validate only if present
-  const optFields = schema.optional_fields.filter((f) => isFieldPresent(fm, f.name));
+  // Optional frontmatter fields — validate only if present
+  const optFields = schema.frontmatter.optional.filter((f) => isFieldPresent(fm, f.name));
   results.push(...testBasicTypeFields(file.path, fm, optFields));
   results.push(...testEnumFields(file.path, fm, optFields));
   results.push(...testDateFields(file.path, fm, optFields));
@@ -166,7 +173,7 @@ async function lintFile(
 
   // Inline metadata
   if (settings.lintInlineMetadata) {
-    results.push(...testInlineMetadata(file.path, content, schema));
+    results.push(...testInlineMetadata(file.path, content, schema, fm));
   }
 
   // Shape heading validation
@@ -178,7 +185,7 @@ async function lintFile(
   return results;
 }
 
-// ── Rule implementations ─────────────────────────────────────────────────────
+// ── Rule implementations ──────────────────────────────────────────────────────
 
 function testRequiredFields(
   path: string,
@@ -220,6 +227,9 @@ function testBasicTypeFields(
         if (!Array.isArray(val)) {
           results.push(newResult(path, field.severity, "type_mismatch",
             `Field '${field.name}' must be a list`));
+        } else if (field.min_items !== undefined && val.length < field.min_items) {
+          results.push(newResult(path, field.severity, "type_mismatch",
+            `Field '${field.name}' must have at least ${field.min_items} item(s)`));
         }
         break;
       case "version":
@@ -273,16 +283,6 @@ function testDateFields(
     if (!dateRegex.test(val) || isNaN(Date.parse(val))) {
       results.push(newResult(path, field.severity, "date_format",
         `Field '${field.name}' value '${val}' does not match format yyyy-MM-dd`));
-      continue;
-    }
-
-    if (field.stale_after_days) {
-      const parsed = new Date(val);
-      const ageDays = (Date.now() - parsed.getTime()) / (1000 * 60 * 60 * 24);
-      if (ageDays > field.stale_after_days) {
-        results.push(newResult(path, "warning", "stale_date",
-          `Field '${field.name}' is ${Math.floor(ageDays)} days old (threshold: ${field.stale_after_days} days)`));
-      }
     }
   }
 
@@ -391,7 +391,7 @@ function testPatternFieldValues(
 
     if (!validSet.has(val.toLowerCase())) {
       results.push(newResult(path, patternField.severity, "invalid_shape_ref",
-        `Field 'shapes' contains '${val}', which is not a valid pattern in System/Shapes/`));
+        `Field 'shapes' contains '${val}', which is not a valid shape in System/Shapes/`));
     }
   }
 
@@ -407,6 +407,7 @@ function testTagNamespaces(
   const tags = getTags(fm);
   const { tag_rules } = schema;
   const allowedNs = new Set(tag_rules.allowed_namespaces);
+  const forbiddenNs = new Set(tag_rules.forbidden_namespaces);
 
   for (const tag of tags) {
     const slashIdx = tag.indexOf("/");
@@ -418,8 +419,16 @@ function testTagNamespaces(
     }
 
     const ns = tag.substring(0, slashIdx);
+
+    if (forbiddenNs.has(ns)) {
+      results.push(newResult(path, "error", "forbidden_namespace",
+        `Tag namespace '${ns}' is reserved and must not be used as a tag namespace`));
+      continue;
+    }
+
     if (tag_rules.unknown_tags !== "off" && !allowedNs.has(ns)) {
-      results.push(newResult(path, "warning", "unknown_tag_namespace",
+      const unknownSeverity = tag_rules.unknown_tags as LintSeverity;
+      results.push(newResult(path, unknownSeverity, "unknown_tag_namespace",
         `Tag namespace '${ns}' is not in allowed_namespaces`));
     }
   }
@@ -427,28 +436,28 @@ function testTagNamespaces(
   return results;
 }
 
-// ── Inline metadata rules ────────────────────────────────────────────────────
+// ── Inline metadata rules ─────────────────────────────────────────────────────
 
 function testInlineMetadata(
   path: string,
   content: string,
-  schema: VaultSchema
+  schema: VaultSchema,
+  fm: Record<string, unknown>
 ): LintResult[] {
   const results: LintResult[] = [];
   const entries = extractInlineMetadataKeys(content);
 
-  const schemaFieldNames = new Set([
-    ...schema.required_fields.map((f) => f.name.toLowerCase()),
-    ...schema.optional_fields.map((f) => f.name.toLowerCase()),
-  ]);
-
-  const inlineFieldNames = new Set(
-    schema.inline_fields.map((f) => f.toLowerCase())
+  // Build lookup sets from new schema structure
+  const schemaFieldNames = new Set(
+    allFrontmatterFields(schema).map((f) => f.name.toLowerCase())
   );
+  const knownInlineNames = inlineFieldNameSet(schema);
+  const conditionalFields = conditionallyRequiredInlineFields(schema);
 
   const allSchemaNames = [...schemaFieldNames];
-  const allInlineNames = [...inlineFieldNames];
+  const allInlineNames = [...knownInlineNames];
   const seen = new Set<string>();
+  const foundInlineKeys = new Set<string>();
 
   for (const entry of entries) {
     const dedupeKey = `${path}|${entry.key}`;
@@ -456,6 +465,7 @@ function testInlineMetadata(
     seen.add(dedupeKey);
 
     const keyLower = entry.key.toLowerCase();
+    foundInlineKeys.add(keyLower);
 
     // ERROR — exact match to a schema frontmatter field
     if (schemaFieldNames.has(keyLower)) {
@@ -465,7 +475,7 @@ function testInlineMetadata(
     }
 
     // SKIP — known inline field
-    if (inlineFieldNames.has(keyLower)) continue;
+    if (knownInlineNames.has(keyLower)) continue;
 
     // WARNING — fuzzy match to schema field (likely typo)
     const [schemaDist, schemaMatch] = closestMatch(entry.key, allSchemaNames, 2);
@@ -485,7 +495,21 @@ function testInlineMetadata(
 
     // INFO — undocumented inline key
     results.push(newResult(path, "info", "inline_undocumented",
-      `Inline key '${entry.key}' is undocumented — consider adding to inline_fields in schema.md (line ${entry.line})`));
+      `Inline key '${entry.key}' is undocumented — consider adding to inline.allowed in schema.md (line ${entry.line})`));
+  }
+
+  // Check conditionally required inline fields
+  for (const field of conditionalFields) {
+    if (!field.required_when) continue;
+    const { field: triggerField, values: triggerValues } = field.required_when;
+    const triggerVal = getFmString(fm, triggerField);
+    if (!triggerVal || !triggerValues.includes(triggerVal)) continue;
+
+    if (!foundInlineKeys.has(field.name.toLowerCase())) {
+      const severity = field.severity ?? "warning";
+      results.push(newResult(path, severity, "required_when",
+        `Inline field '${field.name}' is required when '${triggerField}' = '${triggerVal}'`));
+    }
   }
 
   return results;
@@ -496,10 +520,6 @@ interface InlineEntry {
   line: number;
 }
 
-/**
- * Extracts key:: value patterns from note body (excluding frontmatter and fenced blocks).
- * Port of Get-InlineMetadataKeys from Invoke-VaultLint.ps1.
- */
 function extractInlineMetadataKeys(content: string): InlineEntry[] {
   const results: InlineEntry[] = [];
   const lines = content.split(/\r?\n/);
@@ -512,49 +532,26 @@ function extractInlineMetadataKeys(content: string): InlineEntry[] {
   for (const line of lines) {
     lineNum++;
 
-    // Frontmatter detection
     if (lineNum === 1 && /^---\s*$/.test(line)) { inFrontmatter = true; continue; }
     if (inFrontmatter && /^---\s*$/.test(line)) { inFrontmatter = false; continue; }
     if (inFrontmatter) continue;
 
-    // Fenced block detection
     if (/^(```|~~~)/.test(line)) { inFence = !inFence; continue; }
     if (inFence) continue;
 
     const match = line.match(inlinePattern);
-    if (match) {
-      results.push({ key: match[1], line: lineNum });
-    }
+    if (match) results.push({ key: match[1], line: lineNum });
   }
 
   return results;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function newResult(
-  file: string,
-  severity: LintSeverity,
-  rule: string,
-  message: string
-): LintResult {
-  return { file, severity, rule, message };
-}
-
-// ── Stale note review ────────────────────────────────────────────────────────
-
-/** Maps review cycle enum values to days. */
-const CYCLE_DAYS: Record<string, number> = {
-  daily:     1,
-  weekly:    7,
-  monthly:   30,
-  quarterly: 90,
-  yearly:    365,
-};
+// ── Stale note review ─────────────────────────────────────────────────────────
 
 async function runStaleReview(
   app: App,
   files: TFile[],
+  schema: VaultSchema,
   settings: ForgeSettings
 ): Promise<LintResult[]> {
   const results: LintResult[] = [];
@@ -573,20 +570,18 @@ async function runStaleReview(
 
     const fm = note.frontmatter;
 
-    // Apply in-scope filter — skip if filter field is configured and value not in list
     if (staleReviewFilterField && staleReviewStatuses.length > 0) {
       const fieldVal = getFmString(fm, staleReviewFilterField);
       if (!fieldVal || !staleReviewStatuses.includes(fieldVal)) continue;
     }
 
-    // Read cycle value
     const cycleRaw = getFmString(fm, staleReviewCycleField).toLowerCase().trim();
     if (!cycleRaw || cycleRaw === "never") continue;
 
-    const cycleDays = CYCLE_DAYS[cycleRaw];
-    if (!cycleDays) continue; // unknown value — skip silently
+    // Read day count from schema values_meta — replaces hardcoded CYCLE_DAYS
+    const cycleDays = reviewCycleDays(schema, cycleRaw);
+    if (cycleDays === undefined || cycleDays === null) continue;
 
-    // Read last updated date
     const updatedRaw = getFmString(fm, staleReviewUpdatedField);
     if (!updatedRaw) continue;
 
@@ -608,18 +603,22 @@ async function runStaleReview(
   return results;
 }
 
-function getValidShapeNames(app: App, patternsPath: string): string[] {
-  const folder = app.vault.getAbstractFileByPath(patternsPath);
-  if (!folder) return [];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
+function newResult(
+  file: string,
+  severity: LintSeverity,
+  rule: string,
+  message: string
+): LintResult {
+  return { file, severity, rule, message };
+}
+
+function getValidShapeNames(app: App, patternsPath: string): string[] {
   const files = getMarkdownFiles(app, patternsPath);
   return files.map((f) => f.basename);
 }
 
-/**
- * Levenshtein distance — port of Get-LevenshteinDistance from Invoke-VaultLint.ps1.
- * Returns [distance, matchedName].
- */
 function closestMatch(
   input: string,
   candidates: string[],

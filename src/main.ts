@@ -5,6 +5,7 @@ import { Plugin, Notice } from "obsidian";
 import { DEFAULT_SETTINGS, ForgeSettings } from "./settings";
 import { ForgeSettingsTab } from "./settings-tab";
 import { SchemaCache } from "./schema-cache";
+import { MigrationNoticeModal } from "./migration-notice";
 import { runApplyPatch } from "./commands/apply-patch";
 import { runVaultLint } from "./commands/run-lint";
 import { runValidateSchema } from "./commands/validate-schema";
@@ -24,38 +25,30 @@ export default class ForgePlugin extends Plugin {
   schemaCache: SchemaCache;
 
   async onload(): Promise<void> {
+    // Check for an existing data.json before loadSettings() creates it.
+    // A missing file means this is a fresh install — no notice needed.
+    // A present file with no lastInstalledVersion means a pre-1.0.0 user.
+    const dataPath = `${this.manifest.dir}/data.json`;
+    const hadDataFile = await this.app.vault.adapter.exists(dataPath);
+
     await this.loadSettings();
 
-    // Inject global Forge modal styles early so they're available regardless
-    // of whether the settings tab has been opened this session.
-    if (!document.getElementById("forge-modal-styles")) {
-      const style = document.createElement("style");
-      style.id = "forge-modal-styles";
-      style.textContent = `
-        .forge-modal .modal-content {
-          display: flex;
-          flex-direction: column;
-          max-height: 75vh;
-          overflow: hidden;
-        }
-        .forge-modal-body {
-          flex: 1;
-          overflow-y: auto;
-          padding-right: 4px;
-          margin-bottom: 4px;
-        }
-        .forge-modal-footer {
-          flex-shrink: 0;
-          padding-top: 10px;
-          border-top: 1px solid var(--background-modifier-border);
-        }
-        .forge-button-row {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-      `;
-      document.head.appendChild(style);
+    const currentVersion = this.manifest.version;
+    const lastVersion = this.settings.lastInstalledVersion;
+    const isUpgradeFromLegacy = hadDataFile && !lastVersion;
+
+    if (isUpgradeFromLegacy) {
+      // Show the migration notice once. onClose writes the version so it
+      // never fires again, even if the user dismisses without reading it.
+      new MigrationNoticeModal(this.app, this.settings, async () => {
+        this.settings.lastInstalledVersion = currentVersion;
+        await this.saveSettings();
+      }).open();
+    } else if (!lastVersion || lastVersion !== currentVersion) {
+      // Fresh install, or a future version bump with no notice defined.
+      // Silently record the current version so future upgrade checks work.
+      this.settings.lastInstalledVersion = currentVersion;
+      await this.saveSettings();
     }
 
     // Initialise schema cache — vault access deferred until layout ready

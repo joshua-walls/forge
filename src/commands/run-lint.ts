@@ -66,7 +66,7 @@ interface GroupedLintItem {
 
 function summarizeLintMessage(rule: string, message: string): string {
   if (rule === "inline_undocumented") {
-    return "Inline keys are undocumented — consider adding to inline_fields in schema.md";
+    return "Inline keys are undocumented — consider adding to inline.allowed in schema.md";
   }
 
   if (rule === "tag_namespace") {
@@ -301,8 +301,13 @@ class LintResultsModal extends Modal {
       this.app.workspace.openLinkText(this.runNotePath, "", false);
     });
 
-    // Repair button — wired in Milestone 7
-    if (r.errors.length > 0) {
+    // Repair button — shown based on lintRepairThreshold setting
+    const threshold = this.plugin.settings.lintRepairThreshold ?? "errors_only";
+    const hasRepairable = threshold === "errors_and_warnings"
+      ? r.errors.length > 0 || r.warnings.length > 0
+      : r.errors.length > 0;
+
+    if (hasRepairable) {
       const repairBtn = buttonRow.createEl("button", { text: "Open Vault Repair" });
       repairBtn.addEventListener("click", () => {
         this.close();

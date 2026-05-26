@@ -120,13 +120,22 @@ Forge is designed for real vaults: uneven, evolving, useful, and alive.
 
 ## Community Plugins
 
-**Not yet available**
+Search for **Forge** in Settings → Community Plugins and click Install.
+
+Enable Forge after installation. After any update, click **Reload plugins** from the command palette so Obsidian registers the latest plugin files.
 
 ---
 
 ## Manual Installation
 
-Copy these files into:
+Build the plugin from source:
+
+```bash
+npm install
+npm run build
+```
+
+Copy these files into your vault plugin folder:
 
 ```text
 .obsidian/plugins/forge/
@@ -140,19 +149,9 @@ main.js
 styles.css
 ```
 
-Then enable Forge in:
+Then enable Forge in Settings → Community Plugins.
 
-```text
-Settings → Community Plugins
-```
-
-After installation or updates, click:
-
-```text
-Reload plugins
-```
-
-from the command palette so Obsidian reloads Forge and registers the latest plugin files.
+After installation or updates, click **Reload plugins** from the command palette so Obsidian reloads Forge and registers the latest plugin files.
 
 ---
 
@@ -254,13 +253,14 @@ They can describe:
 Example:
 
 ```yaml
-required_fields:
-  - name: status
-    type: enum
-    values:
-      - draft
-      - active
-      - archived
+frontmatter:
+  required:
+    - name: status
+      type: enum
+      values:
+        - draft
+        - active
+        - archived
 ```
 
 Schemas help keep notes predictable.

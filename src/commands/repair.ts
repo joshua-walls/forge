@@ -15,7 +15,7 @@
 import { App, Modal, Notice, TFile, Setting } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { loadSchema, VaultSchema } from "../utils/schema";
+import { loadSchema, VaultSchema, allFrontmatterFields } from "../utils/schema";
 import { readNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { runApplyPatch } from "./apply-patch";
@@ -35,6 +35,8 @@ interface RepairOp {
   field?: string;
   value?: unknown;
   tag?: string;
+  old_tag?: string;
+  new_tag?: string;
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -59,18 +61,36 @@ export async function runVaultRepair(plugin: ForgePlugin): Promise<void> {
     return;
   }
 
+  const repairThreshold = plugin.settings.lintRepairThreshold ?? "errors_only";
+
+  // All rules that repair can act on
+  const repairableRules = new Set([
+    "no_frontmatter",
+    "required_field",
+    "type_mismatch",
+    "enum_value",
+    "date_format",
+    "required_when",
+    "tag_namespace",
+    "unknown_tag_namespace",
+    "forbidden_namespace",
+    "stale_date",
+  ]);
+
   const errors: LintError[] = (report.results ?? []).filter(
-    (r: LintError) =>
-      r.severity === "error" ||
-      (r.severity === "warning" && (
-        r.rule === "required_field" ||
-        r.rule === "type_mismatch" ||
-        r.rule === "enum_value"
-      ))
+    (r: LintError) => {
+      if (!repairableRules.has(r.rule)) return false;
+      if (r.severity === "error") return true;
+      if (r.severity === "warning" && repairThreshold === "errors_and_warnings") return true;
+      return false;
+    }
   );
 
   if (errors.length === 0) {
-    new Notice("Forge: No errors in lint report — nothing to repair.", 4000);
+    const thresholdLabel = repairThreshold === "errors_and_warnings"
+      ? "errors or repairable warnings"
+      : "errors";
+    new Notice(`Forge: No ${thresholdLabel} in lint report — nothing to repair.`, 4000);
     return;
   }
 
@@ -155,8 +175,7 @@ class VaultRepairModal extends Modal {
       contentEl.createEl("h3", { text: "Fix" });
 
       for (const fieldName of fieldsToFix) {
-        const field = this.schema.required_fields.find((f) => f.name === fieldName)
-          ?? this.schema.optional_fields.find((f) => f.name === fieldName);
+        const field = allFrontmatterFields(this.schema).find((f) => f.name === fieldName);
         if (!field) continue;
 
         if (field.type === "enum" && field.values) {
@@ -224,16 +243,120 @@ class VaultRepairModal extends Modal {
       }
     }
 
+    // ── Tag namespace repair ───────────────────────────────────────────────
+    // Collect bad tags from unknown_tag_namespace and forbidden_namespace errors.
+    // Each offending tag gets its own Skip / Replace / Remove toggle row.
+    const badTagErrors = fileErrors.filter(
+      (e) => e.rule === "unknown_tag_namespace" || e.rule === "forbidden_namespace" || e.rule === "tag_namespace"
+    );
+
+    // Map: full tag string → { action: "skip" | "replace" | "remove", newValue: string }
+    type TagAction = { action: "skip" | "replace" | "remove"; newValue: string };
+    const tagDecisions = new Map<string, TagAction>();
+
+    if (badTagErrors.length > 0) {
+      contentEl.createEl("h3", { text: "Tag Namespace Issues" });
+
+      // Resolve full tags from metadataCache so we can emit precise patch ops.
+      // Lint messages only embed the namespace, not the full tag — look them up here.
+      const cachedMeta = this.app.metadataCache.getCache(filePath);
+      const allFileTags: string[] = (cachedMeta?.frontmatter?.tags ?? []) as string[];
+
+      for (const err of badTagErrors) {
+        const ns = this.extractNamespaceFromError(err);
+        if (!ns) continue;
+
+        // Find all full tags in this file that belong to the offending namespace.
+        // For tag_namespace (no slash), ns IS the full tag — match exactly.
+        // For unknown/forbidden, ns is just the prefix — match all tags with that namespace.
+        const matchingTags = allFileTags.filter((t) => {
+          const slashIdx = t.indexOf("/");
+          if (slashIdx < 0) {
+            // Un-namespaced tag — match exact
+            return t === ns;
+          }
+          return t.substring(0, slashIdx) === ns;
+        });
+
+        // If metadataCache didn't resolve (e.g. new file), fall back to "ns/*" as display key
+        const tagsToShow = matchingTags.length > 0 ? matchingTags : [`${ns}/*`];
+
+        for (const badTag of tagsToShow) {
+          if (tagDecisions.has(badTag)) continue;
+          tagDecisions.set(badTag, { action: "skip", newValue: "" });
+
+          const row = contentEl.createDiv("forge-tag-repair-row");
+
+          row.createEl("span", {
+            text: badTag,
+            cls: "forge-tag-repair-label",
+          });
+
+          row.createEl("span", {
+            text: err.rule === "forbidden_namespace" ? "forbidden" : "unknown",
+            cls: `forge-tag-badge forge-tag-badge-${err.rule === "forbidden_namespace" ? "forbidden" : "unknown"}`,
+          });
+
+          // Toggle button group: Skip / Replace / Remove
+          const toggleGroup = row.createDiv("forge-tag-toggle-group");
+
+          let replaceInputWrapper: HTMLDivElement | null = null;
+
+          const makeToggle = (label: string, value: TagAction["action"]) => {
+            const btn = toggleGroup.createEl("button", {
+              text: label,
+              cls: value === "skip" ? "forge-tag-toggle active" : "forge-tag-toggle",
+            });
+            btn.addEventListener("click", () => {
+              toggleGroup.querySelectorAll(".forge-tag-toggle").forEach((b) =>
+                b.removeClass("active")
+              );
+              btn.addClass("active");
+
+              const decision = tagDecisions.get(badTag)!;
+              decision.action = value;
+
+              if (replaceInputWrapper) {
+                replaceInputWrapper.style.display = value === "replace" ? "" : "none";
+              }
+            });
+            return btn;
+          };
+
+          makeToggle("Skip", "skip");
+          makeToggle("Replace", "replace");
+          makeToggle("Remove", "remove");
+
+          // Replace input — hidden until Replace is selected
+          replaceInputWrapper = row.createDiv("forge-tag-replace-wrapper");
+          replaceInputWrapper.style.display = "none";
+
+          const input = replaceInputWrapper.createEl("input", {
+            type: "text",
+            placeholder: "replacement/tag",
+            cls: "forge-tag-replace-input",
+          });
+
+          input.addEventListener("input", () => {
+            const decision = tagDecisions.get(badTag)!;
+            decision.newValue = input.value.trim();
+          });
+        }
+      }
+    }
+
     // Buttons
     const buttonRow = contentEl.createDiv("forge-button-row");
 
+    const hasAnyFixes = fieldsToFix.length > 0 || badTagErrors.length > 0;
+
     const fixBtn = buttonRow.createEl("button", {
-      text: fieldsToFix.length > 0 ? "Fix & Continue" : "Skip",
-      cls: fieldsToFix.length > 0 ? "mod-cta" : "",
+      text: hasAnyFixes ? "Fix & Continue" : "Skip",
+      cls: hasAnyFixes ? "mod-cta" : "",
     });
 
     fixBtn.addEventListener("click", () => {
-      // Collect ops for this file
+      // Collect field ops for this file
       for (const [fieldName, value] of fieldValues) {
         if (fieldName === "tags" && Array.isArray(value)) {
           for (const tag of value) {
@@ -243,11 +366,27 @@ class VaultRepairModal extends Modal {
           this.ops.push({ op: "set_field", target: filePath, field: fieldName, value });
         }
       }
+
+      // Collect tag namespace repair ops
+      for (const [badTag, decision] of tagDecisions) {
+        if (decision.action === "remove") {
+          this.ops.push({ op: "remove_tag", target: filePath, tag: badTag });
+        } else if (decision.action === "replace" && decision.newValue) {
+          this.ops.push({
+            op: "replace_tag",
+            target: filePath,
+            old_tag: badTag,
+            new_tag: decision.newValue,
+          });
+        }
+        // "skip" → no op emitted
+      }
+
       this.currentIndex++;
       this.renderCurrentFile();
     });
 
-    if (fieldsToFix.length > 0) {
+    if (hasAnyFixes) {
       const skipBtn = buttonRow.createEl("button", { text: "Skip File" });
       skipBtn.addEventListener("click", () => {
         this.skippedCount++;
@@ -305,6 +444,14 @@ class VaultRepairModal extends Modal {
       new Notice("Forge: Repair patch written. Run Apply Vault Patch when ready.", 5000);
     });
 
+    const openBtn = buttonRow.createEl("button", { text: "Write & Open Patch" });
+    openBtn.addEventListener("click", async () => {
+      this.close();
+      await this.writePatch();
+      const paths = getVaultPaths(this.plugin.settings);
+      this.app.workspace.openLinkText(paths.patchFile, "", false);
+    });
+
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
   }
@@ -330,7 +477,7 @@ class VaultRepairModal extends Modal {
       meta: {
         generated_at: localTimestamp(),
         description: "Repair pass — interactive fix of lint errors",
-        schema_version: this.schema.meta.version,
+        schema_version: this.schema.version,
         source: "Forge — Vault Repair",
         contains_schema_changes: false,
       },
@@ -354,6 +501,8 @@ class VaultRepairModal extends Modal {
       lines.push(`    target: "${op.target}"`);
       if (op.field) lines.push(`    field: ${op.field}`);
       if (op.tag) lines.push(`    tag: ${op.tag}`);
+      if (op.old_tag) lines.push(`    old_tag: ${op.old_tag}`);
+      if (op.new_tag) lines.push(`    new_tag: ${op.new_tag}`);
       if (op.value !== undefined) {
         if (typeof op.value === "string") {
           lines.push(`    value: "${op.value}"`);
@@ -409,7 +558,7 @@ class VaultRepairModal extends Modal {
     // If no frontmatter at all — prompt for ALL required fields
     const hasNoFrontmatter = errors.some((e) => e.rule === "no_frontmatter");
     if (hasNoFrontmatter) {
-      for (const field of this.schema.required_fields) {
+      for (const field of this.schema.frontmatter.required) {
         fields.add(field.name);
       }
       return [...fields];
@@ -447,6 +596,29 @@ class VaultRepairModal extends Modal {
     }
 
     return cacheDefault ?? null;
+  }
+
+  /**
+   * Extract the offending namespace from a tag-namespace lint error message.
+   *
+   * Lint engine message formats:
+   *   tag_namespace:          "Tag '<TAG>' is not namespaced. Expected format: namespace/tag"
+   *   unknown_tag_namespace:  "Tag namespace '<NS>' is not in allowed_namespaces"
+   *   forbidden_namespace:    "Tag namespace '<NS>' is reserved and must not be used as a tag namespace"
+   *
+   * Returns the namespace string, or null if the message doesn't match.
+   */
+  private extractNamespaceFromError(err: LintError): string | null {
+    if (err.rule === "tag_namespace") {
+      // Full tag has no slash — namespace === the whole tag in this case; return it as-is
+      const m = err.message.match(/^Tag '([^']+)' is not namespaced/);
+      return m ? m[1] : null;
+    }
+    if (err.rule === "unknown_tag_namespace" || err.rule === "forbidden_namespace") {
+      const m = err.message.match(/^Tag namespace '([^']+)'/);
+      return m ? m[1] : null;
+    }
+    return null;
   }
 
   onClose(): void {

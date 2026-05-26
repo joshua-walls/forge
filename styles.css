@@ -1,0 +1,683 @@
+/* =============================================================================
+   Forge — Plugin Stylesheet
+   Covers: modals, settings tab, repair UI, lint results, patch/apply, restore
+   All colours reference Obsidian CSS variables for theme compatibility.
+   ============================================================================= */
+
+
+/* ── Shared layout helpers ────────────────────────────────────────────────── */
+
+.forge-button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+
+/* ── Modal shell ──────────────────────────────────────────────────────────── */
+
+.forge-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
+  overflow: hidden;
+}
+
+.forge-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 4px;
+}
+
+.forge-modal-footer {
+  flex-shrink: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+
+/* ── Settings tab navigation ─────────────────────────────────────────────── */
+
+.forge-tab-bar {
+  display: flex;
+  gap: 4px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-top: -12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--background-primary);
+}
+
+.forge-tab-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+  transition: background 0.1s, color 0.1s;
+}
+
+.forge-tab-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.forge-tab-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.forge-tab-content {
+  /* intentionally unstyled — content uses standard Setting layout */
+}
+
+
+/* ── Multi-select widget (namespace/folder pickers) ──────────────────────── */
+
+.forge-multiselect {
+  margin: 4px 0 8px;
+  position: relative;
+}
+
+.forge-ms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  min-height: 0;
+}
+
+.forge-ms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: var(--font-ui-smaller);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.forge-ms-chip-rm {
+  cursor: pointer;
+  opacity: 0.7;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.forge-ms-chip-rm:hover {
+  opacity: 1;
+}
+
+.forge-ms-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.forge-ms-trigger:hover {
+  background: var(--background-modifier-hover);
+}
+
+.forge-ms-trigger-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.forge-ms-trigger-icon {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.forge-ms-panel {
+  margin-top: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.forge-ms-hidden {
+  display: none;
+}
+
+.forge-ms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.forge-ms-row:last-child {
+  border-bottom: none;
+}
+
+.forge-ms-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.forge-ms-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  color: var(--text-on-accent);
+}
+
+.forge-ms-box-checked {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.forge-ms-row-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+
+/* ── Field order drag list ────────────────────────────────────────────────── */
+
+.forge-field-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 10px;
+}
+
+.forge-field-order-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: default;
+  user-select: none;
+}
+
+.forge-field-order-item.forge-field-order-dragging {
+  opacity: 0.4;
+}
+
+.forge-field-order-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.forge-field-order-handle:active {
+  cursor: grabbing;
+}
+
+.forge-field-order-name {
+  flex: 1;
+  font-size: var(--font-ui-small);
+  font-family: var(--font-monospace);
+  color: var(--text-normal);
+}
+
+.forge-field-order-rm {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.forge-field-order-rm:hover {
+  color: var(--text-error);
+}
+
+.forge-field-order-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.forge-field-order-input {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-family: var(--font-monospace);
+}
+
+.forge-field-order-add-btn {
+  padding: 5px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+}
+
+.forge-field-order-add-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+
+/* ── Shape field grid (Refine Shapes modal) ──────────────────────────────── */
+
+.forge-shape-fields {
+  margin: 8px 0 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.forge-shape-field-header {
+  display: grid;
+  grid-template-columns: 48px 180px 1fr;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.forge-shape-field-row {
+  display: grid;
+  grid-template-columns: 48px 180px 1fr;
+  gap: 8px;
+  padding: 6px 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.forge-shape-field-row:last-of-type {
+  border-bottom: none;
+}
+
+.forge-shape-field-col-include {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forge-shape-field-col-name {
+  font-size: var(--font-ui-small);
+}
+
+.forge-shape-field-col-value {
+  display: flex;
+  align-items: center;
+}
+
+.forge-field-name {
+  font-family: var(--font-monospace);
+  color: var(--text-normal);
+}
+
+.forge-shape-field-select,
+.forge-shape-field-input {
+  width: 100%;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.forge-shape-field-select:disabled,
+.forge-shape-field-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.forge-shape-runtime-note {
+  padding: 8px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  margin: 0;
+}
+
+
+/* ── Lint results modal ───────────────────────────────────────────────────── */
+
+.forge-lint-summary {
+  margin-bottom: 12px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.forge-lint-rule {
+  margin-top: 12px;
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.forge-lint-message {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  margin-bottom: 2px;
+}
+
+.forge-lint-reason {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  margin: 6px 0 2px;
+}
+
+.forge-lint-list {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+
+.forge-lint-list li {
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+
+/* ── Patch / Apply modal ─────────────────────────────────────────────────── */
+
+.forge-patch-summary {
+  margin-bottom: 12px;
+}
+
+.forge-patch-counts {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.forge-count-changed {
+  color: var(--color-green);
+  font-weight: 600;
+}
+
+.forge-count-skipped {
+  color: var(--text-muted);
+}
+
+.forge-count-error {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+.forge-count-zero {
+  color: var(--text-faint);
+}
+
+.forge-patch-description {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.forge-change-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.forge-change-list li {
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-monospace);
+  color: var(--text-normal);
+  line-height: 1.6;
+}
+
+.forge-more {
+  color: var(--text-faint);
+  font-style: italic;
+  list-style: none;
+}
+
+.forge-no-changes {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 12px 0;
+}
+
+.forge-backup-notice {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+
+/* ── Repair modal ─────────────────────────────────────────────────────────── */
+
+.forge-schema-path {
+  font-size: var(--font-ui-small);
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.forge-error-list {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.forge-error-list li {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  line-height: 1.7;
+}
+
+.forge-error-note {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+}
+
+/* Tag namespace repair rows */
+.forge-tag-repair-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+  flex-wrap: wrap;
+}
+
+.forge-tag-repair-row:last-child {
+  border-bottom: none;
+}
+
+.forge-tag-repair-label {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  min-width: 140px;
+}
+
+/* Rule-type badges */
+.forge-tag-badge {
+  font-size: var(--font-ui-smaller);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.forge-tag-badge-unknown {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.forge-tag-badge-forbidden {
+  background: color-mix(in srgb, var(--text-error) 15%, transparent);
+  color: var(--text-error);
+}
+
+/* Skip / Replace / Remove toggle button group */
+.forge-tag-toggle-group {
+  display: flex;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.forge-tag-toggle {
+  padding: 3px 10px;
+  font-size: var(--font-ui-smaller);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border: none;
+  border-right: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  line-height: 1.5;
+}
+
+.forge-tag-toggle:last-child {
+  border-right: none;
+}
+
+.forge-tag-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.forge-tag-toggle.active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* Replace text input — revealed inline when Replace is active */
+.forge-tag-replace-wrapper {
+  flex: 1;
+  min-width: 160px;
+}
+
+.forge-tag-replace-input {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-family: var(--font-monospace);
+  box-sizing: border-box;
+}
+
+.forge-tag-replace-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+
+/* ── Restore patch modal ──────────────────────────────────────────────────── */
+
+.forge-restore-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+}
+
+.forge-restore-item {
+  padding: 10px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.forge-restore-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.forge-restore-item.forge-restore-done {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.forge-restore-title {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.forge-restore-meta {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.forge-restore-path {
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+}
+
+.forge-restore-backup {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+
+/* ── Maintenance modal ────────────────────────────────────────────────────── */
+
+.forge-policy-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+
+/* ── Validate schema / success states ────────────────────────────────────── */
+
+.forge-success-msg {
+  color: var(--color-green);
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+
+/* ── Misc ─────────────────────────────────────────────────────────────────── */
+
+.forge-coming-soon {
+  padding: 16px 0;
+  opacity: 0.6;
+}

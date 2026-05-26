@@ -158,7 +158,7 @@ interface GroupedLintItem {
 
 function summarizeLintMessage(rule: string, message: string): string {
   if (rule === "inline_undocumented") {
-    return "Inline keys are undocumented — consider adding to inline_fields in schema.md";
+    return "Inline keys are undocumented — consider adding to inline.allowed in schema.md";
   }
 
   if (rule === "tag_namespace") {

@@ -37,7 +37,7 @@ export async function runValidateSchema(plugin: ForgePlugin): Promise<void> {
     return;
   }
 
-  const issues = validateSchemaNote(raw);
+  const issues = validateSchemaNote(raw, settings);
 
   // Refresh cache on successful validation so all commands get updated field list
   if (!issues.some((i) => i.severity === "error")) {

@@ -228,8 +228,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
             return;
           }
           const schemaFields = [
-            ...schema.required_fields.map((f) => f.name),
-            ...schema.optional_fields.map((f) => f.name),
+            ...schema.frontmatter.required.map((f) => f.name),
+            ...schema.frontmatter.optional.map((f) => f.name),
           ];
           // Dedupe while preserving order
           const seen = new Set<string>();
@@ -250,6 +250,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
   private renderLint(el: HTMLElement): void {
     this.renderSchemaNotePicker(el);
+    this.renderSchemaVersionSettings(el);
 
     this.renderFolderPicker(
       el,
@@ -307,6 +308,20 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
+    new Setting(el)
+      .setName("Repair prompt threshold")
+      .setDesc("When to show the Open Vault Repair button after a lint run.")
+      .addDropdown((d) =>
+        d
+          .addOption("errors_only", "Errors only")
+          .addOption("errors_and_warnings", "Errors and warnings")
+          .setValue(this.plugin.settings.lintRepairThreshold)
+          .onChange(async (v) => {
+            this.plugin.settings.lintRepairThreshold = v as "errors_only" | "errors_and_warnings";
+            await this.plugin.saveSettings();
+          })
+      );
+
     // ── Stale Note Review ─────────────────────────────────────────────
     el.createEl("h3", { text: "Stale Note Review" });
 
@@ -325,7 +340,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     if (!this.plugin.settings.staleReviewEnabled) return;
 
-    const allFields = this.plugin.schemaCache.getFieldNames();
+    const allFields = this.plugin.schemaCache.getFrontmatterFieldNames();
 
     // Review cycle field — single-select from all schema fields
     this.renderSchemaFieldDropdown(
@@ -594,7 +609,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     el.createEl("h3", { text: "Overview Options" });
 
     // Domain field
-    const allFieldsForDomain = this.plugin.schemaCache.getFieldNames();
+    const allFieldsForDomain = this.plugin.schemaCache.getFrontmatterFieldNames();
     this.renderSchemaFieldDropdown(
       el,
       "Domain field",
@@ -658,7 +673,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     if (this.plugin.settings.exportPrivateEnabled) {
-      const allFieldsForPrivate = this.plugin.schemaCache.getFieldNames();
+      const allFieldsForPrivate = this.plugin.schemaCache.getFrontmatterFieldNames();
       this.renderSchemaFieldDropdown(
         el,
         "Private note field",
@@ -691,7 +706,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // Field selector — all required + optional fields from schema, no hardcoding
-    const allFields = this.plugin.schemaCache.getFieldNames();
+    const allFields = this.plugin.schemaCache.getFrontmatterFieldNames();
 
     this.renderSchemaFieldDropdown(
       el,
@@ -1186,6 +1201,64 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
       new Setting(el)
+        .setName("Inject relationship headings from schema")
+        .setDesc(
+          "When enabled, refinement injects relationship headings into templates " +
+          "based on schema.ontology.relationships. Only relationships where the shape " +
+          "type participates as a source (or flexible member) are included."
+        )
+        .addToggle((t) =>
+          t.setValue(s.shapeInjectRelationships ?? false).onChange(async (v) => {
+            s.shapeInjectRelationships = v;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+        );
+
+      if (s.shapeInjectRelationships) {
+        new Setting(el)
+          .setName("Relationship parent heading")
+          .setDesc("The heading under which relationship subheadings are grouped.")
+          .addText((t) =>
+            t.setValue(s.shapeRelationshipHeading ?? "Related").onChange(async (v) => {
+              s.shapeRelationshipHeading = v.trim() || "Related";
+              await this.plugin.saveSettings();
+            })
+          );
+
+        new Setting(el)
+          .setName("Relationship heading level")
+          .setDesc("Heading level for the parent relationship heading. Subheadings are always one level below.")
+          .addDropdown((dd) => {
+            dd.addOption("1", "H1");
+            dd.addOption("2", "H2");
+            dd.addOption("3", "H3");
+            dd.setValue(String(s.shapeRelationshipHeadingLevel ?? 2));
+            dd.onChange(async (v) => {
+              s.shapeRelationshipHeadingLevel = parseInt(v, 10);
+              await this.plugin.saveSettings();
+            });
+          });
+
+        new Setting(el)
+          .setName("Relationship injection position")
+          .setDesc(
+            "Inject: add missing headings under the existing parent heading in the structure. " +
+            "Falls back to append if the parent heading is not found. " +
+            "Append: always add the relationship section at the end of the template."
+          )
+          .addDropdown((dd) => {
+            dd.addOption("append", "Append at end");
+            dd.addOption("inject", "Inject into existing heading");
+            dd.setValue(s.shapeRelationshipPosition ?? "append");
+            dd.onChange(async (v) => {
+              s.shapeRelationshipPosition = v as "inject" | "append";
+              await this.plugin.saveSettings();
+            });
+          });
+      }
+
+      new Setting(el)
         .setName("Run refinement")
         .setDesc("Process all shape notes and write or update template notes now.")
         .addButton((btn) =>
@@ -1350,8 +1423,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const schema = await loadSchema(this.plugin.app, s);
         if (schema) {
           const allFields = [
-            ...schema.required_fields.map((f) => f.name),
-            ...schema.optional_fields.map((f) => f.name),
+            ...schema.frontmatter.required.map((f) => f.name),
+            ...schema.frontmatter.optional.map((f) => f.name),
           ];
           for (const name of allFields) {
             dd.addOption(name, name);
@@ -1387,8 +1460,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const schema = await loadSchema(this.plugin.app, s);
         if (schema) {
           const dateFields = [
-            ...schema.required_fields,
-            ...schema.optional_fields,
+            ...schema.frontmatter.required,
+            ...schema.frontmatter.optional,
           ]
             .filter((f) => f.type === "date")
             .map((f) => f.name);
@@ -1427,8 +1500,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
       }
 
       const allFields = [
-        ...schema.required_fields,
-        ...schema.optional_fields,
+        ...schema.frontmatter.required,
+        ...schema.frontmatter.optional,
       ];
 
       // Order by frontmatterFieldOrder if set
@@ -1660,6 +1733,42 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
   }
 
+  /** Schema version field settings — location picker + schema-driven field dropdown. */
+  private renderSchemaVersionSettings(el: HTMLElement): void {
+    const s = this.plugin.settings;
+
+    new Setting(el)
+      .setName("Version field location")
+      .setDesc("Where the schema version is stored — inline metadata (key:: value) or frontmatter.")
+      .addDropdown((dd) =>
+        dd
+          .addOption("inline", "Inline (key:: value)")
+          .addOption("frontmatter", "Frontmatter")
+          .setValue(s.schemaVersionLocation ?? "inline")
+          .onChange(async (v) => {
+            s.schemaVersionLocation = v as "frontmatter" | "inline";
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    const fieldNames = s.schemaVersionLocation === "frontmatter"
+      ? this.plugin.schemaCache.getFrontmatterFieldNames()
+      : this.plugin.schemaCache.getInlineFieldNames();
+
+    this.renderSchemaFieldDropdown(
+      el,
+      "Version field",
+      `The ${s.schemaVersionLocation === "frontmatter" ? "frontmatter" : "inline"} field that holds the schema version.`,
+      fieldNames,
+      s.schemaVersionField ?? "version",
+      async (v) => {
+        s.schemaVersionField = v;
+        await this.plugin.saveSettings();
+      }
+    );
+  }
+
   /** Patch file picker — selects .md / .yaml / .yml files. */
   private renderPatchFilePicker(el: HTMLElement): void {
     const fallback = "System/Forge/Patches/vault-patch.md";
@@ -1822,274 +1931,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
     updateTrigger();
   }
 
-  /** Inject tab bar and multiselect styles scoped to the settings container. */
-  private injectStyles(): void {
-    if (this.containerEl.querySelector("#forge-tab-styles")) return;
-
-    const style = document.createElement("style");
-    style.id = "forge-tab-styles";
-    style.textContent = `
-      .forge-tab-bar {
-        display: flex;
-        gap: 4px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid var(--background-modifier-border);
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background: var(--background-primary);
-        padding-top: 12px;
-        margin-top: -12px;
-      }
-      .forge-tab-btn {
-        padding: 4px 12px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        color: var(--text-muted);
-        cursor: pointer;
-        font-size: var(--font-ui-small);
-      }
-      .forge-tab-btn:hover {
-        background: var(--background-modifier-hover);
-        color: var(--text-normal);
-      }
-      .forge-tab-btn.is-active {
-        background: var(--interactive-accent);
-        color: var(--text-on-accent);
-        border-color: var(--interactive-accent);
-      }
-      .forge-multiselect {
-        margin: 4px 0 8px 0;
-        position: relative;
-      }
-      .forge-ms-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 6px;
-        min-height: 0;
-      }
-      .forge-ms-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-size: var(--font-ui-smaller);
-        background: var(--interactive-accent);
-        color: var(--text-on-accent);
-      }
-      .forge-ms-chip-rm {
-        cursor: pointer;
-        opacity: 0.7;
-        font-size: 13px;
-        line-height: 1;
-      }
-      .forge-ms-chip-rm:hover { opacity: 1; }
-      .forge-ms-trigger {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 10px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        cursor: pointer;
-        user-select: none;
-      }
-      .forge-ms-trigger:hover { background: var(--background-modifier-hover); }
-      .forge-ms-trigger-label {
-        font-size: var(--font-ui-small);
-        color: var(--text-muted);
-      }
-      .forge-ms-trigger-icon {
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-      .forge-ms-panel {
-        margin-top: 4px;
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 4px;
-        background: var(--background-primary);
-        max-height: 240px;
-        overflow-y: auto;
-        z-index: 100;
-      }
-      .forge-ms-hidden { display: none; }
-      .forge-ms-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 7px 12px;
-        cursor: pointer;
-        border-bottom: 1px solid var(--background-modifier-border-hover);
-      }
-      .forge-ms-row:last-child { border-bottom: none; }
-      .forge-ms-row:hover { background: var(--background-modifier-hover); }
-      .forge-ms-box {
-        width: 16px;
-        height: 16px;
-        border-radius: 3px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        flex-shrink: 0;
-        color: var(--text-on-accent);
-      }
-      .forge-ms-box-checked {
-        background: var(--interactive-accent);
-        border-color: var(--interactive-accent);
-      }
-      .forge-ms-row-label {
-        font-size: var(--font-ui-small);
-        color: var(--text-normal);
-      }
-      .forge-coming-soon {
-        padding: 16px 0;
-        opacity: 0.6;
-      }
-      .forge-field-order-list {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin: 8px 0 10px 0;
-      }
-      .forge-field-order-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 5px 10px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        cursor: default;
-        user-select: none;
-      }
-      .forge-field-order-item.forge-field-order-dragging {
-        opacity: 0.4;
-      }
-      .forge-field-order-handle {
-        cursor: grab;
-        color: var(--text-muted);
-        font-size: 14px;
-        line-height: 1;
-        flex-shrink: 0;
-      }
-      .forge-field-order-handle:active { cursor: grabbing; }
-      .forge-field-order-name {
-        flex: 1;
-        font-size: var(--font-ui-small);
-        font-family: var(--font-monospace);
-        color: var(--text-normal);
-      }
-      .forge-field-order-rm {
-        cursor: pointer;
-        color: var(--text-muted);
-        font-size: 14px;
-        line-height: 1;
-        flex-shrink: 0;
-      }
-      .forge-field-order-rm:hover { color: var(--text-error); }
-      .forge-field-order-add-row {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-      .forge-field-order-input {
-        flex: 1;
-        padding: 5px 8px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-primary);
-        color: var(--text-normal);
-        font-size: var(--font-ui-small);
-        font-family: var(--font-monospace);
-      }
-      .forge-field-order-add-btn {
-        padding: 5px 14px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        color: var(--text-normal);
-        cursor: pointer;
-        font-size: var(--font-ui-small);
-      }
-      .forge-field-order-add-btn:hover {
-        background: var(--background-modifier-hover);
-      }
-      .forge-shape-fields {
-        margin: 8px 0 16px 0;
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 4px;
-        overflow: hidden;
-      }
-      .forge-shape-field-header {
-        display: grid;
-        grid-template-columns: 48px 180px 1fr;
-        gap: 8px;
-        padding: 6px 12px;
-        background: var(--background-secondary);
-        border-bottom: 1px solid var(--background-modifier-border);
-        font-size: var(--font-ui-smaller);
-        color: var(--text-muted);
-        font-weight: 600;
-      }
-      .forge-shape-field-row {
-        display: grid;
-        grid-template-columns: 48px 180px 1fr;
-        gap: 8px;
-        padding: 6px 12px;
-        align-items: center;
-        border-bottom: 1px solid var(--background-modifier-border-hover);
-      }
-      .forge-shape-field-row:last-of-type {
-        border-bottom: none;
-      }
-      .forge-shape-field-col-include {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .forge-shape-field-col-name {
-        font-size: var(--font-ui-small);
-      }
-      .forge-shape-field-col-value {
-        display: flex;
-        align-items: center;
-      }
-      .forge-field-name {
-        font-family: var(--font-monospace);
-        color: var(--text-normal);
-      }
-      .forge-shape-field-select,
-      .forge-shape-field-input {
-        width: 100%;
-        padding: 3px 6px;
-        border-radius: 4px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--background-primary);
-        color: var(--text-normal);
-        font-size: var(--font-ui-small);
-      }
-      .forge-shape-field-select:disabled,
-      .forge-shape-field-input:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      .forge-shape-runtime-note {
-        padding: 8px 12px;
-        border-top: 1px solid var(--background-modifier-border);
-        margin: 0;
-      }
-    `;
-    this.containerEl.appendChild(style);
-  }
+  /** Styles are now in styles.css — this method is kept for backward compatibility. */
+  private injectStyles(): void {}
 }
 
 // ── Modal helpers ─────────────────────────────────────────────────────────────

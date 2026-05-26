@@ -85,7 +85,7 @@ async function buildInventory(plugin: ForgePlugin): Promise<InventoryExport> {
 
   const schema        = plugin.schemaCache.peek();
   const exemptPaths   = schema?.exempt_paths ?? [];
-  const schemaVer     = schema?.meta?.version ?? "unknown";
+  const schemaVer     = schema?.version ?? "unknown";
   const privateField  = settings.exportPrivateEnabled ? settings.exportPrivateField : "";
   const domainField   = settings.exportDomainField;
   const typeField     = settings.exportTypeField   || "type";
@@ -134,7 +134,7 @@ async function buildInventory(plugin: ForgePlugin): Promise<InventoryExport> {
 
 function buildMeta(plugin: ForgePlugin, inventory: InventoryExport): VaultMetaExport {
   const { settings } = plugin;
-  const schemaVer    = plugin.schemaCache.peek()?.meta?.version ?? "unknown";
+  const schemaVer    = plugin.schemaCache.peek()?.version ?? "unknown";
 
   // Use configured field names as JSON keys
   const domainLabel  = settings.exportDomainField  || "domain";
