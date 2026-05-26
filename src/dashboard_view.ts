@@ -116,7 +116,6 @@ export class ForgeHealthDashboardView extends ItemView {
       ["Notes scanned", snapshot.summary.notes_scanned],
       ["Lint issues", snapshot.summary.lint_issue_count],
       ["Schema violations", snapshot.summary.schema_violation_count],
-      ["Broken shapes", snapshot.summary.broken_shape_count],
       ["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count],
       ["Normalization candidates", snapshot.summary.normalization_candidates ?? "—"],
     ];
@@ -229,12 +228,13 @@ export class ForgeHealthDashboardView extends ItemView {
     const shape = snapshot.shape_lint;
     const critical = shape?.errors ?? 0;
     const warnings = shape?.warnings ?? 0;
+    const issueCount = shape?.summary.issue_count ?? 0;
     const status: SectionStatus = !shape
       ? { label: "Not scanned", tone: "muted" }
       : critical > 0
         ? { label: `${critical} critical`, tone: "critical" }
-        : warnings > 0
-          ? { label: `${warnings} warning${warnings === 1 ? "" : "s"}`, tone: "warning" }
+        : issueCount > 0
+          ? { label: `${issueCount} issue${issueCount === 1 ? "" : "s"}`, tone: warnings > 0 ? "warning" : "muted" }
           : { label: "Clear", tone: "good" };
 
     const section = createSection(container, "Shape Health", status);
@@ -242,13 +242,12 @@ export class ForgeHealthDashboardView extends ItemView {
       section.createDiv({ text: "Shape lint has not been run yet.", cls: "forge-health-muted" });
     } else {
       section.createDiv({
-        text: `Last shape lint ${formatRelativeWithExactDate(shape.generated_at)}`,
+        text: `Last shape lint ${formatRelativeWithExactDate(shape.generated_at)} • ${shape.summary.files_scanned} files scanned`,
         cls: "forge-health-section-meta",
       });
 
       const grid = section.createDiv("forge-health-metric-grid");
       for (const [label, value] of [
-        ["Files scanned", shape.summary.files_scanned],
         ["Shape issues", shape.summary.issue_count],
         ["Missing headings", shape.summary.missing_heading_count],
         ["Order issues", shape.summary.heading_order_issue_count],

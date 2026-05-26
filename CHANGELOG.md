@@ -1,3 +1,12 @@
+# 1.3.1
+
+## Changed
+
+- Refined Vault Health Dashboard responsive layout for freely resized Obsidian panes.
+- Dashboard cards, section badges, issue groups, and maintenance history rows now wrap more safely at narrow widths.
+
+---
+
 # 1.3.0
 
 ## Added

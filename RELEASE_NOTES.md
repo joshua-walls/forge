@@ -1,43 +1,25 @@
-# Forge 1.3.0
+# Forge 1.3.1
 
-Forge 1.3.0 adds a dedicated Shape Health dashboard section and splits Shape Lint from the general Vault Lint workflow.
+Forge 1.3.1 refines the Vault Health Dashboard layout for freely resized Obsidian panes.
 
 ---
 
 ## What changed
 
-### Shape Health dashboard section
+### Dashboard layout polish
 
-The Vault Health Dashboard now includes a Shape Health card for structural Shape/template issues. It reports:
+Dashboard sections now respond to the panel's own width, not only the app viewport. This helps prevent overlap when the dashboard is docked in a narrow side panel or stretched into a wide workspace pane.
 
-- files scanned
-- total Shape issues
-- missing headings
-- heading order issues
-- extra headings
-- empty sections
+Refined areas include:
 
-Shape issues are listed separately from general Active Issues and include Open actions for affected files.
-
-### Separate Shape Lint workflow
-
-Forge now has a dedicated `Forge: Run Shape Lint` command backed by a Shape Lint service. Shape lint results are cached independently from Vault Lint results.
-
-Vault Lint continues to report general vault/schema/frontmatter/metadata issues. Shape Lint reports structural heading/template drift.
-
-### Shape Lint exports
-
-Shape Lint writes its own artifacts:
-
-- `System/Exports/shape-lint-report.json`
-- `System/Exports/ShapeLintReports/shape-lint-run-{timestamp}.md`
-
-### Dashboard refresh behavior
-
-Manual dashboard refresh runs Shape Lint only when Shape lint is enabled in settings. Existing cached Shape Lint results are shown when available.
+- metric card grids
+- section status badges
+- issue group headers
+- maintenance history rows
+- action buttons
 
 ---
 
 ## Scope notes
 
-Shape Health is read-only. It does not run Shape Repair or mutate notes.
+This release is UI polish only. Dashboard data collection and command behavior are unchanged.
