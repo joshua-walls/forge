@@ -1,3 +1,28 @@
+# 1.4.0
+
+## Added
+
+- Forge Health dashboard now preloads into the right sidebar as a side-panel tab.
+- Dashboard Settings button for direct access to Forge settings.
+- Dashboard actions for maintenance, normalization, repair, ontology refresh, snapshot export, template refinement, patch history, and last-run review.
+- Operational history tracking for maintenance, normalization, template refinement, and shape repair.
+- Shared preview type contract for future preview/apply workflows.
+- Dry-run support in template refinement for future preview workflows.
+
+## Changed
+
+- Dashboard action layout now uses a responsive grid for better desktop, side-pane, and mobile behavior.
+- Patch history can now surface recent repair and normalization activity when available.
+- Dashboard cache schema was bumped with graceful fallback for existing cache files.
+
+## Compatibility
+
+- Existing command palette workflows and command IDs remain supported.
+- Existing patch, restore, lint, schema, export, repair, and normalization behavior is preserved.
+- The preview/apply foundation is present, but the full selected-apply modal workflow is not exposed in this release.
+
+---
+
 # 1.3.3
 
 ## Fixed

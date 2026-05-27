@@ -44,9 +44,20 @@ export async function runVaultMaintenance(plugin: ForgePlugin): Promise<void> {
   }
 
   new MaintenanceConfirmModal(app, plugin, dryResults, async () => {
+    const started = Date.now();
     const applyResults = await runAllTasks(app, settings, false);
     const applied = applyResults.filter((r) => r.status === "removed" || r.status === "trimmed").length;
     const errors  = applyResults.filter((r) => r.status === "error").length;
+    await plugin.dashboardService.recordOperationalRun({
+      command: "maintenance",
+      status: errors > 0 ? "partial" : "success",
+      started_at: new Date(started).toISOString(),
+      duration_ms: Date.now() - started,
+      affected_files: applied,
+      applied_items: applied,
+      warnings: [],
+      errors: applyResults.filter((r) => r.status === "error").map((r) => `${r.target}: ${r.detail}`),
+    });
 
     if (errors > 0) {
       new Notice(`Forge: Maintenance complete. ${applied} action(s), ${errors} error(s).`, 6000);

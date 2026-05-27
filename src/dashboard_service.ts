@@ -5,6 +5,7 @@ import {
   type DashboardIssue,
   type DashboardSnapshot,
   type DashboardSummary,
+  type OperationalRunSummary,
 } from "./dashboard_types";
 import type { LintService } from "./lint_service";
 import type { OntologyService } from "./ontology_service";
@@ -29,13 +30,33 @@ export class DashboardService {
   constructor(
     private app: App,
     private settings: ForgeSettings,
-    private services: DashboardServices
+    private services: DashboardServices,
+    forgeVersion = "unknown"
   ) {
-    this.cache = new DashboardCache(app, settings);
+    this.cache = new DashboardCache(app, settings, forgeVersion);
+  }
+
+  // Exposed so ForgeHealthDashboardView can register the file watcher
+  // without importing vault-paths directly.
+  get cachePath(): string {
+    return this.cache.path;
   }
 
   async loadSnapshot(): Promise<DashboardSnapshot | null> {
     return (await this.cache.read()).dashboard_snapshot;
+  }
+
+  async recordOperationalRun(run: OperationalRunSummary): Promise<void> {
+    try {
+      await this.cache.appendOperationalRun(run);
+    } catch (e) {
+      console.warn("[Forge] Could not update dashboard operational history:", e);
+    }
+  }
+
+  async latestOperationalRun(): Promise<OperationalRunSummary | null> {
+    const history = (await this.cache.read()).operational_history;
+    return Array.isArray(history) ? history[0] ?? null : null;
   }
 
   async refreshSnapshot(): Promise<DashboardSnapshot> {

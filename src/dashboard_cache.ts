@@ -8,6 +8,7 @@ import {
   DashboardSnapshot,
   LintScanResult,
   OntologyMetricsResult,
+  OperationalRunSummary,
   PatchHistoryResult,
   SchemaValidationResult,
   ShapeLintResult,
@@ -19,10 +20,15 @@ type CacheLeaf =
   | { key: "latest_ontology_result"; value: OntologyMetricsResult | null }
   | { key: "latest_shape_lint_result"; value: ShapeLintResult | null }
   | { key: "latest_patch_history_result"; value: PatchHistoryResult | null }
+  | { key: "operational_history"; value: OperationalRunSummary[] | null }
   | { key: "dashboard_snapshot"; value: DashboardSnapshot | null };
 
 export class DashboardCache {
-  constructor(private app: App, private settings: ForgeSettings) {}
+  constructor(
+    private app: App,
+    private settings: ForgeSettings,
+    private forgeVersion: string = "unknown"
+  ) {}
 
   get path(): string {
     const paths = getVaultPaths(this.settings);
@@ -36,6 +42,14 @@ export class DashboardCache {
     try {
       const raw = await this.app.vault.read(file);
       const parsed = JSON.parse(raw);
+      if (
+        "operational_history" in parsed &&
+        parsed.operational_history !== null &&
+        !Array.isArray(parsed.operational_history)
+      ) {
+        console.warn("[Forge] Ignoring malformed dashboard operational_history cache leaf.");
+        parsed.operational_history = null;
+      }
       return {
         ...emptyDashboardCache(),
         ...parsed,
@@ -51,7 +65,11 @@ export class DashboardCache {
     await ensureFolder(this.app, paths.forge);
 
     const content = JSON.stringify(
-      { ...cache, schema_version: DASHBOARD_CACHE_SCHEMA_VERSION },
+      {
+        ...cache,
+        schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
+        forge_version: this.forgeVersion,
+      },
       null,
       2
     );
@@ -69,16 +87,27 @@ export class DashboardCache {
     await this.write(next);
     return next;
   }
+
+  async appendOperationalRun(run: OperationalRunSummary, maxEntries = 10): Promise<DashboardCacheFile> {
+    const cache = await this.read();
+    const history = Array.isArray(cache.operational_history)
+      ? cache.operational_history
+      : [];
+    const nextHistory = [run, ...history].slice(0, maxEntries);
+    return this.updateLeaf({ key: "operational_history", value: nextHistory });
+  }
 }
 
 export function emptyDashboardCache(): DashboardCacheFile {
   return {
     schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
+    forge_version: "unknown",
     latest_lint_result: null,
     latest_schema_result: null,
     latest_ontology_result: null,
     latest_shape_lint_result: null,
     latest_patch_history_result: null,
+    operational_history: null,
     dashboard_snapshot: null,
   };
 }

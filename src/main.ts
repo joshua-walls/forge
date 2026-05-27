@@ -30,6 +30,7 @@ import { runExportOntology } from "./commands/export-ontology";
 import { runRefineShapes } from "./commands/refine-shapes";
 import { runShapeRepair } from "./commands/shape-repair";
 import { runShapeLint } from "./commands/run-shape-lint";
+import { getVaultPaths } from "./vault-paths";
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -68,20 +69,39 @@ export default class ForgePlugin extends Plugin {
       await this.saveSettings();
     }
 
+    // If this is a version upgrade and the dashboard pane is already open
+    // (survived the disable/enable cycle), flag it to show the reload banner.
+    if (lastVersion && lastVersion !== currentVersion) {
+      this.app.workspace.onLayoutReady(() => {
+        const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+        for (const leaf of leaves) {
+          if (leaf.view instanceof ForgeHealthDashboardView) {
+            leaf.view.needsReload = true;
+            leaf.view.render();
+          }
+        }
+      });
+    }
+
     // Initialise schema cache — vault access deferred until layout ready
     this.schemaCache = new SchemaCache(this.app, this.settings);
     this.lintService = new LintService(this.app, this.settings);
     this.schemaService = new SchemaService(this.app, this.settings, this.schemaCache);
     this.ontologyService = new OntologyService(this.app, this.settings);
     this.shapeLintService = new ShapeLintService(this.app, this.settings);
-    this.patchHistoryService = new PatchHistoryService(this.app, this.settings);
-    this.dashboardService = new DashboardService(this.app, this.settings, {
-      lintService: this.lintService,
-      schemaService: this.schemaService,
-      ontologyService: this.ontologyService,
-      shapeLintService: this.shapeLintService,
-      patchHistoryService: this.patchHistoryService,
-    });
+    this.patchHistoryService = new PatchHistoryService(this.app, this.settings, this.manifest.version);
+    this.dashboardService = new DashboardService(
+      this.app,
+      this.settings,
+      {
+        lintService: this.lintService,
+        schemaService: this.schemaService,
+        ontologyService: this.ontologyService,
+        shapeLintService: this.shapeLintService,
+        patchHistoryService: this.patchHistoryService,
+      },
+      this.manifest.version  // stamped into cache on every write
+    );
 
     this.registerView(
       FORGE_HEALTH_DASHBOARD_VIEW,
@@ -119,6 +139,15 @@ export default class ForgePlugin extends Plugin {
           new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
           console.error("[Forge] validate-schema error:", e);
         });
+      },
+    });
+
+    this.addCommand({
+      id: "open-schema-md",
+      name: "Open schema.md",
+      callback: () => {
+        const paths = getVaultPaths(this.settings);
+        this.app.workspace.openLinkText(paths.schemaMd, "", false);
       },
     });
 
@@ -199,7 +228,6 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
-
     this.addCommand({
       id: "export-vault-overview",
       name: "Export Vault Overview",
@@ -212,6 +240,17 @@ export default class ForgePlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "export-vault-snapshot",
+      name: "Export Vault Snapshot",
+      callback: () => {
+        runExportOverview(this).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] export-vault-snapshot error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
       id: "export-ontology-index",
       name: "Export Ontology Index",
       callback: () => {
@@ -219,6 +258,20 @@ export default class ForgePlugin extends Plugin {
           new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
           console.error("[Forge] export-ontology-index error:", e);
         });
+      },
+    });
+
+    this.addCommand({
+      id: "refresh-ontology-metrics",
+      name: "Refresh Ontology Metrics",
+      callback: () => {
+        this.ontologyService.collectMetrics("refresh-vault-health-dashboard")
+          .then(() => this.recomposeHealthDashboard())
+          .then(() => new Notice("Forge: Ontology metrics refreshed.", 4000))
+          .catch((e: Error) => {
+            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+            console.error("[Forge] refresh-ontology-metrics error:", e);
+          });
       },
     });
 
@@ -303,6 +356,43 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: "view-patch-history",
+      name: "View Patch History",
+      callback: () => {
+        this.patchHistoryService.readHistory("patch-history")
+          .then(() => this.recomposeHealthDashboard())
+          .then(() => this.openHealthDashboard())
+          .then(() => new Notice("Forge: Patch history refreshed in the dashboard.", 5000))
+          .catch((e: Error) => {
+            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+            console.error("[Forge] view-patch-history error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "view-last-run",
+      name: "View Last Forge Run",
+      callback: () => {
+        this.dashboardService.latestOperationalRun()
+          .then((run) => {
+            if (!run) {
+              new Notice("Forge: No operational runs have been recorded yet.", 5000);
+              return;
+            }
+            new Notice(
+              `Forge: Last run was ${formatCommandName(run.command)}. Status: ${run.status}. Applied ${run.applied_items} item(s), with ${run.errors.length} error(s).`,
+              7000
+            );
+          })
+          .catch((e: Error) => {
+            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+            console.error("[Forge] view-last-run error:", e);
+          });
+      },
+    });
+
     this.addSettingTab(new ForgeSettingsTab(this.app, this));
 
     // Defer all vault file access until the workspace layout is ready.
@@ -315,6 +405,9 @@ export default class ForgePlugin extends Plugin {
         setTimeout(() => this.schemaCache.refresh().catch((e) => {
           console.warn("[Forge] Schema cache retry failed:", e);
         }), 3000);
+      });
+      this.ensureHealthDashboardPanel().catch((e) => {
+        console.warn("[Forge] Could not preload health dashboard panel:", e);
       });
     });
 
@@ -332,12 +425,34 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    const leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf(true);
-    await leaf.setViewState({
-      type: FORGE_HEALTH_DASHBOARD_VIEW,
+    const leaf = await this.app.workspace.ensureSideLeaf(FORGE_HEALTH_DASHBOARD_VIEW, "right", {
       active: true,
+      reveal: true,
+      split: false,
     });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  async ensureHealthDashboardPanel(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    if (leaves.length > 0) return;
+
+    await this.app.workspace.ensureSideLeaf(FORGE_HEALTH_DASHBOARD_VIEW, "right", {
+      active: false,
+      reveal: false,
+      split: false,
+    });
+  }
+
+  openForgeSettings(): void {
+    const setting = (this.app as any).setting;
+    if (!setting?.open) {
+      new Notice("Forge: Could not open settings from this Obsidian version.", 5000);
+      return;
+    }
+
+    setting.open();
+    setting.openTabById?.(this.manifest.id);
   }
 
   async recomposeHealthDashboard(): Promise<void> {
@@ -376,15 +491,27 @@ export default class ForgePlugin extends Plugin {
     if (this.schemaService) this.schemaService = new SchemaService(this.app, this.settings, this.schemaCache);
     if (this.ontologyService) this.ontologyService = new OntologyService(this.app, this.settings);
     if (this.shapeLintService) this.shapeLintService = new ShapeLintService(this.app, this.settings);
-    if (this.patchHistoryService) this.patchHistoryService = new PatchHistoryService(this.app, this.settings);
+    if (this.patchHistoryService) this.patchHistoryService = new PatchHistoryService(this.app, this.settings, this.manifest.version);
     if (this.dashboardService) {
-      this.dashboardService = new DashboardService(this.app, this.settings, {
-        lintService: this.lintService,
-        schemaService: this.schemaService,
-        ontologyService: this.ontologyService,
-        shapeLintService: this.shapeLintService,
-        patchHistoryService: this.patchHistoryService,
-      });
+      this.dashboardService = new DashboardService(
+        this.app,
+        this.settings,
+        {
+          lintService: this.lintService,
+          schemaService: this.schemaService,
+          ontologyService: this.ontologyService,
+          shapeLintService: this.shapeLintService,
+          patchHistoryService: this.patchHistoryService,
+        },
+        this.manifest.version
+      );
     }
   }
+}
+
+function formatCommandName(command: string): string {
+  return command
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

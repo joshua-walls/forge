@@ -73,8 +73,20 @@ export async function runNormalizeTags(plugin: ForgePlugin): Promise<void> {
     `${candidates.length} file(s) have tags to normalize.`,
     candidates,
     async () => {
+      const started = Date.now();
       const applyResults = await normalizeTagsPass(app, settings, files, false);
       const changed = applyResults.filter((r) => r.changed).length;
+      await plugin.dashboardService.recordOperationalRun({
+        command: "normalization",
+        status: "success",
+        started_at: new Date(started).toISOString(),
+        duration_ms: Date.now() - started,
+        affected_files: changed,
+        applied_items: changed,
+        warnings: [],
+        errors: [],
+      });
+      await plugin.patchHistoryService.readHistory("patch-history");
       new Notice(`Forge: Normalized tags in ${changed} file(s).`, 4000);
     }
   ).open();
@@ -168,8 +180,20 @@ export async function runNormalizeFrontmatter(plugin: ForgePlugin): Promise<void
     `${candidates.length} file(s) have frontmatter to normalize.`,
     candidates,
     async () => {
+      const started = Date.now();
       const applyResults = await normalizeFrontmatterPass(app, settings, files, false, plugin);
       const changed = applyResults.filter((r) => r.changed).length;
+      await plugin.dashboardService.recordOperationalRun({
+        command: "normalization",
+        status: "success",
+        started_at: new Date(started).toISOString(),
+        duration_ms: Date.now() - started,
+        affected_files: changed,
+        applied_items: changed,
+        warnings: [],
+        errors: [],
+      });
+      await plugin.patchHistoryService.readHistory("patch-history");
       new Notice(`Forge: Normalized frontmatter in ${changed} file(s).`, 4000);
     }
   ).open();

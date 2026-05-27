@@ -793,16 +793,28 @@
 }
 
 .forge-health-section-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
   margin: 0 0 10px 0;
 }
 
-.forge-health-section-actions button,
+.forge-health-action-button,
 .forge-health-issue-controls button {
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+.forge-health-action-button {
+  min-width: 0;
+}
+
+.forge-health-action-primary {
+  font-weight: 600;
+}
+
+.forge-health-action-secondary {
+  color: var(--text-muted);
 }
 
 .forge-health-inline-summary {
@@ -1060,14 +1072,17 @@
   }
 }
 
-@container (max-width: 360px) {
-  .forge-health-section-actions,
-  .forge-health-issue-controls {
-    flex-direction: column;
-    align-items: stretch;
+@container (max-width: 520px) {
+  .forge-health-section-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 300px) {
+  .forge-health-section-actions {
+    grid-template-columns: 1fr;
   }
 
-  .forge-health-section-actions button,
   .forge-health-issue-controls button {
     width: 100%;
   }

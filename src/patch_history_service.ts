@@ -4,6 +4,7 @@ import { getVaultPaths } from "./vault-paths";
 import { DashboardCache } from "./dashboard_cache";
 import {
   DASHBOARD_CACHE_SCHEMA_VERSION,
+  type OperationalRunSummary,
   type PatchHistoryResult,
   type PatchRunSummary,
 } from "./dashboard_types";
@@ -22,8 +23,8 @@ interface PatchManifest {
 export class PatchHistoryService {
   private cache: DashboardCache;
 
-  constructor(private app: App, private settings: ForgeSettings) {
-    this.cache = new DashboardCache(app, settings);
+  constructor(private app: App, private settings: ForgeSettings, forgeVersion = "unknown") {
+    this.cache = new DashboardCache(app, settings, forgeVersion);
   }
 
   async readHistory(
@@ -33,6 +34,8 @@ export class PatchHistoryService {
     const paths = getVaultPaths(this.settings);
     const manifests = await this.readPatchManifests(paths.patchReports);
     const lintScans = await this.countLintScans(paths.lintHistoryJson);
+    const operationalHistory = await this.readOperationalHistory();
+    const repairRuns = await this.readRepairRuns(paths.shapeRepairHistory);
 
     const result: PatchHistoryResult = {
       schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
@@ -40,9 +43,9 @@ export class PatchHistoryService {
       generated_at: new Date().toISOString(),
       duration_ms: Date.now() - started,
       last_patch_run: manifests[0] ?? null,
-      last_repair_run: null,
+      last_repair_run: repairRuns[0] ?? operationalRunToPatchSummary(operationalHistory, "repair"),
       restored_runs_available: manifests.length,
-      last_normalization_run: null,
+      last_normalization_run: operationalRunToPatchSummary(operationalHistory, "normalization"),
       lint_scans: lintScans,
     };
 
@@ -97,4 +100,56 @@ export class PatchHistoryService {
       return 0;
     }
   }
+
+  private async readOperationalHistory(): Promise<OperationalRunSummary[]> {
+    try {
+      const history = (await this.cache.read()).operational_history;
+      return Array.isArray(history) ? history : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async readRepairRuns(path: string): Promise<PatchRunSummary[]> {
+    const file = this.app.vault.getAbstractFileByPath(normalizePath(path));
+    if (!(file instanceof TFile)) return [];
+
+    try {
+      const parsed = JSON.parse(await this.app.vault.read(file));
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .map((entry: any): PatchRunSummary | null => {
+          const ranAt = typeof entry.ranAt === "string" ? entry.ranAt : "";
+          if (!ranAt) return null;
+          return {
+            run_id: ranAt,
+            description: "Shape repair",
+            applied_at: ranAt,
+            changed_files: Number(entry.repaired ?? 0),
+            changed_operations: Number(entry.repaired ?? 0),
+          };
+        })
+        .filter((entry): entry is PatchRunSummary => entry !== null)
+        .sort((a, b) => b.applied_at.localeCompare(a.applied_at));
+    } catch {
+      return [];
+    }
+  }
+}
+
+function operationalRunToPatchSummary(
+  history: OperationalRunSummary[],
+  command: OperationalRunSummary["command"]
+): PatchRunSummary | null {
+  const run = history.find((entry) => entry.command === command);
+  if (!run) return null;
+
+  return {
+    run_id: `${run.command}-${run.started_at}`,
+    description: run.command.replace(/_/g, " "),
+    applied_at: run.started_at,
+    changed_files: run.affected_files,
+    changed_operations: run.applied_items,
+  };
 }

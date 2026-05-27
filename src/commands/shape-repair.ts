@@ -171,12 +171,24 @@ export async function runShapeRepair(
   const label = dryRun ? "Shape Repair (Dry Run)" : "Shape Repair";
   new Notice(`Forge: Running ${label}…`, 3000);
 
+  const started = Date.now();
   const result = await repairShapes(plugin, dryRun);
 
   let runNotePath: string | null = null;
   if (!dryRun) {
     await appendShapeRepairHistory(app, settings, result);
     runNotePath = await writeShapeRepairRunNote(app, settings, result);
+    await plugin.dashboardService.recordOperationalRun({
+      command: "repair",
+      status: result.errors > 0 ? "partial" : "success",
+      started_at: new Date(started).toISOString(),
+      duration_ms: Date.now() - started,
+      affected_files: result.repaired,
+      applied_items: result.repaired,
+      warnings: [],
+      errors: result.files.filter((file) => file.status === "error").map((file) => `${file.path}: ${file.detail}`),
+    });
+    await plugin.patchHistoryService.readHistory("patch-history");
   }
 
   new ShapeRepairModal(app, plugin, result, runNotePath, dryRun).open();

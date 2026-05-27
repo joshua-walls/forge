@@ -4,12 +4,29 @@ import type { DashboardIssue, DashboardSnapshot } from "./dashboard_types";
 
 export const FORGE_HEALTH_DASHBOARD_VIEW = "forge-health-dashboard";
 
+// How long to wait after a cache file change before reloading.
+// Debounces rapid successive writes (sync flush, multi-leaf saves).
+const RELOAD_DEBOUNCE_MS = 500;
+
+// Fallback poll interval for sync clients that don't surface vault modify
+// events for remote writes (iCloud, some filesystem sync tools).
+const DASHBOARD_POLL_INTERVAL_MS = 5_000;
+
 export class ForgeHealthDashboardView extends ItemView {
   private plugin: ForgePlugin;
   private snapshot: DashboardSnapshot | null = null;
   private refreshing = false;
   private expandedIssueGroups = new Set<string>();
   private fullIssueGroups = new Set<string>();
+
+  // Live-reload state
+  private reloadDebounceTimer: number | null = null;
+  private pollInterval: number | null = null;
+  private lastKnownCacheMtime = 0;
+
+  // Set to true by main.ts when the plugin version changed since last load.
+  // Triggers the update banner until the user reloads the leaf.
+  needsReload = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: ForgePlugin) {
     super(leaf);
@@ -31,6 +48,12 @@ export class ForgeHealthDashboardView extends ItemView {
   async onOpen(): Promise<void> {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
     this.render();
+    this.startLiveReload();
+  }
+
+  onClose(): Promise<void> {
+    this.stopLiveReload();
+    return Promise.resolve();
   }
 
   async reloadFromCache(): Promise<void> {
@@ -54,7 +77,60 @@ export class ForgeHealthDashboardView extends ItemView {
     }
   }
 
-  private render(): void {
+  // ── Live reload ─────────────────────────────────────────────────────────────
+
+  private startLiveReload(): void {
+    const cachePath = this.plugin.dashboardService.cachePath;
+
+    // Fast path: vault modify event covers local writes and Obsidian Sync.
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (file.path === cachePath) {
+          this.scheduleReload();
+        }
+      })
+    );
+
+    // Fallback poll: catches iCloud and other filesystem syncs that bypass
+    // the vault event system for remote writes.
+    this.pollInterval = window.setInterval(async () => {
+      try {
+        const stat = await this.app.vault.adapter.stat(cachePath);
+        const mtime = stat?.mtime ?? 0;
+        if (mtime !== 0 && mtime !== this.lastKnownCacheMtime) {
+          this.lastKnownCacheMtime = mtime;
+          this.scheduleReload();
+        }
+      } catch {
+        // Cache file doesn't exist yet — nothing to do.
+      }
+    }, DASHBOARD_POLL_INTERVAL_MS);
+  }
+
+  private stopLiveReload(): void {
+    if (this.reloadDebounceTimer !== null) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = null;
+    }
+    if (this.pollInterval !== null) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  private scheduleReload(): void {
+    if (this.reloadDebounceTimer !== null) {
+      clearTimeout(this.reloadDebounceTimer);
+    }
+    this.reloadDebounceTimer = window.setTimeout(async () => {
+      this.reloadDebounceTimer = null;
+      await this.reloadFromCache();
+    }, RELOAD_DEBOUNCE_MS);
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  render(): void {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("forge-health-dashboard");
@@ -78,6 +154,9 @@ export class ForgeHealthDashboardView extends ItemView {
     refreshButton.disabled = this.refreshing;
     refreshButton.addEventListener("click", () => this.refresh());
 
+    const settingsButton = actions.createEl("button", { text: "Settings" });
+    settingsButton.addEventListener("click", () => this.plugin.openForgeSettings());
+
     if (!this.snapshot) {
       const empty = contentEl.createDiv("forge-health-empty");
       empty.createEl("h2", { text: "No cached health snapshot" });
@@ -85,6 +164,7 @@ export class ForgeHealthDashboardView extends ItemView {
       return;
     }
 
+    this.renderVersionBanner(contentEl);
     this.renderSummary(contentEl, this.snapshot);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
@@ -93,6 +173,38 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderHistory(contentEl, this.snapshot);
     this.renderRecommendations(contentEl, this.snapshot);
   }
+
+  // ── Version banner ──────────────────────────────────────────────────────────
+
+  private renderVersionBanner(container: HTMLElement): void {
+    if (!this.needsReload) return;
+
+    const banner = container.createDiv("forge-update-banner");
+    banner.createSpan({
+      text: `Forge updated to ${this.plugin.manifest.version}. Reload to apply new layout.`,
+      cls: "forge-update-banner-text",
+    });
+
+    const reloadBtn = banner.createEl("button", {
+      text: "Reload",
+      cls: "forge-update-banner-reload",
+    });
+    reloadBtn.addEventListener("click", async () => {
+      // Detach the current leaf entirely, then reopen via the plugin command.
+      // setViewState on the same leaf won't reinstantiate — we need a fresh leaf.
+      const leaf = this.leaf;
+      leaf.detach();
+      await this.plugin.openHealthDashboard();
+    });
+
+    const dismissBtn = banner.createEl("button", {
+      text: "Dismiss",
+      cls: "forge-update-banner-dismiss",
+    });
+    dismissBtn.addEventListener("click", () => banner.remove());
+  }
+
+  // ── Sections ────────────────────────────────────────────────────────────────
 
   private renderSummary(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const summaryStatus: SectionStatus = snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0
@@ -108,8 +220,14 @@ export class ForgeHealthDashboardView extends ItemView {
     });
 
     const actions = section.createDiv("forge-health-section-actions");
-    const lintButton = actions.createEl("button", { text: "Run Vault Lint" });
+    const lintButton = actions.createEl("button", { text: "Run Vault Lint", cls: "forge-health-action-button forge-health-action-primary" });
     lintButton.addEventListener("click", () => this.executeCommand("run-vault-lint"));
+    const maintenanceButton = actions.createEl("button", { text: "Vault Maintenance", cls: "forge-health-action-button forge-health-action-primary" });
+    maintenanceButton.addEventListener("click", () => this.executeCommand("vault-maintenance"));
+    const frontmatterButton = actions.createEl("button", { text: "Normalize Frontmatter", cls: "forge-health-action-button forge-health-action-secondary" });
+    frontmatterButton.addEventListener("click", () => this.executeCommand("normalize-frontmatter"));
+    const tagsButton = actions.createEl("button", { text: "Normalize Tags", cls: "forge-health-action-button forge-health-action-secondary" });
+    tagsButton.addEventListener("click", () => this.executeCommand("normalize-tags"));
 
     const grid = section.createDiv("forge-health-metric-grid");
     const metrics = [
@@ -155,11 +273,11 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     const actions = section.createDiv("forge-health-section-actions");
-    const validateButton = actions.createEl("button", { text: "Validate Schema" });
+    const validateButton = actions.createEl("button", { text: "Validate Schema", cls: "forge-health-action-button forge-health-action-primary" });
     validateButton.addEventListener("click", () => this.executeCommand("validate-schema"));
 
     if (schema?.schema_path) {
-      const openButton = actions.createEl("button", { text: "Open schema.md" });
+      const openButton = actions.createEl("button", { text: "Open schema.md", cls: "forge-health-action-button forge-health-action-secondary" });
       openButton.addEventListener("click", () => {
         this.app.workspace.openLinkText(schema.schema_path, "", false);
       });
@@ -176,6 +294,9 @@ export class ForgeHealthDashboardView extends ItemView {
         : { label: "Clear", tone: "good" };
 
     const section = createSection(container, "Active Issues", status);
+    const actions = section.createDiv("forge-health-section-actions");
+    const repairButton = actions.createEl("button", { text: "Vault Repair", cls: "forge-health-action-button forge-health-action-primary" });
+    repairButton.addEventListener("click", () => this.executeCommand("vault-repair"));
     if (issues.length === 0) {
       section.createDiv({ text: "No active lint issues in the latest snapshot.", cls: "forge-health-muted" });
       return;
@@ -193,6 +314,11 @@ export class ForgeHealthDashboardView extends ItemView {
         ? { label: "Indexed", tone: "good" }
         : { label: "No data", tone: "muted" }
     );
+    const actions = section.createDiv("forge-health-section-actions");
+    const refreshButton = actions.createEl("button", { text: "Refresh Metrics", cls: "forge-health-action-button forge-health-action-primary" });
+    refreshButton.addEventListener("click", () => this.executeCommand("refresh-ontology-metrics"));
+    const exportButton = actions.createEl("button", { text: "Export Vault Snapshot", cls: "forge-health-action-button forge-health-action-secondary" });
+    exportButton.addEventListener("click", () => this.executeCommand("export-vault-snapshot"));
     if (!ontology) {
       section.createDiv({ text: "Ontology metrics have not been collected yet.", cls: "forge-health-muted" });
       return;
@@ -267,8 +393,10 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     const actions = section.createDiv("forge-health-section-actions");
-    const shapeLintButton = actions.createEl("button", { text: "Run Shape Lint" });
+    const shapeLintButton = actions.createEl("button", { text: "Run Shape Lint", cls: "forge-health-action-button forge-health-action-primary" });
     shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
+    const refineButton = actions.createEl("button", { text: "Refine Templates", cls: "forge-health-action-button forge-health-action-secondary" });
+    refineButton.addEventListener("click", () => this.executeCommand("refine-shapes"));
   }
 
   private renderHistory(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -298,6 +426,14 @@ export class ForgeHealthDashboardView extends ItemView {
       row.createEl("td", { text: String(label) });
       row.createEl("td", { text: String(value) });
     }
+
+    const actions = section.createDiv("forge-health-section-actions");
+    const restoreButton = actions.createEl("button", { text: "Restore Patch Run", cls: "forge-health-action-button forge-health-action-primary" });
+    restoreButton.addEventListener("click", () => this.executeCommand("restore-patch-run"));
+    const historyButton = actions.createEl("button", { text: "View Patch History", cls: "forge-health-action-button forge-health-action-secondary" });
+    historyButton.addEventListener("click", () => this.executeCommand("view-patch-history"));
+    const lastRunButton = actions.createEl("button", { text: "View Last Run", cls: "forge-health-action-button forge-health-action-secondary" });
+    lastRunButton.addEventListener("click", () => this.executeCommand("view-last-run"));
   }
 
   private renderRecommendations(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -322,6 +458,8 @@ export class ForgeHealthDashboardView extends ItemView {
       list.createEl("li", { text: recommendation });
     }
   }
+
+  // ── Issue rendering ─────────────────────────────────────────────────────────
 
   private lintIssues(snapshot: DashboardSnapshot): DashboardIssue[] {
     return snapshot.issues.filter((issue) => !isSchemaIssue(issue));
@@ -419,6 +557,8 @@ export class ForgeHealthDashboardView extends ItemView {
     });
   }
 
+  // ── Utilities ───────────────────────────────────────────────────────────────
+
   private executeCommand(commandId: string): void {
     const fullId = `forge:${commandId}`;
     const commands = (this.app as any).commands;
@@ -429,6 +569,8 @@ export class ForgeHealthDashboardView extends ItemView {
     }
   }
 }
+
+// ── Module-level helpers ─────────────────────────────────────────────────────
 
 function isSchemaIssue(issue: DashboardIssue): boolean {
   return issue.source_command === "validate-schema" ||

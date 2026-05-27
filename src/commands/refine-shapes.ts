@@ -53,7 +53,18 @@ export async function runRefineShapes(plugin: ForgePlugin): Promise<void> {
 
   new Notice("Forge: Running shape template refinement…", 3000);
 
+  const started = Date.now();
   const result = await refineShapes(plugin);
+  await plugin.dashboardService.recordOperationalRun({
+    command: "template_refinement",
+    status: result.errors > 0 ? "partial" : "success",
+    started_at: new Date(started).toISOString(),
+    duration_ms: Date.now() - started,
+    affected_files: result.created + result.updated,
+    applied_items: result.created + result.updated,
+    warnings: [],
+    errors: result.results.filter((r) => r.status === "error").map((r) => `${r.template}: ${r.detail}`),
+  });
 
   const summary = `Done. Created: ${result.created} | Updated: ${result.updated} | Skipped: ${result.skipped}${result.errors > 0 ? ` | Errors: ${result.errors}` : ""}`;
   new Notice(`Forge: ${summary}`, 6000);
@@ -66,7 +77,7 @@ export async function runRefineShapes(plugin: ForgePlugin): Promise<void> {
 
 // ── Core engine ───────────────────────────────────────────────────────────────
 
-export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunResult> {
+export async function refineShapes(plugin: ForgePlugin, dryRun = false): Promise<RefinementRunResult> {
   const { app, settings } = plugin;
   const paths = getVaultPaths(settings);
 
@@ -76,7 +87,9 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
   let skipped = 0;
   let errors = 0;
 
-  await ensureFolder(app, paths.templates);
+  if (!dryRun) {
+    await ensureFolder(app, paths.templates);
+  }
 
   const shapesFolder = app.vault.getAbstractFileByPath(paths.shapes);
   if (!(shapesFolder instanceof TFolder)) {
@@ -101,7 +114,7 @@ export async function refineShapes(plugin: ForgePlugin): Promise<RefinementRunRe
   gatherShapes(shapesFolder);
 
   for (const shapeFile of shapeFiles) {
-    const result = await processShape(plugin, shapeFile, paths.templates, schema);
+    const result = await processShape(plugin, shapeFile, paths.templates, schema, dryRun);
     results.push(result);
     if (result.status === "created") created++;
     else if (result.status === "updated") updated++;
@@ -118,7 +131,8 @@ async function processShape(
   plugin: ForgePlugin,
   shapeFile: TFile,
   templatesFolder: string,
-  schema: VaultSchema | null
+  schema: VaultSchema | null,
+  dryRun: boolean
 ): Promise<RefinementResult> {
   const { app, settings } = plugin;
   const shapeName = shapeFile.basename;
@@ -163,9 +177,15 @@ async function processShape(
     if (existingContent === newContent) {
       return skipped(shapeName, templateFileName, "No changes");
     }
+    if (dryRun) {
+      return { shape: shapeName, template: templateFileName, status: "updated", detail: "Template would be updated" };
+    }
     await app.vault.modify(existingTemplate, newContent);
     return { shape: shapeName, template: templateFileName, status: "updated", detail: "Template updated" };
   } else {
+    if (dryRun) {
+      return { shape: shapeName, template: templateFileName, status: "created", detail: "Template would be created" };
+    }
     await app.vault.create(templatePath, newContent);
     return { shape: shapeName, template: templateFileName, status: "created", detail: "Template created" };
   }

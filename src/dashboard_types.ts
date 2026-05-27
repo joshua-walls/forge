@@ -1,7 +1,7 @@
 import type { LintResult } from "./lint-engine";
 import type { SchemaValidationIssue } from "./utils/schema";
 
-export const DASHBOARD_CACHE_SCHEMA_VERSION = 1;
+export const DASHBOARD_CACHE_SCHEMA_VERSION = 2;
 
 export type DashboardSeverity = "info" | "warning" | "critical";
 
@@ -105,6 +105,30 @@ export interface PatchHistoryResult {
   lint_scans: number;
 }
 
+export type OperationalRunCommand =
+  | "vault_lint"
+  | "schema_validation"
+  | "maintenance"
+  | "patch_apply"
+  | "patch_restore"
+  | "template_refinement"
+  | "normalization"
+  | "repair";
+
+export type OperationalRunStatus = "success" | "partial" | "error" | "skipped";
+
+export interface OperationalRunSummary {
+  command: OperationalRunCommand;
+  status: OperationalRunStatus;
+  started_at: string;
+  duration_ms: number;
+  affected_files: number;
+  applied_items: number;
+  warnings: string[];
+  errors: string[];
+  restore_manifest_path?: string;
+}
+
 export interface DashboardSnapshot {
   schema_version: number;
   source_command: "refresh-vault-health-dashboard";
@@ -122,11 +146,15 @@ export interface DashboardSnapshot {
 
 export interface DashboardCacheFile {
   schema_version: number;
+  // Stamped on every write. Used by the dashboard view to detect when a
+  // plugin update has changed the render logic and a reload is needed.
+  forge_version: string;
   latest_lint_result: LintScanResult | null;
   latest_schema_result: SchemaValidationResult | null;
   latest_ontology_result: OntologyMetricsResult | null;
   latest_shape_lint_result: ShapeLintResult | null;
   latest_patch_history_result: PatchHistoryResult | null;
+  operational_history: OperationalRunSummary[] | null;
   dashboard_snapshot: DashboardSnapshot | null;
 }
 
