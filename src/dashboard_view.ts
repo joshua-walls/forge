@@ -317,8 +317,10 @@ export class ForgeHealthDashboardView extends ItemView {
     const actions = section.createDiv("forge-health-section-actions");
     const refreshButton = actions.createEl("button", { text: "Refresh Metrics", cls: "forge-health-action-button forge-health-action-primary" });
     refreshButton.addEventListener("click", () => this.executeCommand("refresh-ontology-metrics"));
-    const exportButton = actions.createEl("button", { text: "Export Vault Snapshot", cls: "forge-health-action-button forge-health-action-secondary" });
+    const exportButton = actions.createEl("button", { text: "Export Vault Overview", cls: "forge-health-action-button forge-health-action-secondary" });
     exportButton.addEventListener("click", () => this.executeCommand("export-vault-snapshot"));
+    const ontologyExportButton = actions.createEl("button", { text: "Export Ontology Index", cls: "forge-health-action-button forge-health-action-secondary" });
+    ontologyExportButton.addEventListener("click", () => this.executeCommand("export-ontology-index"));
     if (!ontology) {
       section.createDiv({ text: "Ontology metrics have not been collected yet.", cls: "forge-health-muted" });
       return;

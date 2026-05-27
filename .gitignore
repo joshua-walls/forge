@@ -11,3 +11,4 @@ coverage/
 *.gz
 *.7z
 release.sh
+proposals/
