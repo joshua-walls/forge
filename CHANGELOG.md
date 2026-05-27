@@ -1,3 +1,24 @@
+# 1.5.0
+
+## Added
+
+- Vault Health dashboard auto-refresh control.
+- Auto-refresh interval options for 1, 3, 5, 15, and 30 minutes.
+- Persistent dashboard auto-refresh settings.
+
+## Changed
+
+- Scheduled dashboard refreshes use the existing background refresh service silently, without success or failure notices.
+- Manual dashboard refresh behavior remains unchanged.
+
+## Compatibility
+
+- Auto-refresh is disabled by default.
+- Existing dashboard cache and command workflows are preserved.
+- No user migration is required.
+
+---
+
 # 1.4.0
 
 ## Added

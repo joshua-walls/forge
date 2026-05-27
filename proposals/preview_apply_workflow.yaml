@@ -1,0 +1,789 @@
+addon_name: preview_apply_workflow
+release_target: forge_1_4_0
+status: complete
+priority: highest_value_next_addon
+confidence: high
+contract_revision: "1.4.0-r4.1"
+revised_from: "1.4.0-r4"
+revision_notes: >
+  r4 closes four gaps identified in r3 review:
+  1. Clarified adapter item_fields are additive over PreviewItem base — not exhaustive redefinitions.
+  2. Tightened dry_run invariant language on PreviewRun to remove ambiguity about apply-path safety.
+  3. Expanded register_missing_commands into discrete tasks with explicit dependencies.
+  4. Added before_captures to file_create conflict strategy.
+  r4.1 one consistency fix:
+  5. Deferred preview-repairs — repair preview adapter is not in 1.4.0 scope; corrected
+     dependency from add_maintenance_preview_adapter to add_repair_preview_adapter.
+
+# ---------------------------------------------------------------------------
+# PRODUCT DIRECTION
+# ---------------------------------------------------------------------------
+
+product_direction:
+  dashboard_role: operational_control_center
+
+  intent:
+    - Let users manage Forge health, validation, maintenance, repair, refinement, preview, apply, and restore from one pane.
+    - Make the dashboard the safest execution surface for vault-changing operations.
+    - Keep settings, authoring, and deep editing outside the dashboard.
+
+  user_can_live_in_dashboard_for:
+    - vault_health_review
+    - schema_validation
+    - lint_issue_review
+    - maintenance
+    - normalization
+    - template_refinement
+    - patch_preview
+    - selected_apply
+    - patch_restore
+    - operational_history
+    - snapshot_exports
+
+  dashboard_should_not_be:
+    - full_editor
+    - schema_authoring_surface
+    - settings_dumping_ground
+    - workflow_builder
+    - giant_data_table_view
+
+rationale:
+  why_it_matters:
+    - Gives users one consistent review step before vault mutation.
+    - Makes Forge feel operational instead of command-scattered.
+    - Reduces accidental bulk edits through preview and selected apply.
+    - Turns the dashboard into a trusted transaction surface.
+    - Supports mobile-first maintenance workflows.
+
+  why_it_should_be_next:
+    - Forge already has health, schema, lint, and ontology visibility.
+    - Existing commands already support dry-run patterns (apply-patch, maintenance, normalize).
+    - The dashboard already exposes execution buttons with section-actions slots.
+    - Adding preview/apply turns those buttons into safe operations instead of blunt actions.
+
+# ---------------------------------------------------------------------------
+# ARCHITECTURE
+# ---------------------------------------------------------------------------
+
+architecture:
+  implementation_type: dashboard_backed_preview_apply_workflow
+
+  workflow_is:
+    - dry_run_first
+    - explicit_user_confirmed
+    - command_agnostic
+    - dashboard_accessible
+    - selective_apply_capable
+    - diff_aware_where_safe
+    - non_destructive_by_default
+    - compatible_with_existing_patch_restore
+
+  workflow_is_not:
+    - background_automation
+    - scheduled_maintenance
+    - full_repair_engine_rewrite
+    - schema_breaking_change
+    - forge_2_0_milestone
+
+  affected_systems:
+    - vault_health_dashboard
+    - apply_patch_command
+    - normalize_tags_command
+    - normalize_frontmatter_command
+    - vault_maintenance_command
+    - template_refinement_command
+    - vault_repair_command
+    - patch_restore_history
+    - dashboard_styles
+    - dashboard_cache
+
+# ---------------------------------------------------------------------------
+# PHASE 0 — FOUNDATION
+# ---------------------------------------------------------------------------
+
+phase_0_foundation:
+  description: >
+    Pre-implementation work that resolves source gaps and type gaps before
+    any modal, adapter, or button wiring begins. All three tasks must be
+    complete and reviewed before phase_1_core starts.
+
+  tasks:
+    - id: author_preview_types_ts
+      description: >
+        Create preview-types.ts. This file does not exist in 1.3.3.
+        It is the shared contract between adapters, modal rendering,
+        conflict detection, and apply execution. Author from the
+        preview_model section of this contract.
+      file: src/types/preview-types.ts
+      deliverable: authored and reviewed before phase_1_core
+
+    - id: add_dry_run_to_refine_shapes
+      description: >
+        Add dryRun support to refineShapes(). When dryRun=true,
+        no vault writes may occur.
+      signature_change:
+        before: "refineShapes(plugin: ForgePlugin): Promise<RefinementRunResult>"
+        after:  "refineShapes(plugin: ForgePlugin, dryRun: boolean): Promise<RefinementRunResult>"
+      guarantees:
+        - dry-run returns same result structure as live execution
+        - no app.vault.create calls when dryRun=true
+        - no app.vault.modify calls when dryRun=true
+        - no filesystem mutation of any kind during dry-run
+
+    - id: fix_null_repair_normalization_tracking
+      description: >
+        last_repair_run and last_normalization_run are currently hardcoded
+        null in patch_history_service.ts. Operational history depends on
+        real values. Fix tracking so these fields reflect actual run data.
+      files_affected:
+        - src/services/patch_history_service.ts
+
+# ---------------------------------------------------------------------------
+# DASHBOARD SURFACE
+# ---------------------------------------------------------------------------
+
+dashboard_surface:
+  layout_contract:
+    sections:
+      - vault_health
+      - schema_health
+      - active_issues
+      - ontology_metrics
+      - patch_history
+      - operational_history
+
+    action_button_layout:
+      desktop: auto_fit_grid
+      tablet: two_buttons_per_row
+      mobile: two_buttons_per_row_when_space_allows
+      narrow_mobile: one_button_per_row
+      min_button_width: 140px
+
+    css_classes:
+      action_container: forge-health-section-actions
+      action_button: forge-health-action-button
+      primary_action: forge-health-action-primary
+      secondary_action: forge-health-action-secondary
+
+    css_migration_notes:
+      - forge-health-section-actions currently uses flex-wrap; convert to CSS grid
+      - forge-health-action-button, forge-health-action-primary, forge-health-action-secondary are new classes
+      - all four class names are authoritative as of 1.4.0
+      - dashboard_view.ts and styles.css must update in the same commit — no partial rename
+
+  section_actions:
+    # All command_id values are reconciled against registered commands in
+    # main.ts (1.3.3 source). registered: false means the command must be
+    # added to main.ts in 1.4.0. A mismatched ID produces a silent failure
+    # via executeCommand — verify IDs against main.ts before wiring.
+
+    vault_health:
+      primary:
+        - command_id: run-vault-lint
+          registered: true
+        - command_id: vault-maintenance
+          registered: true
+      secondary:
+        - command_id: normalize-frontmatter
+          registered: true
+        - command_id: normalize-tags
+          registered: true
+
+    schema_health:
+      primary:
+        - command_id: validate-schema
+          registered: true
+        - command_id: open-schema-md
+          registered: true
+
+    active_issues:
+      primary:
+        - command_id: vault-repair
+          registered: true
+          note: >
+            The original contract specified repair-issues which is not
+            registered in 1.3.3. Use vault-repair. repair-issues as a
+            distinct command is deferred beyond 1.4.0.
+      secondary:
+        - command_id: preview-repairs
+          registered: false
+          status: deferred
+          note: >
+            Deferred from 1.4.0. vault-repair is in included_second scope
+            and its preview adapter does not exist yet. Register this command
+            only after add_repair_preview_adapter is complete. Do not
+            substitute the maintenance adapter.
+          registered_in_task: register_preview_repairs
+
+    ontology_metrics:
+      primary:
+        - command_id: refresh-ontology-metrics
+          registered: true
+      secondary:
+        - command_id: export-vault-snapshot
+          registered: true
+
+    template_health:
+      primary:
+        - command_id: refine-shape-templates
+          registered: true
+      secondary:
+        - command_id: preview-template-refinement
+          registered: false
+          note: >
+            Must be registered in main.ts as part of 1.4.0.
+            Cannot be wired until add_dry_run_to_refine_shapes is complete.
+          registered_in_task: register_preview_template_refinement
+          depends_on: add_dry_run_to_refine_shapes
+
+    patch_history:
+      primary:
+        - command_id: restore-patch-run
+          registered: true
+      secondary:
+        - command_id: view-patch-history
+          registered: true
+
+    operational_history:
+      primary:
+        - command_id: view-last-run
+          registered: false
+          registered_in_task: register_view_last_run
+      secondary:
+        - command_id: export-dashboard-snapshot
+          registered: false
+          optional: true
+          note: >
+            Register only if export-dashboard-snapshot is confirmed
+            in-scope for 1.4.0. Omit otherwise.
+
+# ---------------------------------------------------------------------------
+# PREVIEW / APPLY SCOPE
+# ---------------------------------------------------------------------------
+
+preview_apply_scope:
+  included_first:
+    - apply_patch
+    - vault_maintenance
+    - template_refinement
+    - normalize_frontmatter
+    - normalize_tags
+
+  included_second:
+    - vault_repair
+    - shape_repair
+    - restore_patch_history
+
+  deferred:
+    - scheduled_maintenance
+    - background_auto_repair
+    - force_apply_conflicted_operations
+    - complex_schema_authoring
+
+# ---------------------------------------------------------------------------
+# PREVIEW MODEL — authoritative spec for preview-types.ts
+# ---------------------------------------------------------------------------
+
+preview_model:
+  file: src/types/preview-types.ts
+
+  enums:
+
+    PreviewItemStatus:
+      values:
+        - applyable
+        - skipped
+        - error
+        - unsupported
+        - already_current
+        - conflicted
+
+    PreviewRiskLevel:
+      values:
+        - low
+        - medium
+        - high
+
+    PreviewDiffKind:
+      values:
+        - frontmatter_field
+        - frontmatter_tags
+        - frontmatter_order
+        - template_text
+        - file_create
+        - file_delete
+        - file_move
+        - full_note_text
+        - none
+
+    PreviewSource:
+      values:
+        - dashboard
+        - command_palette
+        - settings_tab
+        - modal_followup
+
+  interfaces:
+
+    PreviewRun:
+      fields:
+        run_id:       string
+        command:      string
+        source:       PreviewSource
+        title:        string
+        generated_at: number           # Date.now() at preview generation
+        dry_run:      boolean
+        summary:      PreviewSummary
+        items:        PreviewItem[]
+        warnings:     string[]
+        errors:       string[]
+
+      invariants:
+        - >
+          All preview-generated runs must set dry_run=true at construction.
+          The apply engine must read dry_run from the PreviewRun object and
+          reject any run where dry_run is not true. Hardcoding true on the
+          consumer side is prohibited — the check must be on the object.
+        - >
+          A PreviewRun is never used as a live-run execution record.
+          Live run results are written to operational_history separately.
+
+    PreviewSummary:
+      fields:
+        total_items:       number
+        applyable_items:   number
+        selected_items:    number
+        skipped_items:     number
+        error_items:       number
+        affected_files:    number
+        destructive_items: number
+        high_risk_items:   number
+
+    PreviewItem:
+      description: >
+        Base type for all preview operations across all adapters.
+        Adapter item_fields sections list only the additional metadata
+        fields each adapter populates in the metadata bag — they are not
+        redefinitions of this interface. All fields here are present on
+        every PreviewItem regardless of adapter.
+      fields:
+        id:                  string            # stable identifier within a run
+        command:             string
+        operation:           string            # adapter-defined operation type string
+        target:              string            # human-readable label for the operation
+        file:                string            # vault-relative path of the affected file
+        status:              PreviewItemStatus
+        detail:              string            # human-readable explanation of status
+        before:              PreviewBefore | null
+        after:               string | null
+        diff_kind:           PreviewDiffKind
+        selectable:          boolean
+        selected_by_default: boolean
+        risk:                PreviewRiskLevel
+        metadata:            Record<string, unknown>   # adapter-specific fields go here
+
+        requires_previous_operation:
+          type:    boolean
+          default: false
+          note: >
+            When true, this item depends on a preceding item in adapter order.
+            If the dependency is deselected or conflicted, this item must be
+            auto-deselected by the selection engine.
+
+        depends_on_item_ids:
+          type:    string[]
+          default: []
+          note: >
+            IDs of PreviewItems this item depends on. The apply engine must
+            validate this graph before writing. Topological reordering is
+            prohibited — items apply in original adapter order only.
+
+    PreviewBefore:
+      description: >
+        Snapshot of the relevant file state captured at preview generation time.
+        Used by the apply engine to detect conflicts before writing.
+        The shape of value depends on diff_kind — see conflict_strategy for
+        per-diff-kind capture and comparison rules.
+      fields:
+        diff_kind:   PreviewDiffKind
+        value:       string       # serialized per conflict_strategy rules
+        captured_at: number       # Date.now() at preview generation
+
+# ---------------------------------------------------------------------------
+# SELECTION MODEL
+# ---------------------------------------------------------------------------
+
+selection_model:
+
+  default_behavior:
+    - low_risk_applyable_items_selected_by_default
+    - medium_risk_applyable_items_selected_by_default_when_non_destructive
+    - high_risk_items_require_manual_selection
+    - error_items_not_selectable
+    - unsupported_items_not_selectable
+    - conflicted_items_not_selectable
+
+  apply_rules:
+    - apply_only_selected_items
+    - revalidate_selected_items_before_apply
+    - skip_items_whose_before_state_no_longer_matches
+    - report_applied_skipped_error_counts
+    - write_restore_manifest_for_all_mutating_runs
+
+  selection_constraints:
+    - operations_execute_in_original_adapter_order
+    - adapters_may_mark_operations_as_requires_previous_operation
+    - dependent_operations_auto_deselect_if_dependency_deselected
+    - dependent_operations_auto_deselect_if_dependency_conflicted
+    - apply_engine_must_validate_dependency_graph_before_apply
+
+  apply_ordering_rules:
+    prohibited_behaviors:
+      - topological_reordering
+      - parallel_apply_execution
+      - dependency_inference_at_apply_time
+
+  conflict_rule: current_state_must_still_match_preview_before_state
+
+  conflict_behavior:
+    - mark_item_conflicted
+    - do_not_apply_conflicted_item
+    - report_conflict_reason
+    - allow_user_to_rerun_preview
+
+  conflict_strategy:
+    # For each diff_kind: how PreviewBefore.value is captured at preview time,
+    # and how the apply engine compares it to current state before writing.
+
+    frontmatter_field:
+      compare:         string_equality
+      before_captures: serialized_yaml_scalar_string
+
+    frontmatter_tags:
+      compare:         set_equality_on_sorted_arrays
+      before_captures: json_stringified_string_array
+
+    frontmatter_order:
+      compare:         ordered_array_equality
+      before_captures: json_stringified_key_name_array
+
+    template_text:
+      compare:         full_string_equality_or_sha256_hash
+      before_captures: raw_content_string_or_sha256_hex_string
+      hash_threshold_bytes: 65536
+      hash_flag: >
+        When content length exceeds hash_threshold_bytes, store SHA-256 hex
+        digest in value and set metadata.hashed=true so the apply engine
+        knows to hash current content before comparing.
+
+    file_create:
+      compare:         target_file_must_not_exist_at_apply_time
+      before_captures: empty_string
+      note: >
+        PreviewBefore.value is always an empty string for file_create.
+        The conflict check is existence-only — if the target path exists
+        at apply time, the item is marked conflicted and skipped.
+
+    file_delete:
+      compare:         sha256_hash_equality
+      before_captures: sha256_hex_hash_of_file_content_at_preview_time
+
+    file_move:
+      compare:         source_must_exist_and_destination_must_not_exist
+      before_captures: json_stringified_object
+      before_shape:
+        source_path: string
+        source_hash: string    # SHA-256 hex hash of source content at preview time
+
+    full_note_text:
+      compare:         full_string_equality_or_sha256_hash
+      before_captures: raw_content_string_or_sha256_hex_string
+      hash_threshold_bytes: 65536
+      hash_flag: >
+        Same hash flag rule as template_text — set metadata.hashed=true
+        when threshold is exceeded.
+
+    none:
+      compare:         no_conflict_check_performed
+      before_captures: null
+      note: PreviewBefore must be null for diff_kind=none items.
+
+# ---------------------------------------------------------------------------
+# ADAPTER SPECS
+# ---------------------------------------------------------------------------
+# item_fields in each adapter lists only the metadata bag keys that adapter
+# populates. All base PreviewItem fields (id, command, operation, target,
+# file, status, detail, before, after, diff_kind, selectable,
+# selected_by_default, risk, metadata) are always present and are not
+# repeated here.
+
+template_refinement_preview:
+  include_in_preview_apply_workflow: true
+  depends_on_phase_0: add_dry_run_to_refine_shapes
+
+  operation_types:
+    - create_template
+    - update_template
+    - skip_template
+    - error_template
+
+  metadata_fields:
+    shape:         string    # shape name driving this template
+    template:      string    # template name
+    template_path: string    # vault-relative path to the template note
+
+  diff_kind_by_operation:
+    create_template: file_create
+    update_template: template_text
+    skip_template:   none
+    error_template:  none
+
+  risk_rules:
+    create_template: low
+    update_template: medium
+    skip_template:   low
+    error_template:  high
+
+maintenance_preview:
+  include_in_preview_apply_workflow: true
+
+  operation_types:
+    - remove_backup
+    - remove_history_entry
+    - clean_inbox_item
+    - trim_log
+    - archive_file
+    - skip_item
+    - error_item
+
+  metadata_fields:
+    task_source: string    # which maintenance task produced this item
+
+  diff_kind_by_operation:
+    remove_backup:        file_delete
+    remove_history_entry: file_delete
+    clean_inbox_item:     file_delete
+    trim_log:             full_note_text
+    archive_file:         file_move
+    skip_item:            none
+    error_item:           none
+
+  risk_rules:
+    remove_backup:        medium
+    remove_history_entry: medium
+    clean_inbox_item:     high
+    trim_log:             low
+    archive_file:         medium
+    skip_item:            low
+    error_item:           high
+
+patch_preview:
+  include_in_preview_apply_workflow: true
+
+  operation_types:
+    - set_field
+    - remove_field
+    - compute_field
+    - normalize_tags
+    - add_tag
+    - remove_tag
+    - replace_tag
+    - import_note
+
+  metadata_fields:
+    patch_file:    string    # source patch file name
+    operation_key: string    # key being operated on where applicable
+
+  diff_kind_by_operation:
+    set_field:     frontmatter_field
+    remove_field:  frontmatter_field
+    compute_field: frontmatter_field
+    normalize_tags: frontmatter_tags
+    add_tag:       frontmatter_tags
+    remove_tag:    frontmatter_tags
+    replace_tag:   frontmatter_tags
+    import_note:   file_create
+
+# ---------------------------------------------------------------------------
+# OPERATIONAL HISTORY
+# ---------------------------------------------------------------------------
+
+operational_history:
+  include: true
+
+  storage:
+    location:   DashboardCacheFile
+    strategy:   new_leaf_on_cache_file
+    leaf_name:  operational_history
+    nullable:   true
+
+    nullability_behavior: >
+      A missing or malformed operational_history leaf must not prevent
+      dashboard rendering or cache load. Log a warning; do not throw.
+      Treat as empty history and render the section with a no-runs state.
+
+    schema_version_impact:
+      bump_required: true
+      migration_strategy: graceful_null_fallback
+      migration_detail: >
+        On cache load, if DASHBOARD_CACHE_SCHEMA_VERSION is prior to the
+        1.4.0 version, treat operational_history as null. Write the bumped
+        version on next cache save. No user action required.
+
+  purpose:
+    - Give users confidence after dashboard actions
+    - Provide operational audit visibility
+    - Support restore and troubleshooting workflows
+
+  tracked_runs:
+    - vault_lint
+    - schema_validation
+    - maintenance
+    - patch_apply
+    - patch_restore
+    - template_refinement
+    - normalization
+    - repair
+
+  displayed_fields:
+    - command
+    - status
+    - started_at
+    - duration_ms
+    - affected_files
+    - applied_items
+    - warnings
+    - errors
+    - restore_manifest_path
+
+  retention:
+    default_recent_runs: 10
+    exportable: true
+
+# ---------------------------------------------------------------------------
+# IMPLEMENTATION SEQUENCE
+# ---------------------------------------------------------------------------
+
+implementation_sequence:
+
+  phase_0_foundation:
+    description: >
+      Blockers. All three must be complete and reviewed before any
+      phase_1_core task begins.
+    tasks:
+      - id: author_preview_types_ts
+      - id: add_dry_run_to_refine_shapes
+      - id: fix_null_repair_normalization_tracking
+
+  phase_1_core:
+    description: >
+      Main implementation sequence. Command registration tasks are discrete
+      with explicit dependencies — do not collapse into a single sweep task.
+    tasks:
+      - id: add_shared_preview_modal
+        depends_on: [author_preview_types_ts]
+
+      - id: add_dashboard_action_grid
+        note: CSS grid conversion + all four class names; dashboard_view.ts and styles.css in same commit
+
+      - id: wire_run_maintenance_button
+        depends_on: [add_dashboard_action_grid, add_shared_preview_modal]
+
+      - id: wire_template_refinement_button
+        depends_on: [add_dashboard_action_grid, add_dry_run_to_refine_shapes]
+
+      - id: add_template_refinement_preview_adapter
+        depends_on: [author_preview_types_ts, add_dry_run_to_refine_shapes]
+
+      - id: add_maintenance_preview_adapter
+        depends_on: [author_preview_types_ts]
+
+      - id: add_patch_preview_adapter
+        depends_on: [author_preview_types_ts]
+
+      - id: add_selected_apply_support
+        depends_on:
+          - add_template_refinement_preview_adapter
+          - add_maintenance_preview_adapter
+          - add_patch_preview_adapter
+
+      - id: register_preview_repairs
+        description: >
+          Register preview-repairs command in main.ts. Invokes vault-repair
+          in dry-run mode and surfaces result in the preview modal.
+        depends_on: [add_repair_preview_adapter, add_shared_preview_modal]
+        status: deferred
+        note: >
+          vault-repair is in included_second scope. add_repair_preview_adapter
+          does not exist in 1.4.0. Defer command registration until the repair
+          preview adapter is built. Do not wire this command against the
+          maintenance adapter as a substitute.
+
+      - id: register_preview_template_refinement
+        description: >
+          Register preview-template-refinement command in main.ts.
+          Cannot be registered until add_dry_run_to_refine_shapes is complete.
+        depends_on: [add_template_refinement_preview_adapter, add_dry_run_to_refine_shapes]
+
+      - id: register_view_last_run
+        description: >
+          Register view-last-run command in main.ts.
+          Surfaces the most recent operational_history entry.
+        depends_on: [add_operational_history_model]
+        note: Defer to phase_2 if operational_history_model is not ready
+
+  phase_2_history_and_polish:
+    description: History model, restore entry, mobile styles, docs.
+    tasks:
+      - id: add_operational_history_model
+        note: Bump DASHBOARD_CACHE_SCHEMA_VERSION; nullable leaf; graceful null migration
+
+      - id: add_patch_restore_dashboard_entry
+
+      - id: update_styles_for_mobile_button_grid
+
+      - id: update_tracker_and_docs
+
+# ---------------------------------------------------------------------------
+# VERSION GUIDANCE
+# ---------------------------------------------------------------------------
+
+version_guidance:
+  semantic_version:
+    recommended_version: "1.4.0"
+    reason: additive_dashboard_and_preview_workflow
+
+  keep_in_1_x: true
+
+  not_2_0_because:
+    - no_breaking_settings_change
+    - no_patch_contract_break
+    - no_required_schema_migration_for_existing_patch_files
+    - no_incompatible_manifest_change
+    - existing_commands_keep_same_purpose
+    - dashboard_becomes_more_capable_without_replacing_existing_entrypoints
+
+  cache_schema_bump_is_not_breaking: true
+  cache_schema_bump_reason: >
+    DashboardCacheFile schema version increment is internal. Cache is
+    regenerated on demand and migration is a graceful null — no user
+    action required.
+
+# ---------------------------------------------------------------------------
+# CONTRACT COMPLETENESS
+# ---------------------------------------------------------------------------
+
+contract_completeness:
+  product_direction_and_dashboard_role:  complete
+  architecture_and_workflow_properties:  complete
+  preview_model_types:                   complete
+  adapter_item_fields_semantics:         complete   # r4: clarified as metadata bag keys, not interface redefinitions
+  dry_run_invariant:                     complete   # r4: apply engine must read from object; hardcoding prohibited
+  selection_model_and_conflict_rules:    complete
+  conflict_strategy_per_diff_kind:       complete   # r4: file_create before_captures specified
+  css_class_contract:                    complete
+  section_actions_command_id_mapping:    complete
+  command_registration_tasks:            complete   # r4: discrete tasks with explicit depends_on; r4.1: preview-repairs correctly deferred — repair adapter not in 1.4.0 scope
+  operational_history_storage:           resolved
+  dry_run_coverage:                      resolved
+  version_guidance:                      complete

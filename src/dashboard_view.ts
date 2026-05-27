@@ -1,5 +1,6 @@
 import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import type ForgePlugin from "./main";
+import type { DashboardAutoRefreshIntervalMinutes } from "./settings";
 import type { DashboardIssue, DashboardSnapshot } from "./dashboard_types";
 
 export const FORGE_HEALTH_DASHBOARD_VIEW = "forge-health-dashboard";
@@ -11,6 +12,7 @@ const RELOAD_DEBOUNCE_MS = 500;
 // Fallback poll interval for sync clients that don't surface vault modify
 // events for remote writes (iCloud, some filesystem sync tools).
 const DASHBOARD_POLL_INTERVAL_MS = 5_000;
+const AUTO_REFRESH_INTERVALS: DashboardAutoRefreshIntervalMinutes[] = [1, 3, 5, 15, 30];
 
 export class ForgeHealthDashboardView extends ItemView {
   private plugin: ForgePlugin;
@@ -22,6 +24,7 @@ export class ForgeHealthDashboardView extends ItemView {
   // Live-reload state
   private reloadDebounceTimer: number | null = null;
   private pollInterval: number | null = null;
+  private autoRefreshInterval: number | null = null;
   private lastKnownCacheMtime = 0;
 
   // Set to true by main.ts when the plugin version changed since last load.
@@ -49,10 +52,12 @@ export class ForgeHealthDashboardView extends ItemView {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
     this.render();
     this.startLiveReload();
+    this.updateAutoRefreshTimer();
   }
 
   onClose(): Promise<void> {
     this.stopLiveReload();
+    this.stopAutoRefresh();
     return Promise.resolve();
   }
 
@@ -75,6 +80,34 @@ export class ForgeHealthDashboardView extends ItemView {
       this.refreshing = false;
       this.render();
     }
+  }
+
+  async refreshSilently(): Promise<void> {
+    if (this.refreshing) return;
+    this.refreshing = true;
+
+    try {
+      this.snapshot = await this.plugin.dashboardService.refreshSnapshot();
+    } catch (e) {
+      console.warn("[Forge] auto-refresh-vault-health-dashboard error:", e);
+    } finally {
+      this.refreshing = false;
+      this.render();
+    }
+  }
+
+  private async setAutoRefreshEnabled(enabled: boolean): Promise<void> {
+    this.plugin.settings.dashboardAutoRefreshEnabled = enabled;
+    await this.plugin.saveSettings();
+    this.updateAutoRefreshTimer();
+    this.render();
+  }
+
+  private async setAutoRefreshInterval(interval: DashboardAutoRefreshIntervalMinutes): Promise<void> {
+    this.plugin.settings.dashboardAutoRefreshIntervalMinutes = interval;
+    await this.plugin.saveSettings();
+    this.updateAutoRefreshTimer();
+    this.render();
   }
 
   // ── Live reload ─────────────────────────────────────────────────────────────
@@ -118,6 +151,23 @@ export class ForgeHealthDashboardView extends ItemView {
     }
   }
 
+  private updateAutoRefreshTimer(): void {
+    this.stopAutoRefresh();
+    if (!this.plugin.settings.dashboardAutoRefreshEnabled) return;
+
+    const interval = normalizeAutoRefreshInterval(this.plugin.settings.dashboardAutoRefreshIntervalMinutes);
+    this.autoRefreshInterval = window.setInterval(() => {
+      this.refreshSilently();
+    }, interval * 60_000);
+  }
+
+  private stopAutoRefresh(): void {
+    if (this.autoRefreshInterval !== null) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
+    }
+  }
+
   private scheduleReload(): void {
     if (this.reloadDebounceTimer !== null) {
       clearTimeout(this.reloadDebounceTimer);
@@ -134,6 +184,8 @@ export class ForgeHealthDashboardView extends ItemView {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("forge-health-dashboard");
+
+    this.renderAutoRefreshControls(contentEl);
 
     const header = contentEl.createDiv("forge-health-header");
     const titleBlock = header.createDiv();
@@ -172,6 +224,46 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderShapeHealth(contentEl, this.snapshot);
     this.renderHistory(contentEl, this.snapshot);
     this.renderRecommendations(contentEl, this.snapshot);
+  }
+
+  private renderAutoRefreshControls(container: HTMLElement): void {
+    const enabled = this.plugin.settings.dashboardAutoRefreshEnabled;
+    const selectedInterval = normalizeAutoRefreshInterval(this.plugin.settings.dashboardAutoRefreshIntervalMinutes);
+    const bar = container.createDiv("forge-health-auto-refresh");
+
+    const label = bar.createEl("label", {
+      cls: enabled ? "forge-health-auto-refresh-toggle is-enabled" : "forge-health-auto-refresh-toggle",
+    });
+    const checkbox = label.createEl("input", {
+      type: "checkbox",
+    });
+    checkbox.checked = enabled;
+    label.createSpan({ text: "Auto-refresh" });
+    checkbox.addEventListener("change", () => {
+      this.setAutoRefreshEnabled(!enabled);
+    });
+
+    const intervalGroup = bar.createDiv("forge-health-auto-refresh-intervals");
+    const select = intervalGroup.createEl("select", {
+      cls: "forge-health-auto-refresh-select",
+    });
+    select.disabled = !enabled;
+    select.setAttr("aria-label", "Auto-refresh interval");
+
+    for (const interval of AUTO_REFRESH_INTERVALS) {
+      const option = select.createEl("option", {
+        text: `${interval} min`,
+        value: String(interval),
+      });
+      option.selected = interval === selectedInterval;
+    }
+
+    select.addEventListener("change", () => {
+      const interval = Number(select.value);
+      if (isAutoRefreshInterval(interval)) {
+        this.setAutoRefreshInterval(interval);
+      }
+    });
   }
 
   // ── Version banner ──────────────────────────────────────────────────────────
@@ -660,6 +752,14 @@ function healthClass(snapshot: DashboardSnapshot): string {
   }
   if (snapshot.summary.lint_issue_count > 0) return "is-warning";
   return "is-good";
+}
+
+function isAutoRefreshInterval(value: number): value is DashboardAutoRefreshIntervalMinutes {
+  return AUTO_REFRESH_INTERVALS.includes(value as DashboardAutoRefreshIntervalMinutes);
+}
+
+function normalizeAutoRefreshInterval(value: number): DashboardAutoRefreshIntervalMinutes {
+  return isAutoRefreshInterval(value) ? value : 5;
 }
 
 function formatDate(value: string): string {

@@ -9,6 +9,7 @@
 // schema-driven dropdowns rather than free-text inputs.
 
 export type FieldPointerLocation = "frontmatter" | "inline";
+export type DashboardAutoRefreshIntervalMinutes = 1 | 3 | 5 | 15 | 30;
 
 export interface FieldPointer {
   location: FieldPointerLocation;
@@ -79,6 +80,10 @@ export interface ForgeSettings {
   exportStatusField: string;         // frontmatter dropdown
   exportDashboardName: string;
   exportExcludeFolders: string[];
+
+  // ── Dashboard ─────────────────────────────────────────────────────
+  dashboardAutoRefreshEnabled: boolean;
+  dashboardAutoRefreshIntervalMinutes: DashboardAutoRefreshIntervalMinutes;
 
   // ── Shapes ────────────────────────────────────────────────────────
   shapesEnabled: boolean;
@@ -179,6 +184,10 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   exportStatusField: "",
   exportDashboardName: "",
   exportExcludeFolders: [],
+
+  // Dashboard
+  dashboardAutoRefreshEnabled: false,
+  dashboardAutoRefreshIntervalMinutes: 5,
 
   // Shapes
   shapesEnabled: false,

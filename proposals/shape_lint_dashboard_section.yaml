@@ -1,0 +1,381 @@
+addon_name: shape_lint_dashboard_section
+status: complete
+priority: high_value_dashboard_extension
+confidence: high
+
+rationale:
+  why_it_matters:
+    - Makes Shape lint results visible in the Vault Health Dashboard.
+    - Keeps structural note health separate from general vault lint issues.
+    - Helps users see template drift, missing headings, and malformed Shape notes at a glance.
+    - Builds on the dashboard reporting style users already find helpful.
+    - Strengthens Forge as a governance surface for both metadata and note structure.
+
+  why_it_fits_now:
+    - Vault Health Dashboard already has service-backed cards.
+    - Shape lint already exists as a command/workflow.
+    - Ontology metrics already describe Shape ecosystem health.
+    - A Shape Lint section can extend dashboard visibility without mutating vault files.
+
+architecture:
+  implementation_type: dashboard_section_extension
+  recommended_section_id: shape_lint_health
+
+  dashboard_integration:
+    placement_preference:
+      - near_ontology_metrics
+      - after_active_issues
+      - before_maintenance_history
+
+    relationship_to_ontology:
+      decision: companion_section
+
+      reason: >
+        Ontology Metrics describes the shape/template ecosystem,
+        while Shape Lint Health reports structural problems found
+        in individual notes. They are related, but the issue list
+        deserves its own card-style section when enabled.
+
+  section_is:
+    - read_only
+    - cache_first
+    - manually_refreshed
+    - service_backed
+    - nullable_when_never_run
+    - visible_only_when_shape_features_enabled_or_results_exist
+
+  section_is_not:
+    - repair_engine
+    - automatic_shape_repair
+    - background_shape_scanner
+    - replacement_for_shape_lint_command
+
+service_boundary:
+  required: true
+
+  decision: extract_or_reuse_shape_lint_service
+
+  reason: >
+    The dashboard should consume structured Shape lint results from
+    a service, not invoke command UI or parse markdown reports.
+
+  service_rules:
+    responsibilities:
+      - run_shape_lint_scan
+      - return_structured_shape_lint_result
+      - update_latest_shape_lint_cache
+      - use_file_paths_not_TFile_instances
+
+    must_not:
+      - open_modals
+      - show_notices
+      - mutate_notes
+      - run_shape_repair
+
+  command_wrapper_rules:
+    responsibilities:
+      - call_shape_lint_service
+      - show_existing_results_modal_or_report
+      - update_dashboard_cache
+      - preserve_current_command_behavior
+
+prerequisite_refactor:
+  required: likely
+
+  reason: >
+    Shape lint currently appears to be command-oriented. Dashboard support
+    needs a reusable result object that can be cached and rendered.
+
+  goals:
+    - extract_core_shape_lint_logic_if_needed
+    - return_plain_serializable_results
+    - preserve_existing_shape_lint_command_ui
+    - keep_shape_repair_separate
+    - avoid_mixing_shape_lint_into_general_active_issues
+
+implementation_sequence:
+  corrected_order:
+    - inspect_shape-lint.ts_current_outputs
+    - inspect_shape-repair.ts_history_outputs
+    - define_shape_lint_result_types
+    - add_dashboard_cache_leaf_for_shape_lint
+    - extract_or_wrap_shape_lint_service
+    - update_shape_lint_command_to_write_cache
+    - update_dashboard_snapshot_type
+    - compose_shape_lint_result_in_dashboard_service
+    - render_shape_lint_dashboard_section
+    - add_empty_never_run_state
+    - run_build_and_manual_dashboard_check
+
+source_inventory:
+  required_before_typing: true
+
+  files_to_review:
+    - src/commands/shape-lint.ts
+    - src/commands/shape-repair.ts
+    - src/dashboard_types.ts
+    - src/dashboard_cache.ts
+    - src/dashboard_service.ts
+    - src/dashboard_view.ts
+    - src/ontology_service.ts
+    - src/settings.ts
+    - src/settings-tab.ts
+
+  purpose: >
+    Confirm current Shape lint result structure, whether Shape features
+    have an enabled setting, what metrics already exist in Ontology,
+    and how dashboard cards currently render cached service results.
+
+result_types:
+  file: dashboard_types.ts
+
+  new_interfaces:
+    - ShapeLintResult
+    - ShapeLintIssue
+    - ShapeLintSummary
+
+  shape_lint_result:
+    required_fields:
+      - schema_version
+      - source_command
+      - generated_at
+      - duration_ms
+      - files_scanned
+      - issue_count
+      - summary
+      - issues
+
+  shape_lint_issue:
+    required_fields:
+      - file_path
+      - issue_type
+      - severity
+      - message
+      - suggested_action
+      - heading_optional
+      - expected_optional
+      - actual_optional
+
+  shape_lint_summary:
+    suggested_metrics:
+      - files_scanned
+      - issue_count
+      - missing_heading_count
+      - unexpected_heading_count
+      - heading_order_issue_count
+      - template_mismatch_count
+      - shape_unknown_count
+
+  design_rules:
+    - use_plain_serializable_objects
+    - avoid_TFile_instances
+    - include_generated_at_timestamp
+    - include_duration_ms
+    - include_source_command
+    - keep_shape_issues_distinct_from_vault_lint_issues
+    - prefer_nullable_values_over_fake_data
+
+dashboard_cache_pattern:
+  storage:
+    cache_file: "health-dashboard.json"
+
+    new_leaf:
+      latest_shape_lint_result: nullable
+
+  update_rules:
+    shape_lint_command:
+      - run_shape_lint_service
+      - update_latest_shape_lint_result_cache
+
+    refresh_dashboard:
+      first_version_behavior:
+        - compose_cached_shape_lint_result
+        - do_not_run_shape_lint_unless_explicitly_enabled_for_refresh
+
+  important_rule: >
+    Dashboard refresh should not unexpectedly run expensive Shape lint
+    unless the feature is explicitly included in refresh behavior.
+
+dashboard_service:
+  responsibilities:
+    - read_latest_shape_lint_result_from_cache
+    - include_shape_lint_in_dashboard_snapshot
+    - keep_shape_lint_nullable
+    - avoid_invoking_shape_lint_command_ui
+
+  must_not:
+    - run_shape_repair
+    - merge_shape_lint_issues_into_general_lint_without_design_change
+    - invent_shape_metrics_when_no_result_exists
+
+ui_layout:
+  section:
+    id: shape_lint_health
+    title: Shape Health
+
+  placement:
+    recommended: after_ontology_metrics
+
+  card_style:
+    match_existing_dashboard_cards: true
+
+  header:
+    contains:
+      - section_status_badge
+      - last_shape_lint_timestamp
+      - files_scanned
+      - issue_count
+      - run_shape_lint_action_optional
+
+  summary_metrics:
+    - files_scanned
+    - issue_count
+    - missing_headings
+    - heading_order_issues
+    - template_mismatches
+
+  issue_list:
+    max_initial_items: 8
+
+    item_structure:
+      - file_path
+      - severity
+      - issue_type
+      - message
+      - suggested_action
+      - open_file_action
+
+  empty_states:
+    never_run:
+      message: "Shape lint has not been run yet."
+
+    no_issues:
+      message: "No Shape lint issues found."
+
+    disabled_or_no_shapes:
+      message: "Shape health appears after Shape lint results exist."
+
+relationship_to_active_issues:
+  decision: keep_separate
+
+  reason: >
+    Active Issues should remain focused on general vault lint findings.
+    Shape lint is structural and template-oriented, so it reads better
+    as its own dashboard section.
+
+  optional_future_behavior:
+    - allow_dashboard_filter_to_show_all_issues
+    - include_shape_issues_in_global_health_summary
+    - add_cross_section_issue_count_rollup
+
+relationship_to_ontology_metrics:
+  decision: companion_not_merge
+
+  reason: >
+    Ontology Metrics answers what Shapes, templates, tags, and relationships
+    exist. Shape Health answers whether individual Shape notes conform
+    structurally. Keeping them adjacent preserves clarity.
+
+  possible_shared_metrics:
+    - total_shapes
+    - total_templates
+    - template_mismatch_count
+    - unknown_shape_type_count
+
+commands:
+  existing:
+    - "Forge: Run Shape Lint"
+
+  optional_new:
+    - "Forge: Refresh Shape Health"
+
+  dashboard_actions:
+    first_version:
+      - run_shape_lint
+      - open_file_from_issue
+
+    deferred:
+      - run_shape_repair_for_file
+      - open_template
+      - filter_shape_issues
+
+performance:
+  first_version_strategy:
+    - cache_results
+    - update_section_when_shape_lint_command_runs
+    - show_cached_results_on_dashboard_open
+    - avoid_background_scanning
+
+  avoid_initially:
+    - realtime_shape_linting
+    - running_shape_lint_on_every_dashboard_open
+    - automatic_shape_repair
+    - deep_visualizations
+
+mobile_support:
+  supported: true
+
+  considerations:
+    - collapsed_issue_list_by_default
+    - compact_metric_rows
+    - open_file_action_available_per_issue
+
+safeguards:
+  require:
+    - read_only_dashboard_section
+    - no_shape_repair_from_initial_section
+    - null_safe_rendering
+    - clear_never_run_state
+    - no_fake_metrics
+    - cached_timestamp_visible
+
+  avoid:
+    - mixing_shape_lint_results_into_general_lint_cache
+    - parsing_markdown_reports_as_primary_data
+    - triggering expensive scans unexpectedly
+    - dashboard_ui_depending_on_command_modals
+
+first_version_scope:
+  included:
+    - Shape Health dashboard section
+    - cached latest Shape lint result
+    - summary metrics
+    - issue list
+    - open-file action
+    - nullable never-run state
+    - command updates dashboard cache
+
+  excluded:
+    - automatic shape repair
+    - trend charts
+    - issue filtering
+    - dashboard-triggered repair
+    - background scanning
+    - merging shape issues into Active Issues
+
+future_expansion:
+  possible_features:
+    - shape_issue_filters
+    - severity_filters
+    - template_drift_breakdown
+    - shape_repair_entrypoints
+    - historical_shape_health_trends
+    - dashboard_global_issue_rollup
+    - per_template_health_cards
+    - shape_health_score
+
+strategic_value:
+  current_role: structural_health_visibility
+
+  future_role: >
+    Shape Health becomes the dashboard bridge between ontology awareness,
+    template governance, Shape lint, and Shape repair workflows.
+
+final_assessment:
+  recommendation: implement_next_dashboard_extension
+  status: design_ready
+
+  reason: >
+    A dedicated Shape Health section extends the dashboard in the same
+    service-backed, cache-first style as existing cards, while keeping
+    structural Shape issues distinct from general vault lint findings.
