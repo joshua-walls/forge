@@ -59,7 +59,11 @@ export class ShapeLintService {
   private async scan(): Promise<ShapeLintRunResult> {
     const paths = getVaultPaths(this.settings);
     const schema = await loadSchema(this.app, this.settings);
-    const exemptPaths = buildExemptList(schema?.exempt_paths ?? [], paths.forge);
+    const exemptPaths = buildExemptList(
+      schema?.exempt_paths ?? [],
+      paths.forge,
+      this.settings.shapeLintExcludeInboxFolder ? [this.settings.inboxFolder] : []
+    );
     const files = getMarkdownFiles(this.app).filter(
       (file) => !isExempt(file.path, exemptPaths)
     );

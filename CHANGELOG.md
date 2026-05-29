@@ -1,3 +1,24 @@
+# 1.5.2
+
+## Added
+
+- Optional inbox-folder exclusion for Vault Lint.
+- Optional inbox-folder exclusion for Shape Lint.
+- Maintenance setting to auto-run silently during dashboard refresh.
+
+## Changed
+
+- Vault Health Dashboard refresh now writes fresh lint and shape lint artifacts.
+- Vault Health Dashboard refresh now silently rebuilds vault overview and ontology exports when export is enabled before refreshing ontology metrics.
+
+## Compatibility
+
+- Inbox exclusion defaults to off for both lint workflows.
+- Existing dashboard commands and export settings are preserved.
+- No user migration is required.
+
+---
+
 # 1.5.1
 
 ## Added

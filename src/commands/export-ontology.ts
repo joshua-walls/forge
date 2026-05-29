@@ -15,6 +15,7 @@ import { App, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { readNote, getFmString } from "../utils/frontmatter";
+import { loadSchema } from "../utils/schema";
 import { runExportOverview, loadInventory, type InventoryRecord } from "./export-overview";
 
 export interface OntologyRelationships { [key: string]: string[]; }
@@ -46,30 +47,45 @@ export interface OntologyIndex {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIndex[] | null> {
+interface ExportOntologyOptions {
+  silent?: boolean;
+  refreshMetrics?: boolean;
+  refreshDashboard?: boolean;
+}
+
+export async function runExportOntology(
+  plugin: ForgePlugin,
+  options: ExportOntologyOptions = {}
+): Promise<OntologyIndex[] | null> {
   const { app, settings } = plugin;
+  const {
+    silent = false,
+    refreshMetrics = true,
+    refreshDashboard = true,
+  } = options;
 
   if (!settings.exportEnabled) {
-    new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
+    if (!silent) new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
     return null;
   }
 
   if (!settings.exportFilterField || settings.exportFilterValues.length === 0) {
-    new Notice("Forge: No filter configured — set a field and values in Settings → Export.", 7000);
+    if (!silent) new Notice("Forge: No filter configured — set a field and values in Settings → Export.", 7000);
     return null;
   }
 
-  const schemaVersion = plugin.schemaCache.peek()?.version ?? "unknown";
+  const schema = await loadSchema(app, settings);
+  const schemaVersion = schema?.version ?? "unknown";
   const relHeading    = settings.exportRelationshipHeading?.trim() || "Related";
 
   // Ensure inventory — auto-run if missing
   let inventory = await loadInventory(app, settings.exportsFolder);
   if (!inventory) {
-    new Notice("Forge: No inventory found — running Export Inventory first…", 4000);
-    await runExportOverview(plugin);
+    if (!silent) new Notice("Forge: No inventory found — running Export Inventory first…", 4000);
+    await runExportOverview(plugin, { silent });
     inventory = await loadInventory(app, settings.exportsFolder);
     if (!inventory) {
-      new Notice("Forge: Inventory export failed — ontology export aborted.", 6000);
+      if (!silent) new Notice("Forge: Inventory export failed — ontology export aborted.", 6000);
       return null;
     }
   }
@@ -101,11 +117,11 @@ export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIn
   }
 
   if (recordsByValue.size === 0) {
-    new Notice(`Forge: No notes matched '${exportFilterField}' in [${exportFilterValues.join(", ")}].`, 7000);
+    if (!silent) new Notice(`Forge: No notes matched '${exportFilterField}' in [${exportFilterValues.join(", ")}].`, 7000);
     return null;
   }
 
-  new Notice(`Forge: Building ontology indexes for ${recordsByValue.size} type(s)…`, 4000);
+  if (!silent) new Notice(`Forge: Building ontology indexes for ${recordsByValue.size} type(s)…`, 4000);
 
   const indexes: OntologyIndex[] = [];
   const today = todayString();
@@ -146,9 +162,15 @@ export async function runExportOntology(plugin: ForgePlugin): Promise<OntologyIn
   }
 
   const total = indexes.reduce((sum, idx) => sum + idx.total_notes, 0);
-  await plugin.ontologyService.collectMetrics("export-ontology-index");
-  await plugin.recomposeHealthDashboard();
-  new Notice(`Forge: Ontology export complete — ${total} notes across [${[...recordsByValue.keys()].join(", ")}].`, 6000);
+  if (refreshMetrics) {
+    await plugin.ontologyService.collectMetrics("export-ontology-index");
+  }
+  if (refreshDashboard) {
+    await plugin.recomposeHealthDashboard();
+  }
+  if (!silent) {
+    new Notice(`Forge: Ontology export complete — ${total} notes across [${[...recordsByValue.keys()].join(", ")}].`, 6000);
+  }
   return indexes;
 }
 

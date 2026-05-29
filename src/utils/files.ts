@@ -233,7 +233,8 @@ export function safeTimestamp(): string {
  */
 export function buildExemptList(
   schemaExemptPaths: string[],
-  forgeFolder: string
+  forgeFolder: string,
+  extraPaths: string[] = []
 ): string[] {
-  return [...schemaExemptPaths, forgeFolder];
+  return [...schemaExemptPaths, forgeFolder, ...extraPaths].filter(Boolean);
 }

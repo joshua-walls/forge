@@ -10,6 +10,7 @@ import { App, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { ensureFolder, isExempt, localTimestamp, todayString } from "../utils/files";
 import { readNote, getFmString } from "../utils/frontmatter";
+import { loadSchema } from "../utils/schema";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,19 +39,27 @@ export interface VaultMetaExport {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export async function runExportOverview(plugin: ForgePlugin): Promise<void> {
+interface ExportOverviewOptions {
+  silent?: boolean;
+}
+
+export async function runExportOverview(
+  plugin: ForgePlugin,
+  options: ExportOverviewOptions = {}
+): Promise<void> {
   const { app, settings } = plugin;
+  const { silent = false } = options;
 
   if (!settings.exportEnabled) {
-    new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
+    if (!silent) new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
     return;
   }
 
-  new Notice("Forge: Building vault overview…", 3000);
+  if (!silent) new Notice("Forge: Building vault overview…", 3000);
   await ensureFolder(app, settings.exportsFolder);
 
   const inventory = await buildInventory(plugin);
-  const meta      = buildMeta(plugin, inventory);
+  const meta      = buildMeta(settings, inventory);
 
   await writeFile(app,
     normalizePath(`${settings.exportsFolder}/vault-inventory.json`),
@@ -75,7 +84,7 @@ export async function runExportOverview(plugin: ForgePlugin): Promise<void> {
     await app.vault.create(dashPath, buildDashboardNote(settings, todayString()));
   }
 
-  new Notice(`Forge: Overview complete — ${inventory.count} notes indexed.`, 5000);
+  if (!silent) new Notice(`Forge: Overview complete — ${inventory.count} notes indexed.`, 5000);
 }
 
 // ── Inventory builder ─────────────────────────────────────────────────────────
@@ -83,7 +92,7 @@ export async function runExportOverview(plugin: ForgePlugin): Promise<void> {
 async function buildInventory(plugin: ForgePlugin): Promise<InventoryExport> {
   const { app, settings } = plugin;
 
-  const schema        = plugin.schemaCache.peek();
+  const schema        = await loadSchema(app, settings);
   const exemptPaths   = schema?.exempt_paths ?? [];
   const schemaVer     = schema?.version ?? "unknown";
   const privateField  = settings.exportPrivateEnabled ? settings.exportPrivateField : "";
@@ -132,9 +141,8 @@ async function buildInventory(plugin: ForgePlugin): Promise<InventoryExport> {
 
 // ── Meta builder ──────────────────────────────────────────────────────────────
 
-function buildMeta(plugin: ForgePlugin, inventory: InventoryExport): VaultMetaExport {
-  const { settings } = plugin;
-  const schemaVer    = plugin.schemaCache.peek()?.version ?? "unknown";
+function buildMeta(settings: ForgePlugin["settings"], inventory: InventoryExport): VaultMetaExport {
+  const schemaVer = inventory.schema_version;
 
   // Use configured field names as JSON keys
   const domainLabel  = settings.exportDomainField  || "domain";

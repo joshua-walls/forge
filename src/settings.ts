@@ -36,6 +36,7 @@ export interface ForgeSettings {
   lintRunRetentionCount: number;
   lintFileLinks: boolean;
   lintInlineMetadata: boolean;
+  lintExcludeInboxFolder: boolean;
   lintRepairThreshold: "errors_only" | "errors_and_warnings";
 
   // ── Stale review ──────────────────────────────────────────────────
@@ -64,6 +65,7 @@ export interface ForgeSettings {
   inboxRetentionDays: number;
   lintHistoryRetentionDays: number;
   lintHistoryMaxEntries: number;
+  maintenanceAutoRunOnDashboardRefresh: boolean;
   patchReportRetentionCount: number;
   shapeLintRunRetentionCount: number;
 
@@ -92,6 +94,7 @@ export interface ForgeSettings {
   shapeIncludeSubfolders: boolean;
   shapeLintEnabled: boolean;
   shapeLintStrictMode: boolean;
+  shapeLintExcludeInboxFolder: boolean;
   shapeLintScope: "all" | "folder";
   shapeLintFolders: string[];
   shapeRefinementEnabled: boolean;
@@ -143,6 +146,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   lintRunRetentionCount: 20,
   lintFileLinks: false,
   lintInlineMetadata: true,
+  lintExcludeInboxFolder: false,
   lintRepairThreshold: "errors_only",
 
   // Stale review
@@ -170,6 +174,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   inboxRetentionDays: 30,
   lintHistoryRetentionDays: 14,
   lintHistoryMaxEntries: 20,
+  maintenanceAutoRunOnDashboardRefresh: false,
   patchReportRetentionCount: 20,
   shapeLintRunRetentionCount: 20,
 
@@ -197,6 +202,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   shapeIncludeSubfolders: false,
   shapeLintEnabled: false,
   shapeLintStrictMode: false,
+  shapeLintExcludeInboxFolder: false,
   shapeLintScope: "all",
   shapeLintFolders: [],
   shapeRefinementEnabled: false,

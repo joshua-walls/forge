@@ -15,6 +15,19 @@ import type { ShapeLintService } from "./shape_lint_service";
 import type { ForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import { ensureFolder } from "./utils/files";
+import {
+  appendLintHistory,
+  writeLintReportJson,
+  writeLintRunNote,
+} from "./lint-writers";
+import {
+  writeShapeLintReportJson,
+  writeShapeLintRunNote,
+} from "./shape_lint_writers";
+import { runExportOverview } from "./commands/export-overview";
+import { runExportOntology } from "./commands/export-ontology";
+import { runVaultMaintenanceSilently } from "./commands/maintenance";
+import type ForgePlugin from "./main";
 
 interface DashboardServices {
   lintService: LintService;
@@ -61,14 +74,57 @@ export class DashboardService {
 
   async refreshSnapshot(): Promise<DashboardSnapshot> {
     const started = Date.now();
+    const refreshContext = {
+      app: this.app,
+      settings: this.settings,
+      ontologyService: this.services.ontologyService,
+      recomposeHealthDashboard: async () => {},
+    } as ForgePlugin;
 
-    await this.services.lintService.runLint("refresh-vault-health-dashboard");
-    await this.services.schemaService.validate("refresh-vault-health-dashboard");
-    await this.services.ontologyService.collectMetrics("refresh-vault-health-dashboard");
-    if (this.settings.shapeLintEnabled) {
-      await this.services.shapeLintService.runShapeLint("refresh-vault-health-dashboard");
+    const lintResult = await this.services.lintService.runLint("refresh-vault-health-dashboard");
+    if (lintResult) {
+      await writeLintReportJson(this.app, this.settings, lintResult);
+      await appendLintHistory(this.app, this.settings, lintResult);
+      await writeLintRunNote(this.app, this.settings, lintResult);
     }
+
+    await this.services.schemaService.validate("refresh-vault-health-dashboard");
+
+    if (this.settings.shapeLintEnabled) {
+      const shapeLintResult = await this.services.shapeLintService.runShapeLint("refresh-vault-health-dashboard");
+      await writeShapeLintReportJson(this.app, this.settings, shapeLintResult);
+      await writeShapeLintRunNote(this.app, this.settings, shapeLintResult);
+    }
+
+    if (this.settings.exportEnabled) {
+      await runExportOverview(refreshContext, { silent: true });
+      await runExportOntology(refreshContext, {
+        silent: true,
+        refreshMetrics: false,
+        refreshDashboard: false,
+      });
+    }
+
+    await this.services.ontologyService.collectMetrics("refresh-vault-health-dashboard");
+
     await this.services.patchHistoryService.readHistory("refresh-vault-health-dashboard");
+
+    if (this.settings.maintenanceAutoRunOnDashboardRefresh) {
+      const maintenanceStarted = Date.now();
+      const maintenanceResults = await runVaultMaintenanceSilently(this.app, this.settings);
+      const applied = maintenanceResults.filter((r) => r.status === "removed" || r.status === "trimmed").length;
+      const errors = maintenanceResults.filter((r) => r.status === "error");
+      await this.recordOperationalRun({
+        command: "maintenance",
+        status: errors.length > 0 ? "partial" : "success",
+        started_at: new Date(maintenanceStarted).toISOString(),
+        duration_ms: Date.now() - maintenanceStarted,
+        affected_files: applied,
+        applied_items: applied,
+        warnings: [],
+        errors: errors.map((r) => `${r.target}: ${r.detail}`),
+      });
+    }
 
     return this.composeSnapshotFromLatest(Date.now() - started);
   }

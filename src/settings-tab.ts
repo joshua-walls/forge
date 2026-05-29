@@ -309,6 +309,18 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     new Setting(el)
+      .setName("Exclude inbox folder")
+      .setDesc(
+        "Skip notes in the configured inbox folder during Vault Lint so draft notes can stay incomplete while they are still being worked out."
+      )
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.lintExcludeInboxFolder).onChange(async (v) => {
+          this.plugin.settings.lintExcludeInboxFolder = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
       .setName("Repair prompt threshold")
       .setDesc("When to show the Open Vault Repair button after a lint run.")
       .addDropdown((d) =>
@@ -538,6 +550,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .addSlider((s) =>
         s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.lintHistoryMaxEntries = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("Auto-run on dashboard refresh")
+      .setDesc("Run Vault Maintenance silently whenever the Vault Health Dashboard is refreshed.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.maintenanceAutoRunOnDashboardRefresh).onChange(async (v) => {
+          this.plugin.settings.maintenanceAutoRunOnDashboardRefresh = v;
           await this.plugin.saveSettings();
         })
       );
@@ -1311,6 +1333,18 @@ export class ForgeSettingsTab extends PluginSettingTab {
         .addToggle((t) =>
           t.setValue(s.shapeLintStrictMode).onChange(async (v) => {
             s.shapeLintStrictMode = v;
+            await this.plugin.saveSettings();
+          })
+        );
+
+      new Setting(el)
+        .setName("Exclude inbox folder")
+        .setDesc(
+          "Skip notes in the configured inbox folder during Shape Lint so draft structures can evolve before heading rules are enforced."
+        )
+        .addToggle((t) =>
+          t.setValue(s.shapeLintExcludeInboxFolder).onChange(async (v) => {
+            s.shapeLintExcludeInboxFolder = v;
             await this.plugin.saveSettings();
           })
         );

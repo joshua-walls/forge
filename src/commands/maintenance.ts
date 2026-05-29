@@ -69,6 +69,13 @@ export async function runVaultMaintenance(plugin: ForgePlugin): Promise<void> {
   }).open();
 }
 
+export async function runVaultMaintenanceSilently(
+  app: App,
+  settings: ForgePlugin["settings"]
+): Promise<MaintenanceResult[]> {
+  return runAllTasks(app, settings, false);
+}
+
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 async function runAllTasks(

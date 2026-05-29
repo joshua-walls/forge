@@ -1,17 +1,17 @@
-# Forge 1.5.1
+# Forge 1.5.2
 
-Forge 1.5.1 extends Vault Maintenance to cover Shape Lint and Shape Repair artifacts.
+Forge 1.5.2 expands dashboard refresh workflows and adds optional inbox exclusions for lint passes.
 
 ## What changed
 
-- Vault Maintenance now trims old Shape Lint run notes in `System/Exports/ShapeLintReports`.
-- Vault Maintenance now trims Shape Repair history entries in `shape-repair-history.json`.
-- Vault Maintenance now trims old Shape Repair run notes in the configured Shape Repair runs folder.
-- Added a Maintenance setting for Shape Lint run retention.
-- Shape Repair maintenance reuses the existing Shape Repair history retention setting for both history entries and run notes.
+- Vault Lint can now exclude the configured inbox folder from scans.
+- Shape Lint can now exclude the configured inbox folder from scans.
+- Dashboard refresh now updates lint and shape lint report artifacts, not just dashboard cache state.
+- When export is enabled, dashboard refresh now silently rebuilds the vault overview and ontology index before refreshing ontology metrics.
+- Added a Maintenance setting to auto-run Vault Maintenance silently on dashboard refresh.
 
 ## Compatibility
 
-- The latest `shape-lint-report.json` is preserved.
-- Existing maintenance, lint, patch, dashboard, and shape workflows are otherwise unchanged.
+- Inbox exclusion is off by default for both Vault Lint and Shape Lint.
+- Existing dashboard refresh commands and settings remain supported.
 - No user migration is required.

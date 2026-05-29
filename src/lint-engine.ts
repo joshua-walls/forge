@@ -83,7 +83,11 @@ export async function runLint(
   if (!schema) return null;
 
   const paths = getVaultPaths(settings);
-  const exemptPaths = buildExemptList(schema.exempt_paths, paths.forge);
+  const exemptPaths = buildExemptList(
+    schema.exempt_paths,
+    paths.forge,
+    settings.lintExcludeInboxFolder ? [settings.inboxFolder] : []
+  );
 
   const allFiles = getMarkdownFiles(app).filter(
     (f) => !isExempt(f.path, exemptPaths)
