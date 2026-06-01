@@ -1,17 +1,13 @@
-# Forge 1.5.2
+# Forge 1.5.3
 
-Forge 1.5.2 expands dashboard refresh workflows and adds optional inbox exclusions for lint passes.
+Forge 1.5.3 makes Shape Lint treat populated child sections as satisfying a parent section.
 
 ## What changed
 
-- Vault Lint can now exclude the configured inbox folder from scans.
-- Shape Lint can now exclude the configured inbox folder from scans.
-- Dashboard refresh now updates lint and shape lint report artifacts, not just dashboard cache state.
-- When export is enabled, dashboard refresh now silently rebuilds the vault overview and ontology index before refreshing ontology metrics.
-- Added a Maintenance setting to auto-run Vault Maintenance silently on dashboard refresh.
+- Shape Lint no longer flags a parent heading as empty when meaningful content exists in descendant sections.
+- This makes flexible container headings like `# Details` work without forcing fixed child headings into the template.
 
 ## Compatibility
 
-- Inbox exclusion is off by default for both Vault Lint and Shape Lint.
-- Existing dashboard refresh commands and settings remain supported.
+- Existing shapes and templates remain supported.
 - No user migration is required.
