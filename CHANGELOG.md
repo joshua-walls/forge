@@ -1,3 +1,16 @@
+# 1.5.3
+
+## Changed
+
+- Shape Lint now treats non-empty descendant sections as satisfying a parent section, so flexible container headings do not trigger empty-section findings.
+
+## Compatibility
+
+- Existing shapes and templates are preserved.
+- No user migration is required.
+
+---
+
 # 1.5.2
 
 ## Added

@@ -11,7 +11,8 @@
 //                            H1 extra = warning (non-strict) / error (strict)
 //                            H2+ extra = info (non-strict) / warning (strict)
 //   shape_section_empty    — a heading required by the template has no direct
-//                            non-heading content beneath it
+//                            non-heading content beneath it and no populated
+//                            descendant sections
 //                            non-strict = info, strict = warning
 //
 // Matching: text + level + parent chain. A heading only satisfies a template
@@ -185,7 +186,8 @@ export async function lintShapeHeadings(
  *   - Look for a matching doc section (text + exact level) in the current scope
  *   - If missing: emit shape_heading_missing
  *   - If present but out of order: emit shape_heading_order
- *   - If present with no direct content: emit shape_section_empty
+ *   - If present with no direct content or populated descendants:
+ *     emit shape_section_empty
  *   - Recurse into children
  *
  * Unknown doc sections (not in template at this level): emit shape_heading_extra
@@ -224,9 +226,10 @@ function lintLevel(
     } else {
       consumed.add(match);
 
-      // Empty section check — direct content lines only (not children)
-      const directContent = match.contentLines.join("\n").trim();
-      if (directContent.length === 0 && tn.children.length === 0) {
+      // Empty section check — direct content satisfies the section, and so
+      // do populated descendants. This keeps container headings flexible even
+      // when the template does not statically declare child headings.
+      if (!sectionHasMeaningfulContent(match)) {
         results.push(newResult(
           filePath,
           strict ? "warning" : "info",
@@ -299,6 +302,11 @@ interface DocSection {
   headingLevel: number;
   contentLines: string[];   // direct non-heading content (excluding child sections)
   children: DocSection[];
+}
+
+function sectionHasMeaningfulContent(section: DocSection): boolean {
+  if (section.contentLines.join("\n").trim().length > 0) return true;
+  return section.children.some(sectionHasMeaningfulContent);
 }
 
 function buildDocSectionTree(
