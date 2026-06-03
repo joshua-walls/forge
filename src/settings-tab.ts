@@ -526,12 +526,26 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Inbox retention (days)")
-      .setDesc("Flag inbox files older than this many days as stale.")
+      .setDesc("Age threshold used for stale inbox handling.")
       .addSlider((s) =>
         s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange(async (v) => {
           this.plugin.settings.inboxRetentionDays = v;
           await this.plugin.saveSettings();
         })
+      );
+
+    new Setting(el)
+      .setName("Inbox retention action")
+      .setDesc("Choose whether stale inbox notes are deleted during maintenance or reported as lint warnings.")
+      .addDropdown((d) =>
+        d
+          .addOption("delete", "Delete in maintenance")
+          .addOption("warning", "Warn in Vault Lint")
+          .setValue(this.plugin.settings.inboxRetentionAction)
+          .onChange(async (v) => {
+            this.plugin.settings.inboxRetentionAction = v as "delete" | "warning";
+            await this.plugin.saveSettings();
+          })
       );
 
     new Setting(el)

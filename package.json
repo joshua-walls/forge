@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Define your vault's structure and let Forge enforce it — lint, normalize, patch, and maintain with confidence.",
   "main": "main.js",
   "scripts": {
@@ -17,5 +17,8 @@
     "obsidian": "latest",
     "tslib": "^2.6.0",
     "typescript": "^5.4.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }

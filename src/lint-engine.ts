@@ -23,6 +23,7 @@
 //   inline_fuzzy_inline    — inline key looks like a typo of a known inline field
 //   inline_undocumented    — inline key not in schema inline.allowed list
 //   stale_note             — note's review cycle has elapsed
+//   stale_inbox_note       — inbox note is older than the configured retention threshold
 // Shape heading validation is handled by the separate Shape Lint service.
 
 import { App, TFile } from "obsidian";
@@ -111,6 +112,10 @@ export async function runLint(
     allResults.push(...staleResults);
   }
 
+  if (settings.inboxRetentionAction === "warning") {
+    allResults.push(...runInboxRetentionLint(app, settings));
+  }
+
   const envelope: LintRunEnvelope = {
     vault_path: (app.vault.adapter as any).basePath ?? "",
     timestamp: localTimestamp(),
@@ -125,6 +130,26 @@ export async function runLint(
     warnings: allResults.filter((r) => r.severity === "warning"),
     infos:    allResults.filter((r) => r.severity === "info"),
   };
+}
+
+function runInboxRetentionLint(
+  app: App,
+  settings: ForgeSettings
+): LintResult[] {
+  const paths = getVaultPaths(settings);
+  const cutoff = Date.now() - settings.inboxRetentionDays * 24 * 60 * 60 * 1000;
+
+  return app.vault.getFiles()
+    .filter((file) => file.path.startsWith(`${paths.inbox}/`) && file.stat.mtime < cutoff)
+    .map((file) => {
+      const age = Math.floor((Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24));
+      return newResult(
+        file.path,
+        "warning",
+        "stale_inbox_note",
+        `Inbox note is ${age} days old and exceeds the ${settings.inboxRetentionDays}-day retention threshold`
+      );
+    });
 }
 
 // ── Per-file lint ─────────────────────────────────────────────────────────────

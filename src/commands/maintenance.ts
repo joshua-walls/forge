@@ -346,6 +346,15 @@ async function cleanInbox(
   dryRun: boolean
 ): Promise<MaintenanceResult[]> {
   const paths = getVaultPaths(settings);
+  if (settings.inboxRetentionAction === "warning") {
+    return [{
+      task: "inbox",
+      target: paths.inbox,
+      status: "skipped",
+      detail: "Inbox retention is configured to report stale notes as lint warnings"
+    }];
+  }
+
   const cutoff = Date.now() - settings.inboxRetentionDays * 24 * 60 * 60 * 1000;
   const results: MaintenanceResult[] = [];
 
@@ -415,7 +424,11 @@ class MaintenanceConfirmModal extends Modal {
     policyList.createEl("li", { text: `Shape repair run notes: ${settings.shapeRepairHistoryRetentionCount} notes max` });
     policyList.createEl("li", { text: `Patch reports: ${settings.patchReportRetentionCount} notes max` });
     policyList.createEl("li", { text: `Patch backups: ${settings.backupRetentionDays} days` });
-    policyList.createEl("li", { text: `Inbox files: ${settings.inboxRetentionDays} days` });
+    policyList.createEl("li", {
+      text: settings.inboxRetentionAction === "delete"
+        ? `Inbox files: delete after ${settings.inboxRetentionDays} days`
+        : `Inbox files: report as lint warnings after ${settings.inboxRetentionDays} days`
+    });
 
     if (errors.length > 0) {
       contentEl.createEl("h3", { text: "Errors" });
