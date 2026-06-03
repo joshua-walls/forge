@@ -41,6 +41,9 @@ export default class ForgePlugin extends Plugin {
   shapeLintService: ShapeLintService;
   patchHistoryService: PatchHistoryService;
   dashboardService: DashboardService;
+  hasPendingExternalSettingsReload = false;
+  private lastKnownSettingsMtime = 0;
+  private readonly settingsPollIntervalMs = 5_000;
 
   async onload(): Promise<void> {
     // Check for an existing data.json before loadSettings() creates it.
@@ -50,6 +53,7 @@ export default class ForgePlugin extends Plugin {
     const hadDataFile = await this.app.vault.adapter.exists(dataPath);
 
     await this.loadSettings();
+    await this.captureSettingsMtime();
 
     const currentVersion = this.manifest.version;
     const lastVersion = this.settings.lastInstalledVersion;
@@ -107,6 +111,8 @@ export default class ForgePlugin extends Plugin {
       FORGE_HEALTH_DASHBOARD_VIEW,
       (leaf: WorkspaceLeaf) => new ForgeHealthDashboardView(leaf, this)
     );
+
+    this.startSettingsSyncWatch();
 
     // Register commands and settings tab immediately — these don't need vault access
     this.addCommand({
@@ -482,8 +488,28 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
+  async reloadSettingsFromDisk(): Promise<void> {
+    await this.loadSettings();
+    this.refreshRuntimeServices();
+    this.hasPendingExternalSettingsReload = false;
+    await this.captureSettingsMtime();
+
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof ForgeHealthDashboardView) {
+        await leaf.view.onSettingsReloaded();
+      }
+    }
+  }
+
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    this.refreshRuntimeServices();
+    this.hasPendingExternalSettingsReload = false;
+    await this.captureSettingsMtime();
+  }
+
+  private refreshRuntimeServices(): void {
     if (this.schemaCache) {
       this.schemaCache.updateSettings(this.settings);
     }
@@ -506,6 +532,62 @@ export default class ForgePlugin extends Plugin {
         this.manifest.version
       );
     }
+  }
+
+  private startSettingsSyncWatch(): void {
+    const settingsPath = this.getSettingsDataPath();
+
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (file.path === settingsPath) {
+          void this.checkForExternalSettingsChange();
+        }
+      })
+    );
+
+    this.registerInterval(window.setInterval(() => {
+      void this.checkForExternalSettingsChange();
+    }, this.settingsPollIntervalMs));
+  }
+
+  private async checkForExternalSettingsChange(): Promise<void> {
+    try {
+      const stat = await this.app.vault.adapter.stat(this.getSettingsDataPath());
+      const mtime = stat?.mtime ?? 0;
+      if (mtime === 0 || mtime === this.lastKnownSettingsMtime) return;
+
+      this.lastKnownSettingsMtime = mtime;
+      const stored = (await this.loadData()) ?? {};
+      const normalizedStored = Object.assign({}, DEFAULT_SETTINGS, stored);
+      if (JSON.stringify(normalizedStored) === JSON.stringify(this.settings)) return;
+
+      this.hasPendingExternalSettingsReload = true;
+      this.renderSettingsReloadBanner();
+    } catch {
+      // Ignore transient sync states while the file is being written.
+    }
+  }
+
+  private renderSettingsReloadBanner(): void {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof ForgeHealthDashboardView) {
+        leaf.view.render();
+      }
+    }
+  }
+
+  private async captureSettingsMtime(): Promise<void> {
+    try {
+      const stat = await this.app.vault.adapter.stat(this.getSettingsDataPath());
+      this.lastKnownSettingsMtime = stat?.mtime ?? 0;
+    } catch {
+      this.lastKnownSettingsMtime = 0;
+    }
+  }
+
+  private getSettingsDataPath(): string {
+    return `${this.manifest.dir}/data.json`;
   }
 }
 

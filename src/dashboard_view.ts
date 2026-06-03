@@ -18,6 +18,7 @@ export class ForgeHealthDashboardView extends ItemView {
   private plugin: ForgePlugin;
   private snapshot: DashboardSnapshot | null = null;
   private refreshing = false;
+  private reloadingSettings = false;
   private expandedIssueGroups = new Set<string>();
   private fullIssueGroups = new Set<string>();
 
@@ -64,6 +65,11 @@ export class ForgeHealthDashboardView extends ItemView {
   async reloadFromCache(): Promise<void> {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
     this.render();
+  }
+
+  async onSettingsReloaded(): Promise<void> {
+    this.updateAutoRefreshTimer();
+    await this.reloadFromCache();
   }
 
   async refresh(): Promise<void> {
@@ -209,14 +215,15 @@ export class ForgeHealthDashboardView extends ItemView {
     const settingsButton = actions.createEl("button", { text: "Settings" });
     settingsButton.addEventListener("click", () => this.plugin.openForgeSettings());
 
+    this.renderVersionBanner(contentEl);
+    this.renderSettingsReloadBanner(contentEl);
+
     if (!this.snapshot) {
       const empty = contentEl.createDiv("forge-health-empty");
       empty.createEl("h2", { text: "No cached health snapshot" });
       empty.createEl("p", { text: "Run a manual refresh to scan the vault and populate this dashboard." });
       return;
     }
-
-    this.renderVersionBanner(contentEl);
     this.renderSummary(contentEl, this.snapshot);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
@@ -294,6 +301,47 @@ export class ForgeHealthDashboardView extends ItemView {
       cls: "forge-update-banner-dismiss",
     });
     dismissBtn.addEventListener("click", () => banner.remove());
+  }
+
+  private renderSettingsReloadBanner(container: HTMLElement): void {
+    if (!this.plugin.hasPendingExternalSettingsReload) return;
+
+    const banner = container.createDiv("forge-update-banner");
+    banner.createSpan({
+      text: "Settings changed on another device. Reload to apply the synced changes.",
+      cls: "forge-update-banner-text",
+    });
+
+    const reloadBtn = banner.createEl("button", {
+      text: this.reloadingSettings ? "Reloading..." : "Reload",
+      cls: "forge-update-banner-reload",
+    });
+    reloadBtn.disabled = this.reloadingSettings;
+    reloadBtn.addEventListener("click", async () => {
+      if (this.reloadingSettings) return;
+      this.reloadingSettings = true;
+      this.render();
+
+      try {
+        await this.plugin.reloadSettingsFromDisk();
+      } catch (e) {
+        new Notice(`Forge: ${e instanceof Error ? e.message : "Could not reload synced settings"}`, 6000);
+        console.error("[Forge] reload-synced-settings error:", e);
+      } finally {
+        this.reloadingSettings = false;
+        this.render();
+      }
+    });
+
+    const dismissBtn = banner.createEl("button", {
+      text: "Dismiss",
+      cls: "forge-update-banner-dismiss",
+    });
+    dismissBtn.disabled = this.reloadingSettings;
+    dismissBtn.addEventListener("click", () => {
+      this.plugin.hasPendingExternalSettingsReload = false;
+      this.render();
+    });
   }
 
   // ── Sections ────────────────────────────────────────────────────────────────
