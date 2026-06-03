@@ -10,6 +10,7 @@
 
 export type FieldPointerLocation = "frontmatter" | "inline";
 export type DashboardAutoRefreshIntervalMinutes = 1 | 3 | 5 | 15 | 30;
+export type InboxRetentionAction = "delete" | "warning";
 
 export interface FieldPointer {
   location: FieldPointerLocation;
@@ -63,6 +64,7 @@ export interface ForgeSettings {
   // ── Maintenance ───────────────────────────────────────────────────
   backupRetentionDays: number;
   inboxRetentionDays: number;
+  inboxRetentionAction: InboxRetentionAction;
   lintHistoryRetentionDays: number;
   lintHistoryMaxEntries: number;
   maintenanceAutoRunOnDashboardRefresh: boolean;
@@ -172,6 +174,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   // Maintenance
   backupRetentionDays: 14,
   inboxRetentionDays: 30,
+  inboxRetentionAction: "delete",
   lintHistoryRetentionDays: 14,
   lintHistoryMaxEntries: 20,
   maintenanceAutoRunOnDashboardRefresh: false,
