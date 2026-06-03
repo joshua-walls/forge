@@ -1,3 +1,23 @@
+# 1.5.5
+
+## Added
+
+- Sync-aware settings reload banner in the Forge Health side panel.
+- Live settings reload path for externally changed plugin settings.
+
+## Changed
+
+- Forge now watches synced `data.json` changes and offers an in-panel reload instead of requiring a Community Plugins refresh.
+- Reloading synced settings updates the live in-memory settings and refreshes dependent dashboard services without opening Settings.
+
+## Compatibility
+
+- Existing settings files remain supported.
+- The reload prompt appears only when synced settings differ from the current in-memory state.
+- No user migration is required.
+
+---
+
 # 1.5.4
 
 ## Added
