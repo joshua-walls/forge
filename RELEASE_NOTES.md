@@ -1,13 +1,15 @@
-# Forge 1.5.3
+# Forge 1.5.4
 
-Forge 1.5.3 makes Shape Lint treat populated child sections as satisfying a parent section.
+Forge 1.5.4 adds a selectable inbox retention action so stale inbox notes can either be deleted during maintenance or surfaced as Vault Lint warnings.
 
 ## What changed
 
-- Shape Lint no longer flags a parent heading as empty when meaningful content exists in descendant sections.
-- This makes flexible container headings like `# Details` work without forcing fixed child headings into the template.
+- Maintenance settings now include an `Inbox retention action` selector.
+- You can choose `Delete in maintenance` to keep the previous cleanup behavior.
+- You can choose `Warn in Vault Lint` to keep stale inbox notes and report them through lint instead.
 
 ## Compatibility
 
-- Existing shapes and templates remain supported.
+- Existing inbox retention day settings remain supported.
+- The default inbox retention action is `Delete in maintenance`, so current behavior is preserved until changed.
 - No user migration is required.

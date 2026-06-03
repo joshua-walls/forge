@@ -1,3 +1,21 @@
+# 1.5.4
+
+## Added
+
+- Maintenance setting for inbox retention action.
+
+## Changed
+
+- Inbox retention can now either delete stale inbox notes during maintenance or report them as Vault Lint warnings.
+
+## Compatibility
+
+- Existing inbox retention day settings are preserved.
+- The default inbox retention action is delete during maintenance, so existing behavior is unchanged until the setting is updated.
+- No user migration is required.
+
+---
+
 # 1.5.3
 
 ## Changed
