@@ -48,6 +48,7 @@ export class DataviewExpansionService {
   private pendingTimers = new Map<string, number>();
   private ignoredModifyCounts = new Map<string, number>();
   private inFlight = new Set<string>();
+  private lastOpenedFilePath: string | null = null;
 
   constructor(private app: App, private plugin: ForgePlugin, settings: ForgeSettings) {
     this.settings = settings;
@@ -63,7 +64,7 @@ export class DataviewExpansionService {
 
   onFileModified(file: TAbstractFile): void {
     if (!(file instanceof TFile) || file.extension !== "md") return;
-    if (!this.settings.dataviewExpansionEnabled || !this.settings.dataviewExpansionAutoUpdateOnSave) return;
+    if (!this.settings.dataviewExpansionEnabled || this.settings.dataviewExpansionAutoUpdateMode === "off") return;
 
     const ignored = this.ignoredModifyCounts.get(file.path) ?? 0;
     if (ignored > 0) {
@@ -72,7 +73,24 @@ export class DataviewExpansionService {
       return;
     }
 
-    this.scheduleRefresh(file);
+    this.scheduleRefresh(file, 5_000);
+  }
+
+  onFileOpened(file: TFile | null): void {
+    if (!this.settings.dataviewExpansionEnabled || this.settings.dataviewExpansionAutoUpdateMode === "off") {
+      this.lastOpenedFilePath = file?.path ?? null;
+      return;
+    }
+
+    const previousPath = this.lastOpenedFilePath;
+    this.lastOpenedFilePath = file?.path ?? null;
+
+    if (!previousPath || previousPath === this.lastOpenedFilePath) return;
+
+    const previous = this.app.vault.getAbstractFileByPath(previousPath);
+    if (previous instanceof TFile && previous.extension === "md") {
+      this.scheduleRefresh(previous, 0);
+    }
   }
 
   scheduleRefresh(file: TFile, delayMs = DEFAULT_DEBOUNCE_MS): void {

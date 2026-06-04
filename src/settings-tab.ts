@@ -147,13 +147,17 @@ export class ForgeSettingsTab extends PluginSettingTab {
     if (!s.dataviewExpansionEnabled || !dataviewAvailable) return;
 
     new Setting(el)
-      .setName("Auto-update on save")
-      .setDesc("Refresh the Dataview Expansion block when a Markdown note is saved.")
-      .addToggle((tg) =>
-        tg.setValue(s.dataviewExpansionAutoUpdateOnSave).onChange(async (value) => {
-          s.dataviewExpansionAutoUpdateOnSave = value;
-          await this.plugin.saveSettings();
-        })
+      .setName("Auto-update mode")
+      .setDesc("Off disables automatic refresh. Edit idle waits 5 seconds after typing stops and also refreshes when you leave the note.")
+      .addDropdown((dd) =>
+        dd
+          .addOption("off", "Off")
+          .addOption("edit_idle", "Edit idle")
+          .setValue(s.dataviewExpansionAutoUpdateMode)
+          .onChange(async (value) => {
+            s.dataviewExpansionAutoUpdateMode = value as import("./settings").DataviewExpansionAutoUpdateMode;
+            await this.plugin.saveSettings();
+          })
       );
 
     new Setting(el)
