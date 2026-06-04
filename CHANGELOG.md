@@ -1,3 +1,22 @@
+# 1.6.1
+
+## Fixed
+
+- Repaired stale internal wiki-links in the bundled docs, including outdated export and Shapes note references.
+- Fixed docs-to-examples handoffs so key onboarding pages link directly to the installed starter schema and practical example notes.
+
+## Changed
+
+- Added related-note navigation across bundled examples so schema, patch, export, workflow, and shape examples connect back to the relevant Forge docs and neighboring examples.
+
+## Compatibility
+
+- No command, settings, or data-format changes are included in this release.
+- Existing installed docs remain supported; users can reinstall missing notes if they want the updated bundled copies.
+- No user migration is required.
+
+---
+
 # 1.6.0
 
 ## Added
