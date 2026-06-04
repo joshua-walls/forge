@@ -35,6 +35,7 @@ import { runRefineShapes } from "./commands/refine-shapes";
 import { runShapeRepair } from "./commands/shape-repair";
 import { runShapeLint } from "./commands/run-shape-lint";
 import { getVaultPaths } from "./vault-paths";
+import { DataviewExpansionService } from "./dataview_expansion_service";
 
 type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;
@@ -50,6 +51,7 @@ export default class ForgePlugin extends Plugin {
   shapeLintService: ShapeLintService;
   patchHistoryService: PatchHistoryService;
   dashboardService: DashboardService;
+  dataviewExpansionService: DataviewExpansionService;
   hasPendingExternalSettingsReload = false;
   private lastKnownSettingsMtime = 0;
   private readonly settingsPollIntervalMs = 5_000;
@@ -115,6 +117,7 @@ export default class ForgePlugin extends Plugin {
       },
       this.manifest.version  // stamped into cache on every write
     );
+    this.dataviewExpansionService = new DataviewExpansionService(this.app, this, this.settings);
 
     this.registerView(
       FORGE_HEALTH_DASHBOARD_VIEW,
@@ -228,6 +231,28 @@ export default class ForgePlugin extends Plugin {
         runRenameDataviewFolder(this).catch((e: Error) => {
           new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
           console.error("[Forge] rename-dataview-folder error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "refresh-dataview-expansion",
+      name: "Refresh Dataview Expansion",
+      callback: () => {
+        this.dataviewExpansionService.refreshActiveFile(true).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] refresh-dataview-expansion error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "refresh-dataview-expansion-current-folder",
+      name: "Refresh Dataview Expansion in Current Folder",
+      callback: () => {
+        this.dataviewExpansionService.refreshCurrentFolder(true).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] refresh-dataview-expansion-current-folder error:", e);
         });
       },
     });
@@ -410,6 +435,12 @@ export default class ForgePlugin extends Plugin {
 
     this.addSettingTab(new ForgeSettingsTab(this.app, this));
 
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        this.dataviewExpansionService.onFileModified(file);
+      })
+    );
+
     // Defer all vault file access until the workspace layout is ready.
     // On iOS, the vault adapter is not fully mounted when onload() fires
     // on a cold start — accessing files here causes the plugin to fail.
@@ -516,6 +547,7 @@ export default class ForgePlugin extends Plugin {
     this.refreshRuntimeServices();
     this.hasPendingExternalSettingsReload = false;
     await this.captureSettingsMtime();
+    await this.refreshDashboardViewsForSettingsChange();
   }
 
   private refreshRuntimeServices(): void {
@@ -527,6 +559,7 @@ export default class ForgePlugin extends Plugin {
     if (this.ontologyService) this.ontologyService = new OntologyService(this.app, this.settings);
     if (this.shapeLintService) this.shapeLintService = new ShapeLintService(this.app, this.settings);
     if (this.patchHistoryService) this.patchHistoryService = new PatchHistoryService(this.app, this.settings, this.manifest.version);
+    if (this.dataviewExpansionService) this.dataviewExpansionService.updateSettings(this.settings);
     if (this.dashboardService) {
       this.dashboardService = new DashboardService(
         this.app,
@@ -597,6 +630,16 @@ export default class ForgePlugin extends Plugin {
 
   private getSettingsDataPath(): string {
     return `${this.manifest.dir}/data.json`;
+  }
+
+  private async refreshDashboardViewsForSettingsChange(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof ForgeHealthDashboardView) {
+        leaf.view.render();
+        await leaf.view.onSettingsReloaded();
+      }
+    }
   }
 }
 

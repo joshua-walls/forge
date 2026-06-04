@@ -70,6 +70,7 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   async onSettingsReloaded(): Promise<void> {
+    this.render();
     await this.reloadFromCache();
   }
 
@@ -226,8 +227,12 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderSummary(contentEl, this.snapshot);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
-    this.renderOntology(contentEl, this.snapshot);
-    this.renderShapeHealth(contentEl, this.snapshot);
+    if (this.shouldShowOntologySection()) {
+      this.renderOntology(contentEl, this.snapshot);
+    }
+    if (this.shouldShowShapeSection()) {
+      this.renderShapeHealth(contentEl, this.snapshot);
+    }
     this.renderHistory(contentEl, this.snapshot);
     this.renderRecommendations(contentEl, this.snapshot);
   }
@@ -446,9 +451,10 @@ export class ForgeHealthDashboardView extends ItemView {
 
   private renderOntology(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const ontology = snapshot.ontology;
+    const exportEnabled = this.plugin.settings.exportEnabled;
     const section = createSection(
       container,
-      "Ontology Metrics",
+      "Ontology",
       ontology
         ? { label: "Indexed", tone: "good" }
         : { label: "No data", tone: "muted" }
@@ -456,10 +462,39 @@ export class ForgeHealthDashboardView extends ItemView {
     const actions = section.createDiv("forge-health-section-actions");
     const refreshButton = actions.createEl("button", { text: "Refresh Metrics", cls: "forge-health-action-button forge-health-action-primary" });
     refreshButton.addEventListener("click", () => this.executeCommand("refresh-ontology-metrics"));
-    const exportButton = actions.createEl("button", { text: "Export Vault Overview", cls: "forge-health-action-button forge-health-action-secondary" });
-    exportButton.addEventListener("click", () => this.executeCommand("export-vault-snapshot"));
-    const ontologyExportButton = actions.createEl("button", { text: "Export Ontology Index", cls: "forge-health-action-button forge-health-action-secondary" });
-    ontologyExportButton.addEventListener("click", () => this.executeCommand("export-ontology-index"));
+    if (exportEnabled) {
+      const exportButton = actions.createEl("button", { text: "Export Vault Overview", cls: "forge-health-action-button forge-health-action-secondary" });
+      exportButton.addEventListener("click", () => this.executeCommand("export-vault-snapshot"));
+      const ontologyExportButton = actions.createEl("button", { text: "Export Ontology Index", cls: "forge-health-action-button forge-health-action-secondary" });
+      ontologyExportButton.addEventListener("click", () => this.executeCommand("export-ontology-index"));
+    }
+    if (this.plugin.settings.dataviewExpansionEnabled) {
+      const expansionActions = section.createDiv("forge-health-section-actions");
+      const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
+      const refreshNoteButton = expansionActions.createEl("button", {
+        text: "Refresh Note Expansion",
+        cls: "forge-health-action-button forge-health-action-secondary",
+      });
+      refreshNoteButton.disabled = !dataviewAvailable;
+      refreshNoteButton.title = dataviewAvailable
+        ? "Refresh Dataview Expansion for the active note"
+        : "Dataview must be installed and enabled";
+      refreshNoteButton.addEventListener("click", () => {
+        void this.plugin.dataviewExpansionService.refreshActiveFile(true);
+      });
+
+      const refreshFolderButton = expansionActions.createEl("button", {
+        text: "Refresh Folder Expansion",
+        cls: "forge-health-action-button forge-health-action-secondary",
+      });
+      refreshFolderButton.disabled = !dataviewAvailable;
+      refreshFolderButton.title = dataviewAvailable
+        ? "Refresh Dataview Expansion in the active note's folder"
+        : "Dataview must be installed and enabled";
+      refreshFolderButton.addEventListener("click", () => {
+        void this.plugin.dataviewExpansionService.refreshCurrentFolder(true);
+      });
+    }
     if (!ontology) {
       section.createDiv({ text: "Ontology metrics have not been collected yet.", cls: "forge-health-muted" });
       return;
@@ -492,6 +527,8 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   private renderShapeHealth(container: HTMLElement, snapshot: DashboardSnapshot): void {
+    const shapeLintEnabled = this.plugin.settings.shapeLintEnabled;
+    const shapeRefinementEnabled = this.plugin.settings.shapeRefinementEnabled;
     const shape = snapshot.shape_lint;
     const critical = shape?.errors ?? 0;
     const warnings = shape?.warnings ?? 0;
@@ -534,10 +571,22 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     const actions = section.createDiv("forge-health-section-actions");
-    const shapeLintButton = actions.createEl("button", { text: "Run Shape Lint", cls: "forge-health-action-button forge-health-action-primary" });
-    shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
-    const refineButton = actions.createEl("button", { text: "Refine Templates", cls: "forge-health-action-button forge-health-action-secondary" });
-    refineButton.addEventListener("click", () => this.executeCommand("refine-shapes"));
+    if (shapeLintEnabled) {
+      const shapeLintButton = actions.createEl("button", { text: "Run Shape Lint", cls: "forge-health-action-button forge-health-action-primary" });
+      shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
+    }
+    if (shapeRefinementEnabled) {
+      const refineButton = actions.createEl("button", { text: "Refine Templates", cls: "forge-health-action-button forge-health-action-secondary" });
+      refineButton.addEventListener("click", () => this.executeCommand("refine-shapes"));
+    }
+  }
+
+  private shouldShowOntologySection(): boolean {
+    return this.plugin.settings.exportEnabled || this.plugin.settings.dataviewExpansionEnabled;
+  }
+
+  private shouldShowShapeSection(): boolean {
+    return this.plugin.settings.shapesEnabled;
   }
 
   private renderHistory(container: HTMLElement, snapshot: DashboardSnapshot): void {
