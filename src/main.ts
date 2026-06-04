@@ -41,6 +41,7 @@ type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;
   dashboardAutoRefreshIntervalMinutes?: DashboardAutoRefreshIntervalMinutes;
   dataviewExpansionAutoUpdateOnSave?: boolean;
+  dataviewExpansionAutoUpdateMode?: ForgeSettings["dataviewExpansionAutoUpdateMode"];
 };
 
 export default class ForgePlugin extends Plugin {
@@ -567,10 +568,16 @@ export default class ForgePlugin extends Plugin {
   }
 
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    await this.saveData(settingsForPersistence(this.settings));
     this.refreshRuntimeServices();
     this.hasPendingExternalSettingsReload = false;
     await this.captureSettingsMtime();
+    await this.refreshDashboardViewsForSettingsChange();
+  }
+
+  async applyRuntimeSettingsChange(): Promise<void> {
+    this.refreshRuntimeServices();
+    this.hasPendingExternalSettingsReload = false;
     await this.refreshDashboardViewsForSettingsChange();
   }
 
@@ -624,8 +631,9 @@ export default class ForgePlugin extends Plugin {
 
       this.lastKnownSettingsMtime = mtime;
       const stored = sanitizeLoadedSettings((await this.loadData()) ?? {});
-      const normalizedStored = Object.assign({}, DEFAULT_SETTINGS, stored);
-      if (JSON.stringify(normalizedStored) === JSON.stringify(this.settings)) return;
+      const normalizedStored = settingsForPersistence(Object.assign({}, DEFAULT_SETTINGS, stored));
+      const normalizedCurrent = settingsForPersistence(this.settings);
+      if (JSON.stringify(normalizedStored) === JSON.stringify(normalizedCurrent)) return;
 
       this.hasPendingExternalSettingsReload = true;
       this.renderSettingsReloadBanner();
@@ -681,6 +689,13 @@ function sanitizeLoadedSettings(raw: unknown): Partial<ForgeSettings> {
 
   delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshEnabled;
   delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshIntervalMinutes;
+  delete (loaded as LegacyDashboardRuntimeSettings).dataviewExpansionAutoUpdateMode;
 
   return loaded as Partial<ForgeSettings>;
+}
+
+function settingsForPersistence(settings: ForgeSettings): Partial<ForgeSettings> {
+  const persisted = { ...settings };
+  delete (persisted as Partial<ForgeSettings>).dataviewExpansionAutoUpdateMode;
+  return persisted;
 }
