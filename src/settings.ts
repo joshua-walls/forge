@@ -86,10 +86,6 @@ export interface ForgeSettings {
   exportDashboardName: string;
   exportExcludeFolders: string[];
 
-  // ── Dashboard ─────────────────────────────────────────────────────
-  dashboardAutoRefreshEnabled: boolean;
-  dashboardAutoRefreshIntervalMinutes: DashboardAutoRefreshIntervalMinutes;
-
   // ── Shapes ────────────────────────────────────────────────────────
   shapesEnabled: boolean;
   shapesFolder: string;
@@ -194,10 +190,6 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   exportStatusField: "",
   exportDashboardName: "",
   exportExcludeFolders: [],
-
-  // Dashboard
-  dashboardAutoRefreshEnabled: false,
-  dashboardAutoRefreshIntervalMinutes: 5,
 
   // Shapes
   shapesEnabled: false,
