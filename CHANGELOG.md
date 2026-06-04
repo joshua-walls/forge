@@ -1,3 +1,18 @@
+# 1.6.3
+
+## Added
+
+- New `Forge: Refresh Dataview Expansion in Whole Vault` command for rebuilding Dataview Expansion blocks across the entire vault.
+- New `Refresh Vault Expansion` action in the Forge Health side panel under `Ontology`.
+
+## Compatibility
+
+- Existing Dataview Expansion settings and workflows remain supported.
+- Dataview Expansion still targets fenced `dataview` blocks only; `dataviewjs` is not included.
+- No user migration is required.
+
+---
+
 # 1.6.2
 
 ## Changed

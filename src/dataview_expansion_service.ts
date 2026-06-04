@@ -154,31 +154,17 @@ export class DataviewExpansionService {
 
     const folderPath = normalizeFolderPath(file.parent?.path);
     const candidates = getMarkdownFiles(this.app, folderPath).filter((candidate) => candidate.extension === "md");
-    const startedAt = Date.now();
+    await this.refreshFileSet(candidates, folderPath || "vault root", showNotice);
+  }
 
-    let scanned = 0;
-    let changed = 0;
-    let removed = 0;
-    let skippedWithoutQueries = 0;
-    let totalLinks = 0;
-
-    for (const candidate of candidates) {
-      scanned++;
-      const result = await this.refreshFile(candidate);
-      totalLinks += result.links;
-      if (result.changed) changed++;
-      if (result.removed) removed++;
-      if (result.queries === 0) skippedWithoutQueries++;
+  async refreshWholeVault(showNotice = true): Promise<void> {
+    if (!this.isDataviewAvailable()) {
+      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use Dataview Expansion.", 5000);
+      return;
     }
 
-    if (!showNotice) return;
-
-    const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-    const folderLabel = folderPath || "vault root";
-    new Notice(
-      `Forge: Dataview Expansion refreshed in ${folderLabel} — scanned ${scanned} note(s), updated ${changed}, removed ${removed}, skipped ${skippedWithoutQueries} without queries, in ${elapsedSeconds}s.`,
-      8000
-    );
+    const candidates = getMarkdownFiles(this.app).filter((candidate) => candidate.extension === "md");
+    await this.refreshFileSet(candidates, "whole vault", showNotice);
   }
 
   private async refreshFile(file: TFile): Promise<RefreshResult> {
@@ -230,6 +216,31 @@ export class DataviewExpansionService {
   private async writeExpandedContent(file: TFile, content: string): Promise<void> {
     this.ignoredModifyCounts.set(file.path, (this.ignoredModifyCounts.get(file.path) ?? 0) + 1);
     await this.app.vault.modify(file, content);
+  }
+
+  private async refreshFileSet(files: TFile[], scopeLabel: string, showNotice: boolean): Promise<void> {
+    const startedAt = Date.now();
+
+    let scanned = 0;
+    let changed = 0;
+    let removed = 0;
+    let skippedWithoutQueries = 0;
+
+    for (const file of files) {
+      scanned++;
+      const result = await this.refreshFile(file);
+      if (result.changed) changed++;
+      if (result.removed) removed++;
+      if (result.queries === 0) skippedWithoutQueries++;
+    }
+
+    if (!showNotice) return;
+
+    const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+    new Notice(
+      `Forge: Dataview Expansion refreshed in ${scopeLabel} — scanned ${scanned} note(s), updated ${changed}, removed ${removed}, skipped ${skippedWithoutQueries} without queries, in ${elapsedSeconds}s.`,
+      8000
+    );
   }
 
   private getDataviewApi(): DataviewPluginApi | null {

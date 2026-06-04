@@ -494,6 +494,18 @@ export class ForgeHealthDashboardView extends ItemView {
       refreshFolderButton.addEventListener("click", () => {
         void this.plugin.dataviewExpansionService.refreshCurrentFolder(true);
       });
+
+      const refreshVaultButton = expansionActions.createEl("button", {
+        text: "Refresh Vault Expansion",
+        cls: "forge-health-action-button forge-health-action-secondary",
+      });
+      refreshVaultButton.disabled = !dataviewAvailable;
+      refreshVaultButton.title = dataviewAvailable
+        ? "Refresh Dataview Expansion across the whole vault"
+        : "Dataview must be installed and enabled";
+      refreshVaultButton.addEventListener("click", () => {
+        void this.plugin.dataviewExpansionService.refreshWholeVault(true);
+      });
     }
     if (!ontology) {
       section.createDiv({ text: "Ontology metrics have not been collected yet.", cls: "forge-health-muted" });
