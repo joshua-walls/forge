@@ -11,6 +11,7 @@
 export type FieldPointerLocation = "frontmatter" | "inline";
 export type DashboardAutoRefreshIntervalMinutes = 1 | 3 | 5 | 15 | 30;
 export type InboxRetentionAction = "delete" | "warning";
+export type DataviewExpansionAutoUpdateMode = "off" | "edit_idle";
 
 export interface FieldPointer {
   location: FieldPointerLocation;
@@ -120,7 +121,7 @@ export interface ForgeSettings {
   // are appended alphabetically after the ordered fields.
   frontmatterFieldOrder: string[];
   dataviewExpansionEnabled: boolean;
-  dataviewExpansionAutoUpdateOnSave: boolean;
+  dataviewExpansionAutoUpdateMode: DataviewExpansionAutoUpdateMode;
   dataviewExpansionTitle: string;
   dataviewExpansionMaxLinks: number;
 
@@ -228,7 +229,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   // General
   frontmatterFieldOrder: [],
   dataviewExpansionEnabled: false,
-  dataviewExpansionAutoUpdateOnSave: true,
+  dataviewExpansionAutoUpdateMode: "edit_idle",
   dataviewExpansionTitle: "Dataview Expansion",
   dataviewExpansionMaxLinks: 250,
 

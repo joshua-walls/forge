@@ -1,3 +1,18 @@
+# 1.6.2
+
+## Changed
+
+- Dataview Expansion auto-update now uses `Off` or `Edit idle` mode instead of the earlier save-based toggle.
+- `Edit idle` waits 5 seconds after typing stops and also refreshes when you leave the note, avoiding refresh-on-every-write behavior in live editing.
+
+## Compatibility
+
+- Existing Dataview Expansion settings remain supported.
+- Older saved `auto-update on save` values migrate automatically to the new auto-update mode.
+- No user migration is required.
+
+---
+
 # 1.6.1
 
 ## Fixed

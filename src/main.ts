@@ -40,6 +40,7 @@ import { DataviewExpansionService } from "./dataview_expansion_service";
 type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;
   dashboardAutoRefreshIntervalMinutes?: DashboardAutoRefreshIntervalMinutes;
+  dataviewExpansionAutoUpdateOnSave?: boolean;
 };
 
 export default class ForgePlugin extends Plugin {
@@ -441,6 +442,12 @@ export default class ForgePlugin extends Plugin {
       })
     );
 
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        this.dataviewExpansionService.onFileOpened(file);
+      })
+    );
+
     // Defer all vault file access until the workspace layout is ready.
     // On iOS, the vault adapter is not fully mounted when onload() fires
     // on a cold start — accessing files here causes the plugin to fail.
@@ -518,6 +525,12 @@ export default class ForgePlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const loaded = sanitizeLoadedSettings((await this.loadData()) ?? {});
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+
+    if ("dataviewExpansionAutoUpdateOnSave" in loaded && !("dataviewExpansionAutoUpdateMode" in loaded)) {
+      this.settings.dataviewExpansionAutoUpdateMode = (loaded as LegacyDashboardRuntimeSettings).dataviewExpansionAutoUpdateOnSave
+        ? "edit_idle"
+        : "off";
+    }
 
     // Migrate old saved patch path from legacy raw YAML to patch note format.
     if (
