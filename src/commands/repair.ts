@@ -317,7 +317,7 @@ class VaultRepairModal extends Modal {
               decision.action = value;
 
               if (replaceInputWrapper) {
-                replaceInputWrapper.style.display = value === "replace" ? "" : "none";
+                replaceInputWrapper.toggleClass("is-hidden", value !== "replace");
               }
             });
             return btn;
@@ -329,7 +329,7 @@ class VaultRepairModal extends Modal {
 
           // Replace input — hidden until Replace is selected
           replaceInputWrapper = row.createDiv("forge-tag-replace-wrapper");
-          replaceInputWrapper.style.display = "none";
+          replaceInputWrapper.addClass("is-hidden");
 
           const input = replaceInputWrapper.createEl("input", {
             type: "text",

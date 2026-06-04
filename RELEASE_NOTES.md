@@ -1,14 +1,14 @@
-# Forge 1.6.4
+# Forge 1.6.5
 
-Forge 1.6.4 makes Dataview Expansion auto-update safer in synced vaults by keeping the auto-update mode local to the current session and narrowing which file changes can trigger automatic refresh.
+Forge 1.6.5 is a small review-readiness release for Community Plugins validation.
 
 ## What changed
 
-- Dataview Expansion auto-update mode is now current-session only and is not written to synced plugin settings.
-- Automatic Dataview Expansion refresh now follows only the note you are actively editing or just left, instead of reacting to any synced Markdown file change in the vault.
+- Raised the minimum supported Obsidian version to `1.7.2` to match the side-panel APIs Forge uses.
+- Updated settings section headings to use Obsidian's standard settings-heading pattern.
+- Replaced the inline tag-repair visibility style with a CSS class-based toggle.
 
 ## Compatibility
 
-- Existing Dataview Expansion settings remain supported.
-- Older synced auto-update mode values are ignored automatically.
+- Forge now requires Obsidian `1.7.2` or newer.
 - No migration is required.
