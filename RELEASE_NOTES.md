@@ -1,15 +1,15 @@
-# Forge 1.5.5
+# Forge 1.5.6
 
-Forge 1.5.5 adds a synced-settings reload banner to the Forge Health side panel so cross-device plugin setting changes can be applied without refreshing Community Plugins.
+Forge 1.5.6 makes dashboard auto-refresh a runtime-only control so it never syncs across devices and always starts off on load.
 
 ## What changed
 
-- Forge now watches synced changes to its plugin `data.json` file.
-- When settings change on another device, Forge Health shows a passive `Reload` banner in the side panel.
-- Reload applies the synced settings to the live plugin state and refreshes dependent dashboard behavior without opening Settings.
+- Dashboard auto-refresh is no longer saved into plugin `data.json`.
+- Auto-refresh and its interval now live only in the current running dashboard session.
+- Every plugin load starts auto-refresh off by default, regardless of any older saved value.
 
 ## Compatibility
 
 - Existing settings files remain supported.
-- The reload banner only appears when synced settings differ from the current in-memory state.
+- Older saved auto-refresh keys are ignored automatically.
 - No user migration is required.

@@ -2,7 +2,11 @@
 // Forge — Obsidian plugin entry point.
 
 import { Plugin, Notice, WorkspaceLeaf } from "obsidian";
-import { DEFAULT_SETTINGS, ForgeSettings } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  type DashboardAutoRefreshIntervalMinutes,
+  ForgeSettings,
+} from "./settings";
 import { ForgeSettingsTab } from "./settings-tab";
 import { SchemaCache } from "./schema-cache";
 import { LintService } from "./lint_service";
@@ -31,6 +35,11 @@ import { runRefineShapes } from "./commands/refine-shapes";
 import { runShapeRepair } from "./commands/shape-repair";
 import { runShapeLint } from "./commands/run-shape-lint";
 import { getVaultPaths } from "./vault-paths";
+
+type LegacyDashboardRuntimeSettings = {
+  dashboardAutoRefreshEnabled?: boolean;
+  dashboardAutoRefreshIntervalMinutes?: DashboardAutoRefreshIntervalMinutes;
+};
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -476,7 +485,7 @@ export default class ForgePlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = (await this.loadData()) ?? {};
+    const loaded = sanitizeLoadedSettings((await this.loadData()) ?? {});
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
 
     // Migrate old saved patch path from legacy raw YAML to patch note format.
@@ -557,7 +566,7 @@ export default class ForgePlugin extends Plugin {
       if (mtime === 0 || mtime === this.lastKnownSettingsMtime) return;
 
       this.lastKnownSettingsMtime = mtime;
-      const stored = (await this.loadData()) ?? {};
+      const stored = sanitizeLoadedSettings((await this.loadData()) ?? {});
       const normalizedStored = Object.assign({}, DEFAULT_SETTINGS, stored);
       if (JSON.stringify(normalizedStored) === JSON.stringify(this.settings)) return;
 
@@ -596,4 +605,15 @@ function formatCommandName(command: string): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function sanitizeLoadedSettings(raw: unknown): Partial<ForgeSettings> {
+  const loaded = raw && typeof raw === "object"
+    ? { ...(raw as Record<string, unknown>) }
+    : {};
+
+  delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshEnabled;
+  delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshIntervalMinutes;
+
+  return loaded as Partial<ForgeSettings>;
 }

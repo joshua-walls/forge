@@ -1,3 +1,18 @@
+# 1.5.6
+
+## Changed
+
+- Dashboard auto-refresh is now runtime-only and is never written to synced plugin settings.
+- Auto-refresh always starts off on plugin load, even if an older `data.json` contained a saved value.
+
+## Compatibility
+
+- Existing synced settings files remain supported.
+- Legacy saved auto-refresh keys are ignored and are removed on the next settings save.
+- No user migration is required.
+
+---
+
 # 1.5.5
 
 ## Added

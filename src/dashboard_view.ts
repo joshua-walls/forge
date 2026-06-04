@@ -19,6 +19,8 @@ export class ForgeHealthDashboardView extends ItemView {
   private snapshot: DashboardSnapshot | null = null;
   private refreshing = false;
   private reloadingSettings = false;
+  private autoRefreshEnabled = false;
+  private autoRefreshIntervalMinutes: DashboardAutoRefreshIntervalMinutes = 5;
   private expandedIssueGroups = new Set<string>();
   private fullIssueGroups = new Set<string>();
 
@@ -68,7 +70,6 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   async onSettingsReloaded(): Promise<void> {
-    this.updateAutoRefreshTimer();
     await this.reloadFromCache();
   }
 
@@ -103,15 +104,13 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   private async setAutoRefreshEnabled(enabled: boolean): Promise<void> {
-    this.plugin.settings.dashboardAutoRefreshEnabled = enabled;
-    await this.plugin.saveSettings();
+    this.autoRefreshEnabled = enabled;
     this.updateAutoRefreshTimer();
     this.render();
   }
 
   private async setAutoRefreshInterval(interval: DashboardAutoRefreshIntervalMinutes): Promise<void> {
-    this.plugin.settings.dashboardAutoRefreshIntervalMinutes = interval;
-    await this.plugin.saveSettings();
+    this.autoRefreshIntervalMinutes = interval;
     this.updateAutoRefreshTimer();
     this.render();
   }
@@ -159,9 +158,9 @@ export class ForgeHealthDashboardView extends ItemView {
 
   private updateAutoRefreshTimer(): void {
     this.stopAutoRefresh();
-    if (!this.plugin.settings.dashboardAutoRefreshEnabled) return;
+    if (!this.autoRefreshEnabled) return;
 
-    const interval = normalizeAutoRefreshInterval(this.plugin.settings.dashboardAutoRefreshIntervalMinutes);
+    const interval = normalizeAutoRefreshInterval(this.autoRefreshIntervalMinutes);
     this.autoRefreshInterval = window.setInterval(() => {
       this.refreshSilently();
     }, interval * 60_000);
@@ -234,8 +233,8 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   private renderAutoRefreshControls(container: HTMLElement): void {
-    const enabled = this.plugin.settings.dashboardAutoRefreshEnabled;
-    const selectedInterval = normalizeAutoRefreshInterval(this.plugin.settings.dashboardAutoRefreshIntervalMinutes);
+    const enabled = this.autoRefreshEnabled;
+    const selectedInterval = normalizeAutoRefreshInterval(this.autoRefreshIntervalMinutes);
     const bar = container.createDiv("forge-health-auto-refresh");
 
     const label = bar.createEl("label", {
