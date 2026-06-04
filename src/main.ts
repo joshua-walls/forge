@@ -259,6 +259,17 @@ export default class ForgePlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "refresh-dataview-expansion-whole-vault",
+      name: "Refresh Dataview Expansion in Whole Vault",
+      callback: () => {
+        this.dataviewExpansionService.refreshWholeVault(true).catch((e: Error) => {
+          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+          console.error("[Forge] refresh-dataview-expansion-whole-vault error:", e);
+        });
+      },
+    });
+
+    this.addCommand({
       id: "install-documentation",
       name: "Install Documentation",
       callback: () => {
