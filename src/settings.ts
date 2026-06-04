@@ -119,6 +119,10 @@ export interface ForgeSettings {
   // Canonical sort order for frontmatter fields. Fields not in this list
   // are appended alphabetically after the ordered fields.
   frontmatterFieldOrder: string[];
+  dataviewExpansionEnabled: boolean;
+  dataviewExpansionAutoUpdateOnSave: boolean;
+  dataviewExpansionTitle: string;
+  dataviewExpansionMaxLinks: number;
 
   // ── Plugin metadata ───────────────────────────────────────────────
   // Tracks the last version Forge was loaded as. Used to detect upgrades
@@ -223,6 +227,10 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
 
   // General
   frontmatterFieldOrder: [],
+  dataviewExpansionEnabled: false,
+  dataviewExpansionAutoUpdateOnSave: true,
+  dataviewExpansionTitle: "Dataview Expansion",
+  dataviewExpansionMaxLinks: 250,
 
   // Plugin metadata
   lastInstalledVersion: undefined,

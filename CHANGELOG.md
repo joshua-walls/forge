@@ -1,3 +1,29 @@
+# 1.6.0
+
+## Added
+
+- Dataview Expansion can collect link results from all `dataview` blocks in a note and write one collapsed compatibility block at the bottom.
+- New General settings for enabling Dataview Expansion, auto-updating on save, setting the block title, and capping the number of written links.
+- New `Forge: Refresh Dataview Expansion` command for manually rebuilding the active note.
+- New `Forge: Refresh Dataview Expansion in Current Folder` command for recursive folder refreshes.
+- New Dataview Expansion actions in the Forge Health side panel under `Ontology`.
+
+## Changed
+
+- Forge can now refresh Dataview Expansion blocks automatically after note saves without rewriting the original query blocks.
+- Dataview Expansion now follows Obsidian's current link preferences for path style and markdown-vs-wikilink output.
+- Forge Health now updates live when feature toggles change, and feature-driven sections/actions hide when their corresponding settings are disabled.
+- `Ontology Metrics` in the dashboard has been renamed to `Ontology`.
+
+## Compatibility
+
+- Existing notes and settings remain supported.
+- Dataview Expansion is opt-in and stays off until enabled.
+- Dataview Expansion currently supports fenced `dataview` blocks. `dataviewjs` is not included in this release.
+- No user migration is required.
+
+---
+
 # 1.5.6
 
 ## Changed

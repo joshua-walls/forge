@@ -112,7 +112,76 @@ export class ForgeSettingsTab extends PluginSettingTab {
       "System/Forge"
     );
 
+    this.renderDataviewExpansionSettings(el);
     this.renderFrontmatterFieldOrder(el);
+  }
+
+  private renderDataviewExpansionSettings(el: HTMLElement): void {
+    const s = this.plugin.settings;
+    const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
+
+    el.createEl("h3", { text: "Dataview Expansion" });
+    el.createEl("p", {
+      text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for Graph View and raw-markdown readers.",
+      cls: "setting-item-description",
+    });
+
+    if (!dataviewAvailable) {
+      el.createEl("p", {
+        text: "Dataview Expansion is unavailable because the Dataview plugin is not installed or not enabled.",
+        cls: "setting-item-description",
+      });
+    }
+
+    new Setting(el)
+      .setName("Enable Dataview Expansion")
+      .setDesc("Turn on bottom-of-note Dataview Expansion blocks.")
+      .addToggle((tg) =>
+        tg.setValue(s.dataviewExpansionEnabled).setDisabled(!dataviewAvailable).onChange(async (value) => {
+          s.dataviewExpansionEnabled = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (!s.dataviewExpansionEnabled || !dataviewAvailable) return;
+
+    new Setting(el)
+      .setName("Auto-update on save")
+      .setDesc("Refresh the Dataview Expansion block when a Markdown note is saved.")
+      .addToggle((tg) =>
+        tg.setValue(s.dataviewExpansionAutoUpdateOnSave).onChange(async (value) => {
+          s.dataviewExpansionAutoUpdateOnSave = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("Block title")
+      .setDesc("Title shown in the collapsed block appended to the end of the note.")
+      .addText((text) =>
+        text
+          .setPlaceholder("Dataview Expansion")
+          .setValue(s.dataviewExpansionTitle)
+          .onChange(async (value) => {
+            s.dataviewExpansionTitle = value.trim() || "Dataview Expansion";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(el)
+      .setName("Max links")
+      .setDesc("Maximum number of links written to the block. Use 0 for no limit.")
+      .addText((text) =>
+        text
+          .setPlaceholder("250")
+          .setValue(String(s.dataviewExpansionMaxLinks))
+          .onChange(async (value) => {
+            const parsed = Number.parseInt(value.trim(), 10);
+            s.dataviewExpansionMaxLinks = Number.isFinite(parsed) && parsed >= 0 ? parsed : 250;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   // ── Frontmatter field order ───────────────────────────────────────────────
