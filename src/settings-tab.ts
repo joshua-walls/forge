@@ -90,7 +90,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
-    el.createEl("h3", { text: "System Paths" });
+    this.renderSectionHeading(el, "System Paths");
     el.createEl("p", {
       text: "All paths are relative to your vault root.",
       cls: "setting-item-description",
@@ -120,7 +120,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const s = this.plugin.settings;
     const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
 
-    el.createEl("h3", { text: "Dataview Expansion" });
+    this.renderSectionHeading(el, "Dataview Expansion");
     el.createEl("p", {
       text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for Graph View and raw-markdown readers.",
       cls: "setting-item-description",
@@ -191,7 +191,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
   // ── Frontmatter field order ───────────────────────────────────────────────
 
   private renderFrontmatterFieldOrder(el: HTMLElement): void {
-    el.createEl("h3", { text: "Frontmatter Field Order" });
+    this.renderSectionHeading(el, "Frontmatter Field Order");
     el.createEl("p", {
       text: "Fields are written in this order when Forge modifies a note. " +
             "Fields not listed here are appended alphabetically. " +
@@ -408,7 +408,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // ── Stale Note Review ─────────────────────────────────────────────
-    el.createEl("h3", { text: "Stale Note Review" });
+    this.renderSectionHeading(el, "Stale Note Review");
 
     new Setting(el)
       .setName("Enable stale note review")
@@ -697,7 +697,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     );
 
     // ── Export actions ─────────────────────────────────────────────
-    el.createEl("h3", { text: "Run Exports" });
+    this.renderSectionHeading(el, "Run Exports");
 
     new Setting(el)
       .setName("Export Vault Overview")
@@ -725,7 +725,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // ── Overview options ───────────────────────────────────────────
-    el.createEl("h3", { text: "Overview Options" });
+    this.renderSectionHeading(el, "Overview Options");
 
     // Domain field
     const allFieldsForDomain = this.plugin.schemaCache.getFrontmatterFieldNames();
@@ -807,7 +807,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Ontology filter ────────────────────────────────────────────
-    el.createEl("h3", { text: "Ontology Filter" });
+    this.renderSectionHeading(el, "Ontology Filter");
     el.createEl("p", {
       text: "Select which notes are included in the ontology export by choosing a schema field and the values to match.",
       cls: "setting-item-description",
@@ -873,7 +873,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Relationship heading ───────────────────────────────────────
-    el.createEl("h3", { text: "Relationship Extraction" });
+    this.renderSectionHeading(el, "Relationship Extraction");
 
     new Setting(el)
       .setName("Relationship heading")
@@ -892,7 +892,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // ── Exclude folders ────────────────────────────────────────────
-    el.createEl("h3", { text: "Exclude Folders" });
+    this.renderSectionHeading(el, "Exclude Folders");
     el.createEl("p", {
       text: "Notes inside these folders are skipped during ontology export. Applies at any depth — add a top-level folder to exclude everything under it.",
       cls: "setting-item-description",
@@ -1242,7 +1242,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     if (!s.shapesEnabled) return;
 
     // ── Folders ───────────────────────────────────────────────────
-    el.createEl("h3", { text: "Folders" });
+    this.renderSectionHeading(el, "Folders");
 
     this.renderFolderPicker(
       el,
@@ -1266,7 +1266,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // ── Field Configuration ───────────────────────────────────────
-    el.createEl("h3", { text: "Template Field Configuration" });
+    this.renderSectionHeading(el, "Template Field Configuration");
     el.createEl("p", {
       text: "Configure which schema fields appear in generated templates and what value each gets. " +
             "The type target field and configured date fields are excluded — they are set automatically at runtime.",
@@ -1292,7 +1292,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     this.renderShapeFieldConfigurator(el);
 
     // ── Template Refinement ───────────────────────────────────────
-    el.createEl("h3", { text: "Template Refinement" });
+    this.renderSectionHeading(el, "Template Refinement");
     el.createEl("p", {
       text: "When enabled, the 'Refine Shape Templates' command reads each shape note " +
             "and writes or updates the corresponding template note.",
@@ -1389,7 +1389,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Shape Lint ────────────────────────────────────────────────
-    el.createEl("h3", { text: "Shape Lint" });
+    this.renderSectionHeading(el, "Shape Lint");
     el.createEl("p", {
       text: "When enabled, lint runs validate note heading structure against the " +
             "corresponding shape template. Severity follows the Lint tab strict mode setting.",
@@ -1459,7 +1459,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Shape Repair ──────────────────────────────────────────────
-    el.createEl("h3", { text: "Shape Repair" });
+    this.renderSectionHeading(el, "Shape Repair");
     el.createEl("p", {
       text: "When enabled, the 'Run Shape Repair' command corrects heading drift in notes " +
             "by adding missing headings and reordering sections to match the template. " +
@@ -1736,6 +1736,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
     });
     valueControl.setEnabled(existing.include);
     valueControl.onChanged(save);
+  }
+
+  private renderSectionHeading(el: HTMLElement, title: string): void {
+    new Setting(el).setName(title).setHeading();
   }
 
   private createShapeFieldValueControl(

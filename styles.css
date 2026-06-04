@@ -584,6 +584,10 @@
   min-width: 160px;
 }
 
+.forge-tag-replace-wrapper.is-hidden {
+  display: none;
+}
+
 .forge-tag-replace-input {
   width: 100%;
   padding: 4px 8px;

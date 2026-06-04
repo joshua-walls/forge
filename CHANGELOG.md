@@ -1,3 +1,18 @@
+# 1.6.5
+
+## Changed
+
+- Raised `minAppVersion` to `1.7.2` to match the side-panel workspace APIs Forge now uses.
+- Reworked the flagged settings headings to use Obsidian `Setting(...).setHeading()` for Community Plugins UI consistency.
+- Replaced the inline tag-repair visibility style toggle with a CSS class-based approach.
+
+## Compatibility
+
+- Forge now requires Obsidian `1.7.2` or newer.
+- No data migration is required.
+
+---
+
 # 1.6.4
 
 ## Changed
