@@ -148,7 +148,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Auto-update mode")
-      .setDesc("Off disables automatic refresh. Edit idle waits 5 seconds after typing stops and also refreshes when you leave the note.")
+      .setDesc("Current session only. Off disables automatic refresh. Edit idle waits 5 seconds after typing stops and also refreshes when you leave the note.")
       .addDropdown((dd) =>
         dd
           .addOption("off", "Off")
@@ -156,7 +156,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .setValue(s.dataviewExpansionAutoUpdateMode)
           .onChange(async (value) => {
             s.dataviewExpansionAutoUpdateMode = value as import("./settings").DataviewExpansionAutoUpdateMode;
-            await this.plugin.saveSettings();
+            await this.plugin.applyRuntimeSettingsChange();
           })
       );
 

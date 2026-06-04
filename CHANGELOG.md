@@ -1,3 +1,18 @@
+# 1.6.4
+
+## Changed
+
+- Dataview Expansion auto-update mode is now runtime-only and is no longer written to synced plugin settings.
+- Dataview Expansion auto-refresh now only follows the note you are actively editing or just left, which reduces sync-loop risk from remote vault writes.
+
+## Compatibility
+
+- Existing Dataview Expansion settings remain supported.
+- Older synced auto-update mode values are ignored automatically.
+- No user migration is required.
+
+---
+
 # 1.6.3
 
 ## Added
