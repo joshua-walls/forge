@@ -170,7 +170,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Auto-update mode")
-      .setDesc("Current session only. Off disables automatic refresh. Edit idle waits 5 seconds after typing stops and also refreshes when you leave the note.")
+      .setDesc("Current session only. Off disables automatic refresh. Edit idle waits after typing stops and also refreshes when you leave the note.")
       .addDropdown((dd) =>
         dd
           .addOption("off", "Off")
@@ -183,6 +183,26 @@ export class ForgeSettingsTab extends PluginSettingTab {
             });
           })
       );
+
+    if (s.dataviewExpansionAutoUpdateMode !== "off") {
+      new Setting(el)
+        .setName("Auto-update delay (seconds)")
+        .setDesc("How long forge waits after typing stops before refreshing the current note's dataview expansion.")
+        .addText((text) =>
+          text
+            .setPlaceholder("5")
+            .setValue(String(s.dataviewExpansionAutoUpdateDelayMs / 1000))
+            .onChange((value) => {
+              this.runAsync(async () => {
+                const parsed = Number.parseFloat(value.trim());
+                s.dataviewExpansionAutoUpdateDelayMs = Number.isFinite(parsed) && parsed >= 0
+                  ? Math.round(parsed * 1000)
+                  : 5_000;
+                await this.plugin.saveSettings();
+              });
+            })
+        );
+    }
 
     new Setting(el)
       .setName("Block title")
@@ -456,6 +476,41 @@ export class ForgeSettingsTab extends PluginSettingTab {
             });
           })
       );
+
+    this.renderSectionHeading(el, "Active File Lint");
+
+    new Setting(el)
+      .setName("Enable auto-lint")
+      .setDesc("Turn on background note linting. Forge waits 10 seconds after typing stops, and also lints when you leave the note or switch that note into reading view.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.activeFileLintAutoMode !== "off").onChange((value) => {
+          this.runAsync(async () => {
+            this.plugin.settings.activeFileLintAutoMode = value ? "edit_idle" : "off";
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
+        })
+      );
+
+    if (this.plugin.settings.activeFileLintAutoMode !== "off") {
+      new Setting(el)
+        .setName("Idle delay (seconds)")
+        .setDesc("How long forge waits after typing stops before linting just the active note.")
+        .addText((text) =>
+          text
+            .setPlaceholder("10")
+            .setValue(String(this.plugin.settings.activeFileLintIdleDelayMs / 1000))
+            .onChange((value) => {
+              this.runAsync(async () => {
+                const parsed = Number.parseFloat(value.trim());
+                this.plugin.settings.activeFileLintIdleDelayMs = Number.isFinite(parsed) && parsed >= 0
+                  ? Math.round(parsed * 1000)
+                  : 10_000;
+                await this.plugin.saveSettings();
+              });
+            })
+        );
+    }
 
     // ── Stale Note Review ─────────────────────────────────────────────
     this.renderSectionHeading(el, "Stale Note Review");

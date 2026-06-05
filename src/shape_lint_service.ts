@@ -1,4 +1,4 @@
-import { App } from "obsidian";
+import { App, TFile } from "obsidian";
 import type { ForgeSettings } from "./settings";
 import type { LintResult } from "./lint-engine";
 import { DashboardCache } from "./dashboard_cache";
@@ -56,11 +56,15 @@ export class ShapeLintService {
     return result;
   }
 
+  async runShapeLintForFile(file: TFile): Promise<ShapeLintRunResult> {
+    return this.scan([file]);
+  }
+
   async latest(): Promise<ShapeLintResult | null> {
     return (await this.cache.read()).latest_shape_lint_result;
   }
 
-  private async scan(): Promise<ShapeLintRunResult> {
+  private async scan(files?: TFile[]): Promise<ShapeLintRunResult> {
     const paths = getVaultPaths(this.settings);
     const schema = await loadSchema(this.app, this.settings);
     const exemptPaths = buildExemptList(
@@ -68,7 +72,7 @@ export class ShapeLintService {
       paths.forge,
       this.settings.shapeLintExcludeInboxFolder ? [this.settings.inboxFolder] : []
     );
-    const files = getMarkdownFiles(this.app).filter(
+    const candidateFiles = (files ?? getMarkdownFiles(this.app)).filter(
       (file) => !isExempt(file.path, exemptPaths)
     );
 
@@ -79,7 +83,7 @@ export class ShapeLintService {
     const results: LintResult[] = [];
 
     if (this.settings.shapeLintEnabled && headingCache.size > 0) {
-      for (const file of files) {
+      for (const file of candidateFiles) {
         const content = await this.app.vault.read(file);
         results.push(...await lintShapeHeadings(
           this.app,
@@ -96,7 +100,7 @@ export class ShapeLintService {
         vault_path: (this.app.vault.adapter as VaultAdapterWithBasePath).basePath ?? "",
         timestamp: localTimestamp(),
         schema_version: schema?.version ?? "",
-        notes_scanned: files.length,
+        notes_scanned: candidateFiles.length,
       },
       results,
       errors: results.filter((r) => r.severity === "error"),
