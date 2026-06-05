@@ -31,6 +31,7 @@ export class ForgeHealthDashboardView extends ItemView {
   private autoRefreshIntervalMinutes: DashboardAutoRefreshIntervalMinutes = 5;
   private expandedIssueGroups = new Set<string>();
   private fullIssueGroups = new Set<string>();
+  private collapsedSections = new Set<string>();
 
   // Live-reload state
   private reloadDebounceTimer: number | null = null;
@@ -65,21 +66,6 @@ export class ForgeHealthDashboardView extends ItemView {
 
   private currentNoteFilePath(): string | null {
     return this.plugin.activeFileLintService?.currentFilePath() ?? null;
-  }
-
-  private currentNoteStatusLabel(): string {
-    const filePath = this.currentNoteFilePath();
-    if (!filePath) return "No note";
-    if (!this.plugin.activeFileLintService?.isEnabledForCurrentSession()) return "Off";
-    if (this.plugin.activeFileLintService.isCurrentFileLintInFlight()) return "Linting";
-    if (this.plugin.activeFileLintService.isCurrentFileDirty()) return "Pending";
-
-    const status = this.currentNoteLintStatus();
-    if (!status) return "Not checked";
-    if (status.errors > 0) return `${status.errors} error${status.errors === 1 ? "" : "s"}`;
-    if (status.warnings > 0) return `${status.warnings} warning${status.warnings === 1 ? "" : "s"}`;
-    if (status.infos > 0) return `${status.infos} info${status.infos === 1 ? "" : "s"}`;
-    return "Clear";
   }
 
   async onOpen(): Promise<void> {
@@ -386,6 +372,15 @@ export class ForgeHealthDashboardView extends ItemView {
 
   // ── Sections ────────────────────────────────────────────────────────────────
 
+  private toggleSection(sectionKey: string): void {
+    if (this.collapsedSections.has(sectionKey)) {
+      this.collapsedSections.delete(sectionKey);
+    } else {
+      this.collapsedSections.add(sectionKey);
+    }
+    this.render();
+  }
+
   private renderSummary(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const summaryStatus: SectionStatus = snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0
       ? { label: "Needs attention", tone: "critical" }
@@ -393,7 +388,9 @@ export class ForgeHealthDashboardView extends ItemView {
         ? { label: "Watch", tone: "warning" }
         : { label: "Healthy", tone: "good" };
 
-    const section = createSection(container, "Health Summary", summaryStatus);
+    const section = createSection(container, "summary", "Health Summary", summaryStatus, this.collapsedSections.has("summary"), () => {
+      this.toggleSection("summary");
+    });
     section.createDiv({
       text: `Last scan ${formatRelativeWithExactDate(snapshot.generated_at)}`,
       cls: "forge-health-section-meta",
@@ -413,7 +410,6 @@ export class ForgeHealthDashboardView extends ItemView {
     const metrics = [
       ["Notes scanned", snapshot.summary.notes_scanned],
       ["Lint issues", snapshot.summary.lint_issue_count],
-      ["Current note", this.currentNoteStatusLabel()],
       ["Schema violations", snapshot.summary.schema_violation_count],
       ["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count],
       ["Normalization candidates", snapshot.summary.normalization_candidates ?? "—"],
@@ -451,7 +447,9 @@ export class ForgeHealthDashboardView extends ItemView {
                   ? { label: "Clear", tone: "good" }
                   : { label: "Not checked", tone: "muted" };
 
-    const section = createSection(container, "Current Note", status);
+    const section = createSection(container, "current-note", "Current Note", status, this.collapsedSections.has("current-note"), () => {
+      this.toggleSection("current-note");
+    });
 
     if (!filePath) {
       section.createDiv({ text: "Open a markdown note to see its active lint status here.", cls: "forge-health-muted" });
@@ -510,7 +508,9 @@ export class ForgeHealthDashboardView extends ItemView {
           ? { label: "Warnings", tone: "warning" }
           : { label: "Valid", tone: "good" };
 
-    const section = createSection(container, "Schema Health", status);
+    const section = createSection(container, "schema-health", "Schema Health", status, this.collapsedSections.has("schema-health"), () => {
+      this.toggleSection("schema-health");
+    });
     if (!schema) {
       section.createDiv({ text: "Schema has not been validated in the latest dashboard cache.", cls: "forge-health-muted" });
     } else {
@@ -548,7 +548,9 @@ export class ForgeHealthDashboardView extends ItemView {
         ? { label: `${warnings} warning${warnings === 1 ? "" : "s"}`, tone: "warning" }
         : { label: "Clear", tone: "good" };
 
-    const section = createSection(container, "Active Issues", status);
+    const section = createSection(container, "active-issues", "Active Issues", status, this.collapsedSections.has("active-issues"), () => {
+      this.toggleSection("active-issues");
+    });
     const actions = section.createDiv("forge-health-section-actions");
     const repairButton = actions.createEl("button", { text: "Vault repair", cls: "forge-health-action-button forge-health-action-primary" });
     repairButton.addEventListener("click", () => this.executeCommand("vault-repair"));
@@ -565,10 +567,15 @@ export class ForgeHealthDashboardView extends ItemView {
     const exportEnabled = this.plugin.settings.exportEnabled;
     const section = createSection(
       container,
+      "ontology",
       "Ontology",
       ontology
         ? { label: "Indexed", tone: "good" }
-        : { label: "No data", tone: "muted" }
+        : { label: "No data", tone: "muted" },
+      this.collapsedSections.has("ontology"),
+      () => {
+        this.toggleSection("ontology");
+      }
     );
     const actions = section.createDiv("forge-health-section-actions");
     const refreshButton = actions.createEl("button", { text: "Refresh metrics", cls: "forge-health-action-button forge-health-action-primary" });
@@ -664,7 +671,9 @@ export class ForgeHealthDashboardView extends ItemView {
           ? { label: `${issueCount} issue${issueCount === 1 ? "" : "s"}`, tone: warnings > 0 ? "warning" : "muted" }
           : { label: "Clear", tone: "good" };
 
-    const section = createSection(container, "Shape Health", status);
+    const section = createSection(container, "shape-health", "Shape Health", status, this.collapsedSections.has("shape-health"), () => {
+      this.toggleSection("shape-health");
+    });
     if (!shape) {
       section.createDiv({ text: "Shape lint has not been run yet.", cls: "forge-health-muted" });
     } else {
@@ -716,8 +725,13 @@ export class ForgeHealthDashboardView extends ItemView {
     const history = snapshot.patch_history;
     const section = createSection(
       container,
+      "maintenance-history",
       "Maintenance History",
-      history?.last_patch_run ? { label: "Tracked", tone: "good" } : { label: "No patch history", tone: "muted" }
+      history?.last_patch_run ? { label: "Tracked", tone: "good" } : { label: "No patch history", tone: "muted" },
+      this.collapsedSections.has("maintenance-history"),
+      () => {
+        this.toggleSection("maintenance-history");
+      }
     );
     if (!history) {
       section.createDiv({ text: "No maintenance history has been read yet.", cls: "forge-health-muted" });
@@ -765,7 +779,16 @@ export class ForgeHealthDashboardView extends ItemView {
       return;
     }
 
-    const section = createSection(container, "Recommendations", { label: `${recommendations.length}`, tone: "warning" });
+    const section = createSection(
+      container,
+      "recommendations",
+      "Recommendations",
+      { label: `${recommendations.length}`, tone: "warning" },
+      this.collapsedSections.has("recommendations"),
+      () => {
+        this.toggleSection("recommendations");
+      }
+    );
     const list = section.createEl("ul", { cls: "forge-health-recommendations" });
     for (const recommendation of recommendations) {
       list.createEl("li", { text: recommendation });
@@ -942,12 +965,25 @@ type SectionStatus = { label: string; tone: "good" | "warning" | "critical" | "m
 
 function createSection(
   container: HTMLElement,
+  sectionKey: string,
   title: string,
-  status?: SectionStatus
+  status?: SectionStatus,
+  collapsed = false,
+  onToggle?: () => void
 ): HTMLElement {
-  const section = container.createDiv("forge-health-section");
+  const section = container.createDiv({
+    cls: ["forge-health-section", collapsed ? "is-collapsed" : ""],
+    attr: { "data-section-key": sectionKey },
+  });
   const header = section.createDiv("forge-health-section-header");
-  header.createEl("h3", { text: title });
+  const titleWrap = header.createDiv("forge-health-section-title-wrap");
+  const toggle = titleWrap.createEl("button", {
+    text: collapsed ? "+" : "-",
+    cls: "forge-health-section-toggle",
+  });
+  toggle.setAttr("aria-label", collapsed ? `Expand ${title}` : `Collapse ${title}`);
+  toggle.addEventListener("click", () => onToggle?.());
+  titleWrap.createEl("h3", { text: title });
   if (status) {
     header.createDiv({
       text: status.label,

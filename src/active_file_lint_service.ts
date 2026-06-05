@@ -182,8 +182,12 @@ export class ActiveFileLintService {
         })),
         ...shapeIssues,
       ];
-      const errors = lintResult.errors.length + (shapeLintResult?.errors.length ?? 0);
-      const warnings = lintResult.warnings.length + (shapeLintResult?.warnings.length ?? 0);
+      const lintErrors = lintResult.errors.length;
+      const lintWarnings = lintResult.warnings.length;
+      const shapeErrors = shapeLintResult?.errors.length ?? 0;
+      const shapeWarnings = shapeLintResult?.warnings.length ?? 0;
+      const errors = lintErrors + shapeErrors;
+      const warnings = lintWarnings + shapeWarnings;
       const infos = lintResult.infos.length + (shapeLintResult?.infos.length ?? 0);
 
       this.dirtyFiles.delete(file.path);
@@ -195,7 +199,13 @@ export class ActiveFileLintService {
         warnings,
         infos,
       });
-      this.maybeShowNotice(file, errors, warnings, infos);
+      this.maybeShowNotice(file, {
+        lintErrors,
+        lintWarnings,
+        shapeErrors,
+        shapeWarnings,
+        infos,
+      });
       this.plugin.renderHealthDashboardViews();
     } finally {
       this.inFlight.delete(file.path);
@@ -203,9 +213,20 @@ export class ActiveFileLintService {
     }
   }
 
-  private maybeShowNotice(file: TFile, errors: number, warnings: number, infos: number): void {
-    const attentionCount = errors + warnings;
-    const signature = `${errors}:${warnings}:${infos}`;
+  private maybeShowNotice(
+    file: TFile,
+    counts: {
+      lintErrors: number;
+      lintWarnings: number;
+      shapeErrors: number;
+      shapeWarnings: number;
+      infos: number;
+    }
+  ): void {
+    const lintAttentionCount = counts.lintErrors + counts.lintWarnings;
+    const shapeAttentionCount = counts.shapeErrors + counts.shapeWarnings;
+    const attentionCount = lintAttentionCount + shapeAttentionCount;
+    const signature = `${counts.lintErrors}:${counts.lintWarnings}:${counts.shapeErrors}:${counts.shapeWarnings}:${counts.infos}`;
 
     if (attentionCount === 0) {
       this.lastNoticeSignatureByFile.delete(file.path);
@@ -215,11 +236,18 @@ export class ActiveFileLintService {
     if (this.lastNoticeSignatureByFile.get(file.path) === signature) return;
     this.lastNoticeSignatureByFile.set(file.path, signature);
 
+    const totalErrors = counts.lintErrors + counts.shapeErrors;
+    const totalWarnings = counts.lintWarnings + counts.shapeWarnings;
     const parts: string[] = [];
-    if (errors > 0) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
-    if (warnings > 0) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+    if (totalErrors > 0) parts.push(`${totalErrors} error${totalErrors === 1 ? "" : "s"}`);
+    if (totalWarnings > 0) parts.push(`${totalWarnings} warning${totalWarnings === 1 ? "" : "s"}`);
 
-    new Notice(`Forge: Lint failed for ${file.basename} (${parts.join(", ")}).`, 5000);
+    const checkLabel = lintAttentionCount > 0 && shapeAttentionCount > 0
+      ? "Lint and shape lint failed"
+      : shapeAttentionCount > 0
+        ? "Shape lint failed"
+        : "Lint failed";
+    new Notice(`Forge: ${checkLabel} for ${file.basename} (${parts.join(", ")}).`, 5000);
   }
 
   private getActiveViewState(): ViewState | null {
