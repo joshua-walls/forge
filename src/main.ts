@@ -44,6 +44,15 @@ type LegacyDashboardRuntimeSettings = {
   dataviewExpansionAutoUpdateMode?: ForgeSettings["dataviewExpansionAutoUpdateMode"];
 };
 
+type AppSettingsManager = {
+  open: () => void;
+  openTabById?: (id: string) => void;
+};
+
+type AppWithSettingsManager = Plugin["app"] & {
+  setting?: AppSettingsManager;
+};
+
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   schemaCache: SchemaCache;
@@ -57,6 +66,12 @@ export default class ForgePlugin extends Plugin {
   hasPendingExternalSettingsReload = false;
   private lastKnownSettingsMtime = 0;
   private readonly settingsPollIntervalMs = 5_000;
+
+  private handleCommandError(commandId: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    new Notice(`Forge: ${message}`, 6000);
+    console.error(`[Forge] ${commandId} error:`, error);
+  }
 
   async onload(): Promise<void> {
     // Check for an existing data.json before loadSettings() creates it.
@@ -75,9 +90,11 @@ export default class ForgePlugin extends Plugin {
     if (isUpgradeFromLegacy) {
       // Show the migration notice once. onClose writes the version so it
       // never fires again, even if the user dismisses without reading it.
-      new MigrationNoticeModal(this.app, this.settings, async () => {
-        this.settings.lastInstalledVersion = currentVersion;
-        await this.saveSettings();
+      new MigrationNoticeModal(this.app, this.settings, () => {
+        void (async () => {
+          this.settings.lastInstalledVersion = currentVersion;
+          await this.saveSettings();
+        })();
       }).open();
     } else if (!lastVersion || lastVersion !== currentVersion) {
       // Fresh install, or a future version bump with no notice defined.
@@ -131,33 +148,30 @@ export default class ForgePlugin extends Plugin {
     // Register commands and settings tab immediately — these don't need vault access
     this.addCommand({
       id: "apply-vault-patch",
-      name: "Apply Vault Patch",
+      name: "Apply vault patch",
       callback: () => {
-        runApplyPatch(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] apply-vault-patch error:", e);
+        void runApplyPatch(this).catch((error: unknown) => {
+          this.handleCommandError("apply-vault-patch", error);
         });
       },
     });
 
     this.addCommand({
       id: "run-vault-lint",
-      name: "Run Vault Lint",
+      name: "Run vault lint",
       callback: () => {
-        runVaultLint(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] run-vault-lint error:", e);
+        void runVaultLint(this).catch((error: unknown) => {
+          this.handleCommandError("run-vault-lint", error);
         });
       },
     });
 
     this.addCommand({
       id: "validate-schema",
-      name: "Validate Schema",
+      name: "Validate schema",
       callback: () => {
-        runValidateSchema(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] validate-schema error:", e);
+        void runValidateSchema(this).catch((error: unknown) => {
+          this.handleCommandError("validate-schema", error);
         });
       },
     });
@@ -167,269 +181,260 @@ export default class ForgePlugin extends Plugin {
       name: "Open schema.md",
       callback: () => {
         const paths = getVaultPaths(this.settings);
-        this.app.workspace.openLinkText(paths.schemaMd, "", false);
+        void this.app.workspace.openLinkText(paths.schemaMd, "", false);
       },
     });
 
     this.addCommand({
       id: "normalize-tags",
-      name: "Normalize Tags",
+      name: "Normalize tags",
       callback: () => {
-        runNormalizeTags(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] normalize-tags error:", e);
+        void runNormalizeTags(this).catch((error: unknown) => {
+          this.handleCommandError("normalize-tags", error);
         });
       },
     });
 
     this.addCommand({
       id: "normalize-frontmatter",
-      name: "Normalize Frontmatter",
+      name: "Normalize frontmatter",
       callback: () => {
-        runNormalizeFrontmatter(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] normalize-frontmatter error:", e);
+        void runNormalizeFrontmatter(this).catch((error: unknown) => {
+          this.handleCommandError("normalize-frontmatter", error);
         });
       },
     });
 
     this.addCommand({
       id: "vault-maintenance",
-      name: "Vault Maintenance",
+      name: "Vault maintenance",
       callback: () => {
-        runVaultMaintenance(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] vault-maintenance error:", e);
+        void runVaultMaintenance(this).catch((error: unknown) => {
+          this.handleCommandError("vault-maintenance", error);
         });
       },
     });
 
     this.addCommand({
       id: "vault-repair",
-      name: "Vault Repair",
+      name: "Vault repair",
       callback: () => {
-        runVaultRepair(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] vault-repair error:", e);
+        void runVaultRepair(this).catch((error: unknown) => {
+          this.handleCommandError("vault-repair", error);
         });
       },
     });
 
     this.addCommand({
       id: "restore-patch-run",
-      name: "Restore Patch Run",
+      name: "Restore patch run",
       callback: () => {
-        runRestorePatch(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] restore-patch-run error:", e);
+        void runRestorePatch(this).catch((error: unknown) => {
+          this.handleCommandError("restore-patch-run", error);
         });
       },
     });
 
     this.addCommand({
       id: "rename-dataview-folder",
-      name: "Rename Dataview Folder",
+      name: "Rename dataview folder",
       callback: () => {
-        runRenameDataviewFolder(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] rename-dataview-folder error:", e);
+        void runRenameDataviewFolder(this).catch((error: unknown) => {
+          this.handleCommandError("rename-dataview-folder", error);
         });
       },
     });
 
     this.addCommand({
       id: "refresh-dataview-expansion",
-      name: "Refresh Dataview Expansion",
+      name: "Refresh dataview expansion",
       callback: () => {
-        this.dataviewExpansionService.refreshActiveFile(true).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] refresh-dataview-expansion error:", e);
+        void this.dataviewExpansionService.refreshActiveFile(true).catch((error: unknown) => {
+          this.handleCommandError("refresh-dataview-expansion", error);
         });
       },
     });
 
     this.addCommand({
       id: "refresh-dataview-expansion-current-folder",
-      name: "Refresh Dataview Expansion in Current Folder",
+      name: "Refresh dataview expansion in current folder",
       callback: () => {
-        this.dataviewExpansionService.refreshCurrentFolder(true).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] refresh-dataview-expansion-current-folder error:", e);
+        void this.dataviewExpansionService.refreshCurrentFolder(true).catch((error: unknown) => {
+          this.handleCommandError("refresh-dataview-expansion-current-folder", error);
         });
       },
     });
 
     this.addCommand({
       id: "refresh-dataview-expansion-whole-vault",
-      name: "Refresh Dataview Expansion in Whole Vault",
+      name: "Refresh dataview expansion in whole vault",
       callback: () => {
-        this.dataviewExpansionService.refreshWholeVault(true).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] refresh-dataview-expansion-whole-vault error:", e);
+        void this.dataviewExpansionService.refreshWholeVault(true).catch((error: unknown) => {
+          this.handleCommandError("refresh-dataview-expansion-whole-vault", error);
         });
       },
     });
 
     this.addCommand({
       id: "install-documentation",
-      name: "Install Documentation",
+      name: "Install documentation",
       callback: () => {
-        installVaultForgeDocumentation(this.app, this.settings).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] install-documentation error:", e);
+        void installVaultForgeDocumentation(this.app, this.settings).catch((error: unknown) => {
+          this.handleCommandError("install-documentation", error);
         });
       },
     });
 
     this.addCommand({
       id: "export-vault-overview",
-      name: "Export Vault Overview",
+      name: "Export vault overview",
       callback: () => {
-        runExportOverview(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] export-vault-overview error:", e);
+        void runExportOverview(this).catch((error: unknown) => {
+          this.handleCommandError("export-vault-overview", error);
         });
       },
     });
 
     this.addCommand({
       id: "export-vault-snapshot",
-      name: "Export Vault Snapshot",
+      name: "Export vault snapshot",
       callback: () => {
-        runExportOverview(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] export-vault-snapshot error:", e);
+        void runExportOverview(this).catch((error: unknown) => {
+          this.handleCommandError("export-vault-snapshot", error);
         });
       },
     });
 
     this.addCommand({
       id: "export-ontology-index",
-      name: "Export Ontology Index",
+      name: "Export ontology index",
       callback: () => {
-        runExportOntology(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] export-ontology-index error:", e);
+        void runExportOntology(this).catch((error: unknown) => {
+          this.handleCommandError("export-ontology-index", error);
         });
       },
     });
 
     this.addCommand({
       id: "refresh-ontology-metrics",
-      name: "Refresh Ontology Metrics",
+      name: "Refresh ontology metrics",
       callback: () => {
-        this.ontologyService.collectMetrics("refresh-vault-health-dashboard")
-          .then(() => this.recomposeHealthDashboard())
-          .then(() => new Notice("Forge: Ontology metrics refreshed.", 4000))
-          .catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-            console.error("[Forge] refresh-ontology-metrics error:", e);
-          });
+        void (async () => {
+          try {
+            await this.ontologyService.collectMetrics("refresh-vault-health-dashboard");
+            await this.recomposeHealthDashboard();
+            new Notice("Forge: Ontology metrics refreshed.", 4000);
+          } catch (error) {
+            this.handleCommandError("refresh-ontology-metrics", error);
+          }
+        })();
       },
     });
 
     this.addCommand({
       id: "refine-shapes",
-      name: "Refine Shape Templates",
+      name: "Refine shape templates",
       callback: () => {
-        runRefineShapes(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] refine-shapes error:", e);
+        void runRefineShapes(this).catch((error: unknown) => {
+          this.handleCommandError("refine-shapes", error);
         });
       },
     });
 
     this.addCommand({
       id: "run-shape-lint",
-      name: "Run Shape Lint",
+      name: "Run shape lint",
       callback: () => {
-        runShapeLint(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] run-shape-lint error:", e);
+        void runShapeLint(this).catch((error: unknown) => {
+          this.handleCommandError("run-shape-lint", error);
         });
       },
     });
 
     this.addCommand({
       id: "shape-repair",
-      name: "Run Shape Repair",
+      name: "Run shape repair",
       callback: () => {
-        runShapeRepair(this).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] shape-repair error:", e);
+        void runShapeRepair(this).catch((error: unknown) => {
+          this.handleCommandError("shape-repair", error);
         });
       },
     });
 
     this.addCommand({
       id: "shape-repair-dry-run",
-      name: "Run Shape Repair (Dry Run)",
+      name: "Run shape repair (dry run)",
       callback: () => {
-        runShapeRepair(this, true).catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] shape-repair-dry-run error:", e);
+        void runShapeRepair(this, true).catch((error: unknown) => {
+          this.handleCommandError("shape-repair-dry-run", error);
         });
       },
     });
 
     this.addCommand({
       id: "open-vault-health-dashboard",
-      name: "Open Vault Health Dashboard",
+      name: "Open vault health dashboard",
       callback: () => {
-        this.openHealthDashboard().catch((e: Error) => {
-          new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-          console.error("[Forge] open-vault-health-dashboard error:", e);
+        void this.openHealthDashboard().catch((error: unknown) => {
+          this.handleCommandError("open-vault-health-dashboard", error);
         });
       },
     });
 
     this.addCommand({
       id: "refresh-vault-health-dashboard",
-      name: "Refresh Vault Health Dashboard",
+      name: "Refresh vault health dashboard",
       callback: () => {
-        this.dashboardService.refreshSnapshot()
-          .then(() => new Notice("Forge: Vault Health Dashboard refreshed.", 4000))
-          .catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-            console.error("[Forge] refresh-vault-health-dashboard error:", e);
-          });
+        void (async () => {
+          try {
+            await this.dashboardService.refreshSnapshot();
+            new Notice("Forge: Vault health dashboard refreshed.", 4000);
+          } catch (error) {
+            this.handleCommandError("refresh-vault-health-dashboard", error);
+          }
+        })();
       },
     });
 
     this.addCommand({
       id: "export-dashboard-snapshot",
-      name: "Export Dashboard Snapshot",
+      name: "Export dashboard snapshot",
       callback: () => {
-        this.dashboardService.exportSnapshot()
-          .then((path) => new Notice(`Forge: Dashboard snapshot exported to ${path}`, 6000))
-          .catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-            console.error("[Forge] export-dashboard-snapshot error:", e);
-          });
+        void (async () => {
+          try {
+            const path = await this.dashboardService.exportSnapshot();
+            new Notice(`Forge: Dashboard snapshot exported to ${path}`, 6000);
+          } catch (error) {
+            this.handleCommandError("export-dashboard-snapshot", error);
+          }
+        })();
       },
     });
 
     this.addCommand({
       id: "view-patch-history",
-      name: "View Patch History",
+      name: "View patch history",
       callback: () => {
-        this.patchHistoryService.readHistory("patch-history")
-          .then(() => this.recomposeHealthDashboard())
-          .then(() => this.openHealthDashboard())
-          .then(() => new Notice("Forge: Patch history refreshed in the dashboard.", 5000))
-          .catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-            console.error("[Forge] view-patch-history error:", e);
-        });
+        void (async () => {
+          try {
+            await this.patchHistoryService.readHistory("patch-history");
+            await this.recomposeHealthDashboard();
+            await this.openHealthDashboard();
+            new Notice("Forge: Patch history refreshed in the dashboard.", 5000);
+          } catch (error) {
+            this.handleCommandError("view-patch-history", error);
+          }
+        })();
       },
     });
 
     this.addCommand({
       id: "view-last-run",
-      name: "View Last Forge Run",
+      name: "View last run",
       callback: () => {
-        this.dashboardService.latestOperationalRun()
-          .then((run) => {
+        void (async () => {
+          try {
+            const run = await this.dashboardService.latestOperationalRun();
             if (!run) {
               new Notice("Forge: No operational runs have been recorded yet.", 5000);
               return;
@@ -438,11 +443,10 @@ export default class ForgePlugin extends Plugin {
               `Forge: Last run was ${formatCommandName(run.command)}. Status: ${run.status}. Applied ${run.applied_items} item(s), with ${run.errors.length} error(s).`,
               7000
             );
-          })
-          .catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
-            console.error("[Forge] view-last-run error:", e);
-          });
+          } catch (error) {
+            this.handleCommandError("view-last-run", error);
+          }
+        })();
       },
     });
 
@@ -466,27 +470,27 @@ export default class ForgePlugin extends Plugin {
     // onLayoutReady() is a no-op if layout is already ready (e.g. on re-enable).
     this.app.workspace.onLayoutReady(() => {
       // Warm schema cache — retry once after 3s if vault not ready yet (iOS sync delay)
-      this.schemaCache.refresh().catch(() => {
-        setTimeout(() => this.schemaCache.refresh().catch((e) => {
-          console.warn("[Forge] Schema cache retry failed:", e);
-        }), 3000);
+      void this.schemaCache.refresh().catch(() => {
+        window.setTimeout(() => {
+          void this.schemaCache.refresh().catch((error: unknown) => {
+            console.warn("[Forge] Schema cache retry failed:", error);
+          });
+        }, 3000);
       });
-      this.ensureHealthDashboardPanel().catch((e) => {
-        console.warn("[Forge] Could not preload health dashboard panel:", e);
+      void this.ensureHealthDashboardPanel().catch((error: unknown) => {
+        console.warn("[Forge] Could not preload health dashboard panel:", error);
       });
     });
 
-    console.log("Forge loaded");
   }
 
   onunload(): void {
-    console.log("Forge unloaded");
   }
 
   async openHealthDashboard(): Promise<void> {
     const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
     if (leaves.length > 0) {
-      this.app.workspace.revealLeaf(leaves[0]);
+      void this.app.workspace.revealLeaf(leaves[0]);
       return;
     }
 
@@ -495,7 +499,7 @@ export default class ForgePlugin extends Plugin {
       reveal: true,
       split: false,
     });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
   }
 
   async ensureHealthDashboardPanel(): Promise<void> {
@@ -510,7 +514,7 @@ export default class ForgePlugin extends Plugin {
   }
 
   openForgeSettings(): void {
-    const setting = (this.app as any).setting;
+    const setting = (this.app as AppWithSettingsManager).setting;
     if (!setting?.open) {
       new Notice("Forge: Could not open settings from this Obsidian version.", 5000);
       return;
@@ -691,7 +695,7 @@ function sanitizeLoadedSettings(raw: unknown): Partial<ForgeSettings> {
   delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshIntervalMinutes;
   delete (loaded as LegacyDashboardRuntimeSettings).dataviewExpansionAutoUpdateMode;
 
-  return loaded as Partial<ForgeSettings>;
+  return loaded;
 }
 
 function settingsForPersistence(settings: ForgeSettings): Partial<ForgeSettings> {

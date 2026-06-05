@@ -41,7 +41,7 @@ export class DashboardCache {
 
     try {
       const raw = await this.app.vault.read(file);
-      const parsed = JSON.parse(raw);
+      const parsed: Partial<DashboardCacheFile> = JSON.parse(raw) as Partial<DashboardCacheFile>;
       if (
         "operational_history" in parsed &&
         parsed.operational_history !== null &&

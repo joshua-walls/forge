@@ -21,8 +21,12 @@ import { runExportOverview } from "./commands/export-overview";
 import { runExportOntology } from "./commands/export-ontology";
 import { installVaultForgeDocumentation } from "./docs";
 import { loadSchema } from "./utils/schema";
+import type { ForgeSettings } from "./settings";
 
 type TabId = "general" | "lint" | "patch" | "maintenance" | "export" | "shapes";
+type StringSettingKey = {
+  [K in keyof ForgeSettings]: ForgeSettings[K] extends string ? K : never;
+}[keyof ForgeSettings];
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "general",     label: "General"     },
@@ -42,13 +46,24 @@ export class ForgeSettingsTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  display(): void {
+  private runAsync(task: () => Promise<void>): void {
+    void task();
+  }
+
+  private stringifyUiValue(value: unknown): string {
+    return typeof value === "string" ? value : "";
+  }
+
+  private setStringSetting<K extends StringSettingKey>(key: K, value: ForgeSettings[K]): void {
+    this.plugin.settings[key] = value;
+  }
+
+  private renderTab(): void {
     const { containerEl } = this;
     containerEl.empty();
 
     this.injectStyles();
 
-    // ── Tab bar ──────────────────────────────────────────────────────
     const tabBar = containerEl.createDiv({ cls: "forge-tab-bar" });
 
     TABS.forEach(({ id, label }) => {
@@ -58,11 +73,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
       });
       btn.addEventListener("click", () => {
         this.activeTab = id;
-        this.display();
+        this.renderTab();
       });
     });
 
-    // ── Tab content ──────────────────────────────────────────────────
     const content = containerEl.createDiv({ cls: "forge-tab-content" });
 
     switch (this.activeTab) {
@@ -71,22 +85,28 @@ export class ForgeSettingsTab extends PluginSettingTab {
       case "patch":       this.renderPatch(content);       break;
       case "maintenance": this.renderMaintenance(content); break;
       case "export":      this.renderExport(content);      break;
-      case "shapes":    this.renderShapes(content);    break;
+      case "shapes":      this.renderShapes(content);      break;
     }
+  }
+
+  display(): void {
+    this.renderTab();
   }
 
   // ── General ──────────────────────────────────────────────────────────────
 
   private renderGeneral(el: HTMLElement): void {
     new Setting(el)
-      .setName("Install Documentation")
+      .setName("Install documentation")
       .setDesc(
         "Writes vault-native docs into your Forge folder — command reference, " +
         "schema guide, patch examples, and troubleshooting. Skips notes that already exist."
       )
       .addButton((btn) =>
-        btn.setButtonText("Install Docs").setCta().onClick(async () => {
-          await installVaultForgeDocumentation(this.plugin.app, this.plugin.settings);
+        btn.setButtonText("Install docs").setCta().onClick(() => {
+          this.runAsync(() =>
+            installVaultForgeDocumentation(this.plugin.app, this.plugin.settings)
+          );
         })
       );
 
@@ -122,25 +142,27 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     this.renderSectionHeading(el, "Dataview Expansion");
     el.createEl("p", {
-      text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for Graph View and raw-markdown readers.",
+      text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for graph view and raw-Markdown readers.",
       cls: "setting-item-description",
     });
 
     if (!dataviewAvailable) {
       el.createEl("p", {
-        text: "Dataview Expansion is unavailable because the Dataview plugin is not installed or not enabled.",
+        text: "Dataview expansion is unavailable because the dataview plugin is not installed or not enabled.",
         cls: "setting-item-description",
       });
     }
 
     new Setting(el)
-      .setName("Enable Dataview Expansion")
-      .setDesc("Turn on bottom-of-note Dataview Expansion blocks.")
+      .setName("Enable dataview expansion")
+      .setDesc("Turn on bottom-of-note dataview expansion blocks.")
       .addToggle((tg) =>
-        tg.setValue(s.dataviewExpansionEnabled).setDisabled(!dataviewAvailable).onChange(async (value) => {
-          s.dataviewExpansionEnabled = value;
-          await this.plugin.saveSettings();
-          this.display();
+        tg.setValue(s.dataviewExpansionEnabled).setDisabled(!dataviewAvailable).onChange((value) => {
+          this.runAsync(async () => {
+            s.dataviewExpansionEnabled = value;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -154,9 +176,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .addOption("off", "Off")
           .addOption("edit_idle", "Edit idle")
           .setValue(s.dataviewExpansionAutoUpdateMode)
-          .onChange(async (value) => {
-            s.dataviewExpansionAutoUpdateMode = value as import("./settings").DataviewExpansionAutoUpdateMode;
-            await this.plugin.applyRuntimeSettingsChange();
+          .onChange((value) => {
+            this.runAsync(async () => {
+              s.dataviewExpansionAutoUpdateMode = value as import("./settings").DataviewExpansionAutoUpdateMode;
+              await this.plugin.applyRuntimeSettingsChange();
+            });
           })
       );
 
@@ -165,11 +189,13 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setDesc("Title shown in the collapsed block appended to the end of the note.")
       .addText((text) =>
         text
-          .setPlaceholder("Dataview Expansion")
+          .setPlaceholder("Dataview expansion")
           .setValue(s.dataviewExpansionTitle)
-          .onChange(async (value) => {
-            s.dataviewExpansionTitle = value.trim() || "Dataview Expansion";
-            await this.plugin.saveSettings();
+          .onChange((value) => {
+            this.runAsync(async () => {
+              s.dataviewExpansionTitle = value.trim() || "Dataview Expansion";
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -180,10 +206,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
         text
           .setPlaceholder("250")
           .setValue(String(s.dataviewExpansionMaxLinks))
-          .onChange(async (value) => {
-            const parsed = Number.parseInt(value.trim(), 10);
-            s.dataviewExpansionMaxLinks = Number.isFinite(parsed) && parsed >= 0 ? parsed : 250;
-            await this.plugin.saveSettings();
+          .onChange((value) => {
+            this.runAsync(async () => {
+              const parsed = Number.parseInt(value.trim(), 10);
+              s.dataviewExpansionMaxLinks = Number.isFinite(parsed) && parsed >= 0 ? parsed : 250;
+              await this.plugin.saveSettings();
+            });
           })
       );
   }
@@ -220,9 +248,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
       const rm = item.createSpan({ cls: "forge-field-order-rm", text: "×" });
       rm.title = "Remove";
-      rm.addEventListener("click", async () => {
-        item.remove();
-        await save();
+      rm.addEventListener("click", () => {
+        this.runAsync(async () => {
+          item.remove();
+          await save();
+        });
       });
 
       // Drag-and-drop handlers
@@ -231,9 +261,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
         e.dataTransfer?.setData("text/plain", field);
       });
 
-      item.addEventListener("dragend", async () => {
-        item.classList.remove("forge-field-order-dragging");
-        await save();
+      item.addEventListener("dragend", () => {
+        this.runAsync(async () => {
+          item.classList.remove("forge-field-order-dragging");
+          await save();
+        });
       });
 
       item.addEventListener("dragover", (e) => {
@@ -261,7 +293,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const input = addRow.createEl("input", {
       type: "text",
       cls: "forge-field-order-input",
-      attr: { placeholder: "field_name" },
+      attr: { placeholder: "Field_name" },
     });
 
     const addBtn = addRow.createEl("button", {
@@ -283,8 +315,14 @@ export class ForgeSettingsTab extends PluginSettingTab {
       input.value = "";
     };
 
-    addBtn.addEventListener("click", doAdd);
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") doAdd(); });
+    addBtn.addEventListener("click", () => {
+      this.runAsync(doAdd);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.runAsync(doAdd);
+      }
+    });
 
     // ── Prefill from schema ──────────────────────────────────────────
     new Setting(el)
@@ -294,27 +332,27 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "in the order they appear in the schema."
       )
       .addButton((btn) =>
-        btn.setButtonText("Prefill").onClick(async () => {
-          const schema = await loadSchema(this.plugin.app, this.plugin.settings);
-          if (!schema) {
-            new Notice("Forge: Could not load schema — is schema.md present?");
-            return;
-          }
-          const schemaFields = [
-            ...schema.frontmatter.required.map((f) => f.name),
-            ...schema.frontmatter.optional.map((f) => f.name),
-          ];
-          // Dedupe while preserving order
-          const seen = new Set<string>();
-          const deduped = schemaFields.filter((f) => {
-            if (seen.has(f)) return false;
-            seen.add(f);
-            return true;
+        btn.setButtonText("Prefill").onClick(() => {
+          this.runAsync(async () => {
+            const schema = await loadSchema(this.plugin.app, this.plugin.settings);
+            if (!schema) {
+              new Notice("Forge: Could not load schema — is schema.md present?");
+              return;
+            }
+            const schemaFields = [
+              ...schema.frontmatter.required.map((f) => f.name),
+              ...schema.frontmatter.optional.map((f) => f.name),
+            ];
+            const seen = new Set<string>();
+            const deduped = schemaFields.filter((f) => {
+              if (seen.has(f)) return false;
+              seen.add(f);
+              return true;
+            });
+            this.plugin.settings.frontmatterFieldOrder = deduped;
+            await this.plugin.saveSettings();
+            this.renderTab();
           });
-          this.plugin.settings.frontmatterFieldOrder = deduped;
-          await this.plugin.saveSettings();
-          // Re-render the tab so the list reflects the new order
-          this.display();
         })
       );
   }
@@ -337,9 +375,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Strict mode")
       .setDesc("Treat warnings as errors.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.lintStrictMode).onChange(async (v) => {
-          this.plugin.settings.lintStrictMode = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.lintStrictMode).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintStrictMode = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -351,9 +391,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .setLimits(5, 50, 5)
           .setValue(this.plugin.settings.lintRunRetentionCount)
           .setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.lintRunRetentionCount = v;
-            await this.plugin.saveSettings();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.lintRunRetentionCount = v;
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -363,47 +405,55 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "Wrap file paths in [[wikilinks]] in lint run notes so you can navigate directly to affected files."
       )
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.lintFileLinks).onChange(async (v) => {
-          this.plugin.settings.lintFileLinks = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.lintFileLinks).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintFileLinks = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
     new Setting(el)
       .setName("Lint inline metadata")
       .setDesc(
-        "Check inline metadata (key:: value patterns) against the schema. Disable to skip all inline metadata rules."
+        "Check inline metadata (key:: Value patterns) against the schema. Disable to skip all inline metadata rules."
       )
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.lintInlineMetadata).onChange(async (v) => {
-          this.plugin.settings.lintInlineMetadata = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.lintInlineMetadata).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintInlineMetadata = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
     new Setting(el)
       .setName("Exclude inbox folder")
       .setDesc(
-        "Skip notes in the configured inbox folder during Vault Lint so draft notes can stay incomplete while they are still being worked out."
+        "Skip notes in the configured inbox folder during vault lint so draft notes can stay incomplete while they are still being worked out."
       )
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.lintExcludeInboxFolder).onChange(async (v) => {
-          this.plugin.settings.lintExcludeInboxFolder = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.lintExcludeInboxFolder).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintExcludeInboxFolder = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
     new Setting(el)
       .setName("Repair prompt threshold")
-      .setDesc("When to show the Open Vault Repair button after a lint run.")
+      .setDesc("When to show the open vault repair button after a lint run.")
       .addDropdown((d) =>
         d
           .addOption("errors_only", "Errors only")
           .addOption("errors_and_warnings", "Errors and warnings")
           .setValue(this.plugin.settings.lintRepairThreshold)
-          .onChange(async (v) => {
-            this.plugin.settings.lintRepairThreshold = v as "errors_only" | "errors_and_warnings";
-            await this.plugin.saveSettings();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.lintRepairThreshold = v as "errors_only" | "errors_and_warnings";
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -416,10 +466,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "Flag notes whose review cycle has elapsed, based on frontmatter field values."
       )
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.staleReviewEnabled).onChange(async (v) => {
-          this.plugin.settings.staleReviewEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(this.plugin.settings.staleReviewEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.staleReviewEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -464,7 +516,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         this.plugin.settings.staleReviewFilterField = v;
         this.plugin.settings.staleReviewStatuses = [];
         await this.plugin.saveSettings();
-        this.display();
+        this.renderTab();
       }
     );
 
@@ -523,10 +575,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Backup before patch")
       .setDesc("Create a backup of each modified file before applying a patch.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.patchBackupEnabled).onChange(async (v) => {
-          this.plugin.settings.patchBackupEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(this.plugin.settings.patchBackupEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.patchBackupEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -541,10 +595,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
         )
         .addButton((btn) =>
           btn.setButtonText("Choose").onClick(() => {
-            new FolderSuggestModal(this.app, async (folder) => {
-              this.plugin.settings.patchBackupFolder = folder.path;
-              await this.plugin.saveSettings();
-              this.display();
+            new FolderSuggestModal(this.app, (folder) => {
+              this.runAsync(async () => {
+                this.plugin.settings.patchBackupFolder = folder.path;
+                await this.plugin.saveSettings();
+                this.renderTab();
+              });
             }).open();
           })
         );
@@ -556,30 +612,36 @@ export class ForgeSettingsTab extends PluginSettingTab {
           "in one step. Only active when backups are enabled."
         )
         .addToggle((t) =>
-          t.setValue(this.plugin.settings.patchGenerateManifest).onChange(async (v) => {
-            this.plugin.settings.patchGenerateManifest = v;
-            await this.plugin.saveSettings();
+          t.setValue(this.plugin.settings.patchGenerateManifest).onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.patchGenerateManifest = v;
+              await this.plugin.saveSettings();
+            });
           })
         );
     }
 
     new Setting(el)
       .setName("Run lint after patch")
-      .setDesc("Automatically run Vault Lint after a patch is applied.")
+      .setDesc("Automatically run vault lint after a patch is applied.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.patchAutoLintAfterApply).onChange(async (v) => {
-          this.plugin.settings.patchAutoLintAfterApply = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.patchAutoLintAfterApply).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.patchAutoLintAfterApply = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
     new Setting(el)
       .setName("Run maintenance after patch")
-      .setDesc("Automatically run Vault Maintenance after a patch is applied.")
+      .setDesc("Automatically run vault maintenance after a patch is applied.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.patchAutoMaintenanceAfterApply).onChange(async (v) => {
-          this.plugin.settings.patchAutoMaintenanceAfterApply = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.patchAutoMaintenanceAfterApply).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.patchAutoMaintenanceAfterApply = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
   }
@@ -591,9 +653,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Backup retention (days)")
       .setDesc("Delete patch backup files older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.backupRetentionDays = v;
-          await this.plugin.saveSettings();
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.backupRetentionDays = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -601,9 +665,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Inbox retention (days)")
       .setDesc("Age threshold used for stale inbox handling.")
       .addSlider((s) =>
-        s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.inboxRetentionDays = v;
-          await this.plugin.saveSettings();
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.inboxRetentionDays = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -613,11 +679,13 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .addDropdown((d) =>
         d
           .addOption("delete", "Delete in maintenance")
-          .addOption("warning", "Warn in Vault Lint")
+          .addOption("warning", "Warn in vault lint")
           .setValue(this.plugin.settings.inboxRetentionAction)
-          .onChange(async (v) => {
-            this.plugin.settings.inboxRetentionAction = v as "delete" | "warning";
-            await this.plugin.saveSettings();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.inboxRetentionAction = v as "delete" | "warning";
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -625,9 +693,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history retention (days)")
       .setDesc("Trim lint history entries older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.lintHistoryRetentionDays = v;
-          await this.plugin.saveSettings();
+        s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintHistoryRetentionDays = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -635,19 +705,23 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history max entries")
       .setDesc("Hard cap on the number of lint history entries to retain.")
       .addSlider((s) =>
-        s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.lintHistoryMaxEntries = v;
-          await this.plugin.saveSettings();
+        s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.lintHistoryMaxEntries = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
     new Setting(el)
       .setName("Auto-run on dashboard refresh")
-      .setDesc("Run Vault Maintenance silently whenever the Vault Health Dashboard is refreshed.")
+      .setDesc("Run vault maintenance silently whenever the vault health dashboard is refreshed.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.maintenanceAutoRunOnDashboardRefresh).onChange(async (v) => {
-          this.plugin.settings.maintenanceAutoRunOnDashboardRefresh = v;
-          await this.plugin.saveSettings();
+        t.setValue(this.plugin.settings.maintenanceAutoRunOnDashboardRefresh).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.maintenanceAutoRunOnDashboardRefresh = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -655,9 +729,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Patch report retention")
       .setDesc("Number of patch report notes to keep.")
       .addSlider((s) =>
-        s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.patchReportRetentionCount = v;
-          await this.plugin.saveSettings();
+        s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.patchReportRetentionCount = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -665,9 +741,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Shape lint run retention")
       .setDesc("Number of shape lint run notes to keep.")
       .addSlider((s) =>
-        s.setLimits(5, 50, 5).setValue(this.plugin.settings.shapeLintRunRetentionCount).setDynamicTooltip().onChange(async (v) => {
-          this.plugin.settings.shapeLintRunRetentionCount = v;
-          await this.plugin.saveSettings();
+        s.setLimits(5, 50, 5).setValue(this.plugin.settings.shapeLintRunRetentionCount).setDynamicTooltip().onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.shapeLintRunRetentionCount = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
   }
@@ -679,10 +757,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Enable export")
       .setDesc("Enables vault inventory, meta, and ontology export commands.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.exportEnabled).onChange(async (v) => {
-          this.plugin.settings.exportEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(this.plugin.settings.exportEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.exportEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -700,26 +780,36 @@ export class ForgeSettingsTab extends PluginSettingTab {
     this.renderSectionHeading(el, "Run Exports");
 
     new Setting(el)
-      .setName("Export Vault Overview")
+      .setName("Export vault overview")
       .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-export.md in one pass. Inventory is schema-optional; meta requires schema and excludes ai_private notes.")
       .addButton((btn) =>
-        btn.setButtonText("Run").onClick(async () => {
-          runExportOverview(this.plugin).catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+        btn.setButtonText("Run").onClick(() => {
+          this.runAsync(async () => {
+            try {
+              await runExportOverview(this.plugin);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Unexpected error";
+              new Notice(`Forge: ${message}`, 6000);
+            }
           });
         })
       );
 
     new Setting(el)
-      .setName("Export Ontology Index")
+      .setName("Export ontology index")
       .setDesc(
         "Builds per-type relationship indexes using the inventory and the filter settings below. " +
         "Runs inventory export first if no inventory file is on disk."
       )
       .addButton((btn) =>
-        btn.setButtonText("Run").onClick(async () => {
-          runExportOntology(this.plugin).catch((e: Error) => {
-            new Notice(`Forge: ${e?.message ?? "Unexpected error"}`, 6000);
+        btn.setButtonText("Run").onClick(() => {
+          this.runAsync(async () => {
+            try {
+              await runExportOntology(this.plugin);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Unexpected error";
+              new Notice(`Forge: ${message}`, 6000);
+            }
           });
         })
       );
@@ -768,14 +858,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
     // Dashboard name
     new Setting(el)
       .setName("Dashboard note name")
-      .setDesc("Filename for the Dataview dashboard note created on first export run. Leave blank to use 'vault-dashboard'.")
+      .setDesc("Filename for the dataview dashboard note created on first export run. Leave blank to use 'vault-dashboard'.")
       .addText((t) =>
         t
-          .setPlaceholder("vault-dashboard")
+          .setPlaceholder("Vault-dashboard")
           .setValue(this.plugin.settings.exportDashboardName)
-          .onChange(async (v) => {
-            this.plugin.settings.exportDashboardName = v.trim();
-            await this.plugin.saveSettings();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.exportDashboardName = v.trim();
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -784,10 +876,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Private notes")
       .setDesc("When enabled, notes marked as private are counted separately in the overview and excluded from vault-meta.json.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.exportPrivateEnabled).onChange(async (v) => {
-          this.plugin.settings.exportPrivateEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(this.plugin.settings.exportPrivateEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            this.plugin.settings.exportPrivateEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -817,10 +911,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Reload from schema")
       .setDesc("Refresh field and value lists from the current schema.")
       .addButton((btn) =>
-        btn.setButtonText("Reload").onClick(async () => {
-          await this.plugin.schemaCache.refresh();
-          new Notice("Forge: schema reloaded.");
-          this.display();
+        btn.setButtonText("Reload").onClick(() => {
+          this.runAsync(async () => {
+            await this.plugin.schemaCache.refresh();
+            new Notice("Forge: schema reloaded.");
+            this.renderTab();
+          });
         })
       );
 
@@ -837,7 +933,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         this.plugin.settings.exportFilterField = v;
         this.plugin.settings.exportFilterValues = []; // reset values when field changes
         await this.plugin.saveSettings();
-        this.display();
+        this.renderTab();
       }
     );
 
@@ -885,9 +981,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
         t
           .setPlaceholder("Related")
           .setValue(this.plugin.settings.exportRelationshipHeading)
-          .onChange(async (v) => {
-            this.plugin.settings.exportRelationshipHeading = v.trim();
-            await this.plugin.saveSettings();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              this.plugin.settings.exportRelationshipHeading = v.trim();
+              await this.plugin.saveSettings();
+            });
           })
       );
 
@@ -920,14 +1018,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
         chip.createSpan({ text: val });
         const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
-        rm.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const idx = selected.indexOf(val);
-          if (idx > -1) selected.splice(idx, 1);
-          setCheckedMap.get(val)?.(false);
-          renderChips();
-          updateTrigger();
-          await this.plugin.saveSettings();
+        rm.addEventListener("click", (e) => {
+          this.runAsync(async () => {
+            e.stopPropagation();
+            const idx = selected.indexOf(val);
+            if (idx > -1) selected.splice(idx, 1);
+            setCheckedMap.get(val)?.(false);
+            renderChips();
+            updateTrigger();
+            await this.plugin.saveSettings();
+          });
         });
       });
     };
@@ -966,18 +1066,20 @@ export class ForgeSettingsTab extends PluginSettingTab {
       setCheckedMap.set(folderPath, setChecked);
       setChecked(selected.includes(folderPath));
 
-      row.addEventListener("click", async () => {
-        const idx = selected.indexOf(folderPath);
-        if (idx > -1) {
-          selected.splice(idx, 1);
-          setChecked(false);
-        } else {
-          selected.push(folderPath);
-          setChecked(true);
-        }
-        renderChips();
-        updateTrigger();
-        await this.plugin.saveSettings();
+      row.addEventListener("click", () => {
+        this.runAsync(async () => {
+          const idx = selected.indexOf(folderPath);
+          if (idx > -1) {
+            selected.splice(idx, 1);
+            setChecked(false);
+          } else {
+            selected.push(folderPath);
+            setChecked(true);
+          }
+          renderChips();
+          updateTrigger();
+          await this.plugin.saveSettings();
+        });
       });
     });
 
@@ -996,15 +1098,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
         triggerIcon.setText("▾");
       }
     };
-    document.addEventListener("click", onOutside);
+    activeDocument.addEventListener("click", onOutside);
 
     const observer = new MutationObserver(() => {
-      if (!document.contains(wrap)) {
-        document.removeEventListener("click", onOutside);
+      if (!activeDocument.contains(wrap)) {
+        activeDocument.removeEventListener("click", onOutside);
         observer.disconnect();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(activeDocument.body, { childList: true, subtree: true });
 
     renderChips();
     updateTrigger();
@@ -1025,14 +1127,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
         chip.createSpan({ text: val });
         const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
-        rm.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const idx = selected.indexOf(val);
-          if (idx > -1) selected.splice(idx, 1);
-          setCheckedMap.get(val)?.(false);
-          renderChips();
-          updateTrigger();
-          await this.plugin.saveSettings();
+        rm.addEventListener("click", (e) => {
+          this.runAsync(async () => {
+            e.stopPropagation();
+            const idx = selected.indexOf(val);
+            if (idx > -1) selected.splice(idx, 1);
+            setCheckedMap.get(val)?.(false);
+            renderChips();
+            updateTrigger();
+            await this.plugin.saveSettings();
+          });
         });
       });
     };
@@ -1071,18 +1175,20 @@ export class ForgeSettingsTab extends PluginSettingTab {
       setCheckedMap.set(folderPath, setChecked);
       setChecked(selected.includes(folderPath));
 
-      row.addEventListener("click", async () => {
-        const idx = selected.indexOf(folderPath);
-        if (idx > -1) {
-          selected.splice(idx, 1);
-          setChecked(false);
-        } else {
-          selected.push(folderPath);
-          setChecked(true);
-        }
-        renderChips();
-        updateTrigger();
-        await this.plugin.saveSettings();
+      row.addEventListener("click", () => {
+        this.runAsync(async () => {
+          const idx = selected.indexOf(folderPath);
+          if (idx > -1) {
+            selected.splice(idx, 1);
+            setChecked(false);
+          } else {
+            selected.push(folderPath);
+            setChecked(true);
+          }
+          renderChips();
+          updateTrigger();
+          await this.plugin.saveSettings();
+        });
       });
     });
 
@@ -1102,15 +1208,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
         triggerIcon.setText("▾");
       }
     };
-    document.addEventListener("click", onOutside);
+    activeDocument.addEventListener("click", onOutside);
 
     const observer = new MutationObserver(() => {
-      if (!document.contains(wrap)) {
-        document.removeEventListener("click", onOutside);
+      if (!activeDocument.contains(wrap)) {
+        activeDocument.removeEventListener("click", onOutside);
         observer.disconnect();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(activeDocument.body, { childList: true, subtree: true });
 
     renderChips();
     updateTrigger();
@@ -1131,14 +1237,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
         chip.createSpan({ text: val });
         const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
-        rm.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const idx = selected.indexOf(val);
-          if (idx > -1) selected.splice(idx, 1);
-          setCheckedMap.get(val)?.(false);
-          renderChips();
-          updateTrigger();
-          await this.plugin.saveSettings();
+        rm.addEventListener("click", (e) => {
+          this.runAsync(async () => {
+            e.stopPropagation();
+            const idx = selected.indexOf(val);
+            if (idx > -1) selected.splice(idx, 1);
+            setCheckedMap.get(val)?.(false);
+            renderChips();
+            updateTrigger();
+            await this.plugin.saveSettings();
+          });
         });
       });
     };
@@ -1177,18 +1285,20 @@ export class ForgeSettingsTab extends PluginSettingTab {
       setCheckedMap.set(folderPath, setChecked);
       setChecked(selected.includes(folderPath));
 
-      row.addEventListener("click", async () => {
-        const idx = selected.indexOf(folderPath);
-        if (idx > -1) {
-          selected.splice(idx, 1);
-          setChecked(false);
-        } else {
-          selected.push(folderPath);
-          setChecked(true);
-        }
-        renderChips();
-        updateTrigger();
-        await this.plugin.saveSettings();
+      row.addEventListener("click", () => {
+        this.runAsync(async () => {
+          const idx = selected.indexOf(folderPath);
+          if (idx > -1) {
+            selected.splice(idx, 1);
+            setChecked(false);
+          } else {
+            selected.push(folderPath);
+            setChecked(true);
+          }
+          renderChips();
+          updateTrigger();
+          await this.plugin.saveSettings();
+        });
       });
     });
 
@@ -1208,15 +1318,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
         triggerIcon.setText("▾");
       }
     };
-    document.addEventListener("click", onOutside);
+    activeDocument.addEventListener("click", onOutside);
 
     const observer = new MutationObserver(() => {
-      if (!document.contains(wrap)) {
-        document.removeEventListener("click", onOutside);
+      if (!activeDocument.contains(wrap)) {
+        activeDocument.removeEventListener("click", onOutside);
         observer.disconnect();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(activeDocument.body, { childList: true, subtree: true });
 
     renderChips();
     updateTrigger();
@@ -1229,13 +1339,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     // ── Enable ────────────────────────────────────────────────────
     new Setting(el)
-      .setName("Enable Vault Shape Engine")
+      .setName("Enable vault shape engine")
       .setDesc("Enables shape note processing and template refinement.")
       .addToggle((t) =>
-        t.setValue(s.shapesEnabled).onChange(async (v) => {
-          s.shapesEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(s.shapesEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            s.shapesEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -1259,9 +1371,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "in refinement, lint, and repair. Off by default to preserve existing behavior."
       )
       .addToggle((t) =>
-        t.setValue(s.shapeIncludeSubfolders ?? false).onChange(async (v) => {
-          s.shapeIncludeSubfolders = v;
-          await this.plugin.saveSettings();
+        t.setValue(s.shapeIncludeSubfolders ?? false).onChange((v) => {
+          this.runAsync(async () => {
+            s.shapeIncludeSubfolders = v;
+            await this.plugin.saveSettings();
+          });
         })
       );
 
@@ -1301,12 +1415,14 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Enable template refinement")
-      .setDesc("Allow the Refine Shape Templates command to create and update template notes.")
+      .setDesc("Allow the refine shape templates command to create and update template notes.")
       .addToggle((t) =>
-        t.setValue(s.shapeRefinementEnabled).onChange(async (v) => {
-          s.shapeRefinementEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(s.shapeRefinementEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            s.shapeRefinementEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -1327,10 +1443,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
           "type participates as a source (or flexible member) are included."
         )
         .addToggle((t) =>
-          t.setValue(s.shapeInjectRelationships ?? false).onChange(async (v) => {
-            s.shapeInjectRelationships = v;
-            await this.plugin.saveSettings();
-            this.display();
+          t.setValue(s.shapeInjectRelationships ?? false).onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeInjectRelationships = v;
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           })
         );
 
@@ -1339,9 +1457,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
           .setName("Relationship parent heading")
           .setDesc("The heading under which relationship subheadings are grouped.")
           .addText((t) =>
-            t.setValue(s.shapeRelationshipHeading ?? "Related").onChange(async (v) => {
-              s.shapeRelationshipHeading = v.trim() || "Related";
-              await this.plugin.saveSettings();
+            t.setValue(s.shapeRelationshipHeading ?? "Related").onChange((v) => {
+              this.runAsync(async () => {
+                s.shapeRelationshipHeading = v.trim() || "Related";
+                await this.plugin.saveSettings();
+              });
             })
           );
 
@@ -1353,9 +1473,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
             dd.addOption("2", "H2");
             dd.addOption("3", "H3");
             dd.setValue(String(s.shapeRelationshipHeadingLevel ?? 2));
-            dd.onChange(async (v) => {
-              s.shapeRelationshipHeadingLevel = parseInt(v, 10);
-              await this.plugin.saveSettings();
+            dd.onChange((v) => {
+              this.runAsync(async () => {
+                s.shapeRelationshipHeadingLevel = parseInt(v, 10);
+                await this.plugin.saveSettings();
+              });
             });
           });
 
@@ -1370,9 +1492,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
             dd.addOption("append", "Append at end");
             dd.addOption("inject", "Inject into existing heading");
             dd.setValue(s.shapeRelationshipPosition ?? "append");
-            dd.onChange(async (v) => {
-              s.shapeRelationshipPosition = v as "inject" | "append";
-              await this.plugin.saveSettings();
+            dd.onChange((v) => {
+              this.runAsync(async () => {
+                s.shapeRelationshipPosition = v as "inject" | "append";
+                await this.plugin.saveSettings();
+              });
             });
           });
       }
@@ -1381,9 +1505,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
         .setName("Run refinement")
         .setDesc("Process all shape notes and write or update template notes now.")
         .addButton((btn) =>
-          btn.setButtonText("Refine Shape Templates").setCta().onClick(async () => {
-            const { runRefineShapes } = await import("./commands/refine-shapes");
-            await runRefineShapes(this.plugin);
+          btn.setButtonText("Refine shape templates").setCta().onClick(() => {
+            this.runAsync(async () => {
+              const { runRefineShapes } = await import("./commands/refine-shapes");
+              await runRefineShapes(this.plugin);
+            });
           })
         );
     }
@@ -1403,10 +1529,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "in the correct order, with no empty sections."
       )
       .addToggle((t) =>
-        t.setValue(s.shapeLintEnabled).onChange(async (v) => {
-          s.shapeLintEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(s.shapeLintEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            s.shapeLintEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -1418,21 +1546,25 @@ export class ForgeSettingsTab extends PluginSettingTab {
           "When off, Shape Lint checks required template headings and heading levels, but ignores extra headings."
         )
         .addToggle((t) =>
-          t.setValue(s.shapeLintStrictMode).onChange(async (v) => {
-            s.shapeLintStrictMode = v;
-            await this.plugin.saveSettings();
+          t.setValue(s.shapeLintStrictMode).onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeLintStrictMode = v;
+              await this.plugin.saveSettings();
+            });
           })
         );
 
       new Setting(el)
         .setName("Exclude inbox folder")
         .setDesc(
-          "Skip notes in the configured inbox folder during Shape Lint so draft structures can evolve before heading rules are enforced."
+          "Skip notes in the configured inbox folder during shape lint so draft structures can evolve before heading rules are enforced."
         )
         .addToggle((t) =>
-          t.setValue(s.shapeLintExcludeInboxFolder).onChange(async (v) => {
-            s.shapeLintExcludeInboxFolder = v;
-            await this.plugin.saveSettings();
+          t.setValue(s.shapeLintExcludeInboxFolder).onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeLintExcludeInboxFolder = v;
+              await this.plugin.saveSettings();
+            });
           })
         );
 
@@ -1443,10 +1575,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
           dd.addOption("all", "All vault notes");
           dd.addOption("folder", "Selected folders only");
           dd.setValue(s.shapeLintScope ?? "all");
-          dd.onChange(async (v) => {
-            s.shapeLintScope = v as "all" | "folder";
-            await this.plugin.saveSettings();
-            this.display();
+          dd.onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeLintScope = v as "all" | "folder";
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           });
         });
 
@@ -1469,12 +1603,14 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Enable shape repair")
-      .setDesc("Allow the Run Shape Repair command to modify notes.")
+      .setDesc("Allow the run shape repair command to modify notes.")
       .addToggle((t) =>
-        t.setValue(s.shapeRepairEnabled).onChange(async (v) => {
-          s.shapeRepairEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
+        t.setValue(s.shapeRepairEnabled).onChange((v) => {
+          this.runAsync(async () => {
+            s.shapeRepairEnabled = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         })
       );
 
@@ -1486,10 +1622,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
           dd.addOption("all", "All vault notes");
           dd.addOption("folder", "Selected folders only");
           dd.setValue(s.shapeRepairScope ?? "all");
-          dd.onChange(async (v) => {
-            s.shapeRepairScope = v as "all" | "folder";
-            await this.plugin.saveSettings();
-            this.display();
+          dd.onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeRepairScope = v as "all" | "folder";
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           });
         });
 
@@ -1514,9 +1652,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
           "Wrap file paths in [[wikilinks]] in repair run notes so you can navigate directly to affected files."
         )
         .addToggle((t) =>
-          t.setValue(s.shapeRepairFileLinks).onChange(async (v) => {
-            s.shapeRepairFileLinks = v;
-            await this.plugin.saveSettings();
+          t.setValue(s.shapeRepairFileLinks).onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeRepairFileLinks = v;
+              await this.plugin.saveSettings();
+            });
           })
         );
 
@@ -1528,9 +1668,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
             .setLimits(5, 50, 5)
             .setValue(s.shapeRepairHistoryRetentionCount)
             .setDynamicTooltip()
-            .onChange(async (v) => {
-              s.shapeRepairHistoryRetentionCount = v;
-              await this.plugin.saveSettings();
+            .onChange((v) => {
+              this.runAsync(async () => {
+                s.shapeRepairHistoryRetentionCount = v;
+                await this.plugin.saveSettings();
+              });
             })
         );
 
@@ -1538,15 +1680,19 @@ export class ForgeSettingsTab extends PluginSettingTab {
         .setName("Run shape repair")
         .setDesc("Add missing headings and reorder sections to match templates now.")
         .addButton((btn) =>
-          btn.setButtonText("Dry Run").onClick(async () => {
-            const { runShapeRepair } = await import("./commands/shape-repair");
-            await runShapeRepair(this.plugin, true);
+          btn.setButtonText("Dry run").onClick(() => {
+            this.runAsync(async () => {
+              const { runShapeRepair } = await import("./commands/shape-repair");
+              await runShapeRepair(this.plugin, true);
+            });
           })
         )
         .addButton((btn) =>
-          btn.setButtonText("Run Shape Repair").setCta().onClick(async () => {
-            const { runShapeRepair } = await import("./commands/shape-repair");
-            await runShapeRepair(this.plugin, false);
+          btn.setButtonText("Run shape repair").setCta().onClick(() => {
+            this.runAsync(async () => {
+              const { runShapeRepair } = await import("./commands/shape-repair");
+              await runShapeRepair(this.plugin, false);
+            });
           })
         );
     }
@@ -1579,10 +1725,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
           dd.setValue(s.shapeTypeTargetField || "");
         }
 
-        dd.onChange(async (v) => {
-          s.shapeTypeTargetField = v;
-          await this.plugin.saveSettings();
-          this.display();
+        dd.onChange((v) => {
+          this.runAsync(async () => {
+            s.shapeTypeTargetField = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         });
       });
   }
@@ -1620,10 +1768,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
           dd.setValue(s[settingKey] ?? "");
         }
 
-        dd.onChange(async (v) => {
-          s[settingKey] = v;
-          await this.plugin.saveSettings();
-          this.display();
+        dd.onChange((v) => {
+          this.runAsync(async () => {
+            s[settingKey] = v;
+            await this.plugin.saveSettings();
+            this.renderTab();
+          });
         });
       });
   }
@@ -1634,7 +1784,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const container = el.createDiv({ cls: "forge-shape-fields" });
 
     // Load schema and render field rows
-    loadSchema(this.plugin.app, s).then((schema) => {
+    this.runAsync(async () => {
+      const schema = await loadSchema(this.plugin.app, s);
       if (!schema) {
         container.createEl("p", {
           text: "Could not load schema. Ensure schema.md exists and is valid.",
@@ -1648,7 +1799,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
         ...schema.frontmatter.optional,
       ];
 
-      // Order by frontmatterFieldOrder if set
       const order = s.frontmatterFieldOrder;
       const ordered = order.length > 0
         ? [
@@ -1659,7 +1809,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
           ]
         : allFields;
 
-      // Filter out runtime fields
       const runtimeFields = new Set([
         s.shapeTypeTargetField,
         s.shapeCreatedField,
@@ -1675,7 +1824,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
         return;
       }
 
-      // Header row
       const header = container.createDiv({ cls: "forge-shape-field-header" });
       header.createSpan({ text: "Include", cls: "forge-shape-field-col-include" });
       header.createSpan({ text: "Field", cls: "forge-shape-field-col-name" });
@@ -1685,7 +1833,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
         this.renderShapeFieldRow(container, field, s);
       }
 
-      // Runtime fields note
       const runtimeNote = [
         "The type target field is always set to the shape name.",
         s.shapeCreatedField ? `'${s.shapeCreatedField}' is stamped on create.` : null,
@@ -1730,12 +1877,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
       await this.plugin.saveSettings();
     };
 
-    checkbox.addEventListener("change", async () => {
-      valueControl.setEnabled(checkbox.checked);
-      await save();
+    checkbox.addEventListener("change", () => {
+      this.runAsync(async () => {
+        valueControl.setEnabled(checkbox.checked);
+        await save();
+      });
     });
     valueControl.setEnabled(existing.include);
-    valueControl.onChanged(save);
+    valueControl.onChanged(() => {
+      this.runAsync(save);
+    });
   }
 
   private renderSectionHeading(el: HTMLElement, title: string): void {
@@ -1757,7 +1908,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       const emptyOpt = select.createEl("option", { value: "", text: "— none —" });
       for (const val of field.values) {
         const opt = select.createEl("option", { value: val, text: val });
-        if (val === String(currentValue ?? "")) opt.selected = true;
+        if (val === this.stringifyUiValue(currentValue)) opt.selected = true;
       }
       if (!currentValue) emptyOpt.selected = true;
 
@@ -1774,8 +1925,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
       // Boolean dropdown
       const select = container.createEl("select", { cls: "forge-shape-field-select" });
       select.createEl("option", { value: "", text: "— none —" });
-      select.createEl("option", { value: "true", text: "true" });
-      select.createEl("option", { value: "false", text: "false" });
+      select.createEl("option", { value: "true", text: "True" });
+      select.createEl("option", { value: "false", text: "False" });
       const strVal = currentValue === true ? "true" : currentValue === false ? "false" : "";
       select.value = strVal;
       select.addEventListener("change", notify);
@@ -1796,9 +1947,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
       const input = container.createEl("input", {
         type: "text",
         cls: "forge-shape-field-input",
-        attr: { placeholder: "value1, value2" },
+        attr: { placeholder: "Value1, value2" },
       });
-      const arr = Array.isArray(currentValue) ? (currentValue as string[]).join(", ") : String(currentValue ?? "");
+      const arr = Array.isArray(currentValue)
+        ? currentValue.filter((value): value is string => typeof value === "string").join(", ")
+        : this.stringifyUiValue(currentValue);
       input.value = arr;
       input.addEventListener("input", notify);
 
@@ -1817,9 +1970,9 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const input = container.createEl("input", {
       type: "text",
       cls: "forge-shape-field-input",
-      attr: { placeholder: field.type === "date" ? "yyyy-MM-dd" : "" },
+      attr: { placeholder: field.type === "date" ? "Yyyy-MM-dd" : "" },
     });
-    input.value = String(currentValue ?? "");
+    input.value = this.stringifyUiValue(currentValue);
     input.addEventListener("input", notify);
 
     return {
@@ -1839,7 +1992,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     el: HTMLElement,
     name: string,
     desc: string,
-    settingKey: keyof import("./settings").ForgeSettings,
+    settingKey: StringSettingKey,
     fallback: string,
     _schemaNote = false   // reserved for future schema-specific behaviour
   ): void {
@@ -1850,10 +2003,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setDesc(`${desc} Current: ${current}`)
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
-          new FolderSuggestModal(this.app, async (folder) => {
-            (this.plugin.settings as unknown as Record<string, unknown>)[settingKey as string] = folder.path || fallback;
-            await this.plugin.saveSettings();
-            this.display();
+          new FolderSuggestModal(this.app, (folder) => {
+            this.runAsync(async () => {
+              this.setStringSetting(settingKey, folder.path || fallback);
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           }).open();
         })
       );
@@ -1868,14 +2023,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setDesc(`Path to schema.md relative to vault root. Current: ${current}`)
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
-          new MarkdownFileSuggestModal(this.app, async (file) => {
-            const lastSlash = file.path.lastIndexOf("/");
-            this.plugin.settings.schemaNoteFolder =
-              lastSlash >= 0 ? file.path.substring(0, lastSlash) : "";
-            this.plugin.settings.schemaNoteFile =
-              lastSlash >= 0 ? file.path.substring(lastSlash + 1) : file.path;
-            await this.plugin.saveSettings();
-            this.display();
+          new MarkdownFileSuggestModal(this.app, (file) => {
+            this.runAsync(async () => {
+              const lastSlash = file.path.lastIndexOf("/");
+              this.plugin.settings.schemaNoteFolder =
+                lastSlash >= 0 ? file.path.substring(0, lastSlash) : "";
+              this.plugin.settings.schemaNoteFile =
+                lastSlash >= 0 ? file.path.substring(lastSlash + 1) : file.path;
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           }).open();
         })
       );
@@ -1887,16 +2044,18 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Version field location")
-      .setDesc("Where the schema version is stored — inline metadata (key:: value) or frontmatter.")
+      .setDesc("Where the schema version is stored — inline metadata (key:: Value) or frontmatter.")
       .addDropdown((dd) =>
         dd
-          .addOption("inline", "Inline (key:: value)")
+          .addOption("inline", "Inline (key:: Value)")
           .addOption("frontmatter", "Frontmatter")
           .setValue(s.schemaVersionLocation ?? "inline")
-          .onChange(async (v) => {
-            s.schemaVersionLocation = v as "frontmatter" | "inline";
-            await this.plugin.saveSettings();
-            this.display();
+          .onChange((v) => {
+            this.runAsync(async () => {
+              s.schemaVersionLocation = v as "frontmatter" | "inline";
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           })
       );
 
@@ -1927,10 +2086,12 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setDesc(`Path to the patch note loaded by Apply Vault Patch. Current: ${current}`)
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
-          new PatchFileSuggestModal(this.app, async (file) => {
-            this.plugin.settings.patchDefaultFile = file.path;
-            await this.plugin.saveSettings();
-            this.display();
+          new PatchFileSuggestModal(this.app, (file) => {
+            this.runAsync(async () => {
+              this.plugin.settings.patchDefaultFile = file.path;
+              await this.plugin.saveSettings();
+              this.renderTab();
+            });
           }).open();
         })
       );
@@ -1959,9 +2120,13 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     setting.addDropdown((d) => {
       d.addOption("", "— select a field —");
-      fields.forEach((f) => d.addOption(f, f));
-      d.setValue(currentValue).onChange(async (v) => {
-        await onChange(v);
+      fields.forEach((f) => {
+        d.addOption(f, f);
+      });
+      d.setValue(currentValue).onChange((v) => {
+        this.runAsync(async () => {
+          await onChange(v);
+        });
       });
     });
   }
@@ -1991,13 +2156,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
         const chip = chipStrip.createDiv({ cls: "forge-ms-chip" });
         chip.createSpan({ text: val });
         const rm = chip.createSpan({ cls: "forge-ms-chip-rm", text: "×" });
-        rm.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const idx = selected.indexOf(val);
-          if (idx > -1) selected.splice(idx, 1);
-          renderChips();
-          updateTrigger();
-          await onChange([...selected]);
+        rm.addEventListener("click", (e) => {
+          this.runAsync(async () => {
+            e.stopPropagation();
+            const idx = selected.indexOf(val);
+            if (idx > -1) selected.splice(idx, 1);
+            renderChips();
+            updateTrigger();
+            await onChange([...selected]);
+          });
         });
       });
     };
@@ -2030,18 +2197,20 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
       setChecked(selected.includes(val));
 
-      row.addEventListener("click", async () => {
-        const idx = selected.indexOf(val);
-        if (idx > -1) {
-          selected.splice(idx, 1);
-          setChecked(false);
-        } else {
-          selected.push(val);
-          setChecked(true);
-        }
-        renderChips();
-        updateTrigger();
-        await onChange([...selected]);
+      row.addEventListener("click", () => {
+        this.runAsync(async () => {
+          const idx = selected.indexOf(val);
+          if (idx > -1) {
+            selected.splice(idx, 1);
+            setChecked(false);
+          } else {
+            selected.push(val);
+            setChecked(true);
+          }
+          renderChips();
+          updateTrigger();
+          await onChange([...selected]);
+        });
       });
     });
 
@@ -2064,16 +2233,16 @@ export class ForgeSettingsTab extends PluginSettingTab {
         triggerIcon.setText("▾");
       }
     };
-    document.addEventListener("click", onOutside);
+    activeDocument.addEventListener("click", onOutside);
 
     // Cleanup listener when element is removed
     const observer = new MutationObserver(() => {
-      if (!document.contains(wrap)) {
-        document.removeEventListener("click", onOutside);
+      if (!activeDocument.contains(wrap)) {
+        activeDocument.removeEventListener("click", onOutside);
         observer.disconnect();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(activeDocument.body, { childList: true, subtree: true });
 
     renderChips();
     updateTrigger();
@@ -2117,7 +2286,7 @@ class FolderSuggestModal extends FuzzySuggestModal<TFolder> {
 class MarkdownFileSuggestModal extends FuzzySuggestModal<TFile> {
   constructor(app: App, private onChoose: (file: TFile) => void) {
     super(app);
-    this.setPlaceholder("Choose a markdown note...");
+    this.setPlaceholder("Choose a Markdown note...");
   }
 
   getItems(): TFile[] {

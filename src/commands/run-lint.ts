@@ -9,7 +9,7 @@
 //   5. Show results modal — summary with error/warning/info counts
 //   6. If errors and settings allow: offer to open Vault Repair (Milestone 7)
 
-import { App, Modal, Notice, normalizePath } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 import type ForgePlugin from "../main";
 import { LintRunResult } from "../lint-engine";
 import {
@@ -293,12 +293,12 @@ class LintResultsModal extends Modal {
     const buttonRow = footer.createDiv("forge-button-row");
 
     const viewBtn = buttonRow.createEl("button", {
-      text: "View Lint Run Note",
+      text: "View lint run note",
       cls: "mod-cta",
     });
     viewBtn.addEventListener("click", () => {
       this.close();
-      this.app.workspace.openLinkText(this.runNotePath, "", false);
+      void this.app.workspace.openLinkText(this.runNotePath, "", false);
     });
 
     // Repair button — shown based on lintRepairThreshold setting
@@ -308,10 +308,10 @@ class LintResultsModal extends Modal {
       : r.errors.length > 0;
 
     if (hasRepairable) {
-      const repairBtn = buttonRow.createEl("button", { text: "Open Vault Repair" });
+      const repairBtn = buttonRow.createEl("button", { text: "Open vault repair" });
       repairBtn.addEventListener("click", () => {
         this.close();
-        runVaultRepair(this.plugin);
+        void runVaultRepair(this.plugin);
       });
     }
 

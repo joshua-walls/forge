@@ -31,7 +31,7 @@ export async function runValidateSchema(plugin: ForgePlugin): Promise<void> {
 
   try {
     await app.vault.read(file);
-  } catch (e) {
+  } catch {
     new Notice("Forge: Could not read schema.md.", 5000);
     return;
   }
@@ -114,7 +114,7 @@ class ValidateSchemaModal extends Modal {
     });
     openBtn.addEventListener("click", () => {
       this.close();
-      this.app.workspace.openLinkText(this.schemaPath, "", false);
+      void this.app.workspace.openLinkText(this.schemaPath, "", false);
     });
 
     const closeBtn = buttonRow.createEl("button", { text: "Close" });

@@ -95,7 +95,7 @@ export function parseNote(raw: string, file: TFile): VaultNote {
   let frontmatter: Record<string, unknown> = {};
 
   try {
-    const parsed = parseYaml(fmText);
+    const parsed: unknown = parseYaml(fmText);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       frontmatter = parsed as Record<string, unknown>;
     }
@@ -238,9 +238,13 @@ export function getFmString(
   if (value === null || value === undefined) return "";
   if (Array.isArray(value)) {
     return value
-      .filter((v) => v !== null && v !== undefined)
+      .filter((v): v is string | number | boolean => (
+        typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+      ))
       .map((v) => String(v))
       .join("; ");
   }
-  return String(value);
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
 }

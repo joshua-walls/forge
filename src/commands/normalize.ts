@@ -29,9 +29,8 @@ import {
   convertTagSeparator,
   isInvalidTag,
 } from "../utils/tags";
-import { buildExemptList, getMarkdownFiles, isExempt, safeTimestamp, todayString } from "../utils/files";
+import { buildExemptList, getMarkdownFiles, isExempt } from "../utils/files";
 import { loadSchema } from "../utils/schema";
-import { ensureFolder } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -244,7 +243,7 @@ async function normalizeFrontmatterPass(
     // Lowercase values for enum fields
     for (const field of lowercaseFields) {
       if (field in fm && typeof fm[field] === "string") {
-        const original = fm[field] as string;
+        const original = fm[field];
         const lower = original.toLowerCase();
         if (original !== lower) {
           fm[field] = lower;
@@ -328,7 +327,7 @@ class NormalizeConfirmModal extends Modal {
 
     if (this.plugin.settings.patchBackupEnabled) {
       contentEl.createEl("p", {
-        text: "Backups will be written to System/Forge/Patches/Backups/",
+        text: "Backups will be written to system/forge/patches/backups/",
         cls: "forge-backup-notice",
       });
     }
@@ -339,9 +338,11 @@ class NormalizeConfirmModal extends Modal {
       text: "Apply",
       cls: "mod-cta",
     });
-    applyBtn.addEventListener("click", async () => {
-      this.close();
-      await this.onConfirm();
+    applyBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.onConfirm();
+      })();
     });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });

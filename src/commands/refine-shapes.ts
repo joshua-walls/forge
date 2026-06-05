@@ -20,6 +20,12 @@ import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { stringifyYaml } from "obsidian";
 import { VaultSchema, SchemaRelationship } from "../utils/schema";
 
+function formatScalarValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
+
 export interface RefinementResult {
   shape: string;
   template: string;
@@ -39,15 +45,15 @@ export interface RefinementRunResult {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export async function runRefineShapes(plugin: ForgePlugin): Promise<void> {
-  const { app, settings } = plugin;
+  const { settings } = plugin;
 
   if (!settings.shapesEnabled) {
-    new Notice("Forge: Shapes is not enabled. Enable it in Settings → Shapes.", 5000);
+    new Notice("Forge: Shapes is not enabled. Enable it in settings → shapes.", 5000);
     return;
   }
 
   if (!settings.shapeRefinementEnabled) {
-    new Notice("Forge: Template refinement is not enabled. Enable it in Settings → Shapes.", 5000);
+    new Notice("Forge: Template refinement is not enabled. Enable it in settings → shapes.", 5000);
     return;
   }
 
@@ -146,8 +152,9 @@ async function processShape(
   }
 
   const noteType = note.frontmatter["type"];
-  if (noteType && String(noteType).toLowerCase() !== "shape") {
-    return skipped(shapeName, templateFileName, `type is '${noteType}', not 'shape'`);
+  const noteTypeText = formatScalarValue(noteType);
+  if (noteTypeText && noteTypeText.toLowerCase() !== "shape") {
+    return skipped(shapeName, templateFileName, `type is '${noteTypeText}', not 'shape'`);
   }
 
   const structure = getSectionBody(note.body, "Structure");

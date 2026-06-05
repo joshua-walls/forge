@@ -36,7 +36,7 @@ export async function ensureFolder(app: App, folderPath: string): Promise<void> 
     if (!node) {
       try {
         await app.vault.createFolder(current);
-      } catch (e) {
+      } catch {
         // May already exist due to race condition — ignore
       }
     }

@@ -47,7 +47,10 @@ interface DocContext {
  */
 function interpolate(template: string, ctx: DocContext): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return (ctx as any)[key] ?? `{{${key}}}`;
+    if (key in ctx) {
+      return ctx[key as keyof DocContext];
+    }
+    return `{{${key}}}`;
   });
 }
 
@@ -112,13 +115,13 @@ function buildDocList(ctx: DocContext): GeneratedDoc[] {
   // Tag and type are inferred from filename — override by adding a frontmatter
   // block to the .md file itself (the installer strips it before writing).
   const docs: Array<{ relativePath: string; raw: string; type: string; tags: string[] }> = [
-    ...Object.entries(docsRaw as Record<string, string>).map(([key, raw]) => ({
+    ...Object.entries(docsRaw).map(([key, raw]) => ({
       relativePath: `Docs/${key}.md`,
       raw,
       type: "reference",
       tags: inferTags(key, "docs"),
     })),
-    ...Object.entries(examplesRaw as Record<string, string>).map(([key, raw]) => ({
+    ...Object.entries(examplesRaw).map(([key, raw]) => ({
       relativePath: `Examples/${key}.md`,
       raw,
       type: inferType(key),

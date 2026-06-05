@@ -86,8 +86,10 @@ export async function appendLintHistory(
   if (histFile instanceof TFile) {
     try {
       const raw = await app.vault.read(histFile);
-      history = JSON.parse(raw);
-      if (!Array.isArray(history)) history = [];
+      const parsed: unknown = JSON.parse(raw);
+      history = Array.isArray(parsed) ? parsed.filter((item): item is typeof entry => (
+        typeof item === "object" && item !== null
+      )) : [];
     } catch {
       history = [];
     }

@@ -9,8 +9,7 @@
 import { App, Modal, Notice, Setting, TFile } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { getMarkdownFiles, isExempt } from "../utils/files";
-import { loadSchema } from "../utils/schema";
+import { getMarkdownFiles } from "../utils/files";
 
 // ── Rename Dataview Folder ────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ class RenameDataviewModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Rename Dataview Folder" });
+    contentEl.createEl("h2", { text: "Rename dataview folder" });
     contentEl.createEl("p", {
       text: "Updates folder path references inside dataview blocks only. Lines outside dataview blocks are never touched.",
       cls: "setting-item-description",
@@ -43,7 +42,7 @@ class RenameDataviewModal extends Modal {
       .setName("Current folder path")
       .setDesc("The folder path currently referenced in dataview queries.")
       .addText((t) => {
-        t.setPlaceholder("Work/Skills");
+        t.setPlaceholder("Work/skills");
         t.onChange((val) => { this.currentFolder = val.trim().replace(/^["']+|["']+$/g, "").replace(/\/+$/, ""); });
       });
 
@@ -51,7 +50,7 @@ class RenameDataviewModal extends Modal {
       .setName("New folder path")
       .setDesc("The replacement folder path.")
       .addText((t) => {
-        t.setPlaceholder("Work/Disciplines");
+        t.setPlaceholder("Work/disciplines");
         t.onChange((val) => { this.newFolder = val.trim().replace(/^["']+|["']+$/g, "").replace(/\/+$/, ""); });
       });
 
@@ -66,17 +65,19 @@ class RenameDataviewModal extends Modal {
     const buttonRow = contentEl.createDiv("forge-button-row");
 
     const previewBtn = buttonRow.createEl("button", { text: "Preview", cls: "mod-cta" });
-    previewBtn.addEventListener("click", async () => {
-      if (!this.currentFolder || !this.newFolder) {
-        new Notice("Forge: Both folder paths are required.", 3000);
-        return;
-      }
-      if (this.currentFolder === this.newFolder) {
-        new Notice("Forge: Current and new folder paths are the same.", 3000);
-        return;
-      }
-      this.close();
-      await this.runRename(true);
+    previewBtn.addEventListener("click", () => {
+      void (async () => {
+        if (!this.currentFolder || !this.newFolder) {
+          new Notice("Forge: Both folder paths are required.", 3000);
+          return;
+        }
+        if (this.currentFolder === this.newFolder) {
+          new Notice("Forge: Current and new folder paths are the same.", 3000);
+          return;
+        }
+        this.close();
+        await this.runRename(true);
+      })();
     });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
@@ -186,7 +187,7 @@ class DataviewRenameConfirmModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Rename Dataview Folder — Confirm" });
+    contentEl.createEl("h2", { text: "Rename dataview folder — confirm" });
     contentEl.createEl("p", {
       text: `"${this.currentFolder}" → "${this.newFolder}"`,
       cls: "forge-patch-description",
@@ -208,7 +209,7 @@ class DataviewRenameConfirmModal extends Modal {
 
     if (this.plugin.settings.patchBackupEnabled) {
       contentEl.createEl("p", {
-        text: "Backups will be written to System/Forge/Patches/Backups/",
+        text: "Backups will be written to system/forge/patches/backups/",
         cls: "forge-backup-notice",
       });
     }
@@ -216,25 +217,27 @@ class DataviewRenameConfirmModal extends Modal {
     const buttonRow = contentEl.createDiv("forge-button-row");
 
     const applyBtn = buttonRow.createEl("button", { text: "Apply", cls: "mod-cta" });
-    applyBtn.addEventListener("click", async () => {
-      this.close();
+    applyBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
 
-      const paths = getVaultPaths(this.plugin.settings);
-      let changed = 0;
+        const paths = getVaultPaths(this.plugin.settings);
+        let changed = 0;
 
-      for (const { file, updated } of this.candidates) {
-        if (this.plugin.settings.patchBackupEnabled) {
-          const { backupNote } = await import("../utils/frontmatter");
-          await backupNote(this.app, file, paths.patchBackups);
+        for (const { file, updated } of this.candidates) {
+          if (this.plugin.settings.patchBackupEnabled) {
+            const { backupNote } = await import("../utils/frontmatter");
+            await backupNote(this.app, file, paths.patchBackups);
+          }
+          await this.app.vault.modify(file, updated);
+          changed++;
         }
-        await this.app.vault.modify(file, updated);
-        changed++;
-      }
 
-      new Notice(
-        `Forge: Updated dataview references in ${changed} file(s).`,
-        4000
-      );
+        new Notice(
+          `Forge: Updated dataview references in ${changed} file(s).`,
+          4000
+        );
+      })();
     });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });

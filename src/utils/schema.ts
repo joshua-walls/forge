@@ -8,6 +8,12 @@ import { App, TFile, parseYaml } from "obsidian";
 import type { ForgeSettings } from "../settings";
 import { getVaultPaths } from "../vault-paths";
 
+function stringifySchemaValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SchemaLintRule {
@@ -174,7 +180,7 @@ export function parseSchemaNote(raw: string, options?: ParseSchemaOptions): Vaul
     // Read from YAML frontmatter block
     const fmData = parseYaml(fmText) as Record<string, unknown> | null;
     const val = fmData?.[versionField];
-    if (val !== undefined && val !== null) version = String(val);
+    if (val !== undefined && val !== null) version = stringifySchemaValue(val);
   } else {
     // Read from inline metadata (key:: value)
     // Handles both bare values (version:: 7.0) and quoted values (version:: "7.0").
@@ -227,14 +233,14 @@ export function parseSchemaNote(raw: string, options?: ParseSchemaOptions): Vaul
     if (val === null || typeof val !== "object") continue;
     const r = val as Record<string, unknown>;
     relationships[key] = {
-      description: String(r.description ?? ""),
+      description: stringifySchemaValue(r.description),
       direction: (r.direction as SchemaRelationship["direction"]) ?? "flexible",
       allowed_between: Array.isArray(r.allowed_between)
         ? r.allowed_between.map(String)
         : undefined,
       sources: Array.isArray(r.sources) ? r.sources.map(String) : undefined,
       targets: Array.isArray(r.targets) ? r.targets.map(String) : undefined,
-      template_heading: String(r.template_heading ?? key),
+      template_heading: stringifySchemaValue(r.template_heading) || key,
     };
   }
 
@@ -342,22 +348,23 @@ export function validateSchemaNote(
     } else {
       fm.required.forEach((entry: unknown, i: number) => {
         const e = entry as Record<string, unknown>;
+        const name = stringifySchemaValue(e.name);
         if (!e || typeof e !== "object") {
           issues.push({ severity: "error", message: `frontmatter.required[${i}] must be an object` });
           return;
         }
         if (!e.name) issues.push({ severity: "error", message: `frontmatter.required[${i}] is missing 'name'` });
-        if (!e.type) issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${e.name}') is missing 'type'` });
-        if (!e.severity) issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${e.name}') is missing 'severity'` });
+        if (!e.type) issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${name}') is missing 'type'` });
+        if (!e.severity) issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${name}') is missing 'severity'` });
         if (e.type === "enum" && !Array.isArray(e.values)) {
-          issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${e.name}') is type enum but has no values list` });
+          issues.push({ severity: "error", message: `frontmatter.required[${i}] ('${name}') is type enum but has no values list` });
         }
         if (e.values_meta && typeof e.values_meta === "object" && Array.isArray(e.values)) {
-          const metaKeys = Object.keys(e.values_meta as object);
+          const metaKeys = Object.keys(e.values_meta);
           const valueKeys = e.values as string[];
           const missing = valueKeys.filter((v) => !metaKeys.includes(v));
           if (missing.length > 0) {
-            issues.push({ severity: "warning", message: `frontmatter.required ('${e.name}') values_meta is missing keys: ${missing.join(", ")}` });
+            issues.push({ severity: "warning", message: `frontmatter.required ('${name}') values_meta is missing keys: ${missing.join(", ")}` });
           }
         }
       });
@@ -368,15 +375,16 @@ export function validateSchemaNote(
     } else {
       fm.optional.forEach((entry: unknown, i: number) => {
         const e = entry as Record<string, unknown>;
+        const name = stringifySchemaValue(e.name);
         if (!e || typeof e !== "object") {
           issues.push({ severity: "error", message: `frontmatter.optional[${i}] must be an object` });
           return;
         }
         if (!e.name) issues.push({ severity: "error", message: `frontmatter.optional[${i}] is missing 'name'` });
-        if (!e.type) issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${e.name}') is missing 'type'` });
-        if (!e.severity) issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${e.name}') is missing 'severity'` });
+        if (!e.type) issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${name}') is missing 'type'` });
+        if (!e.severity) issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${name}') is missing 'severity'` });
         if (e.type === "enum" && !Array.isArray(e.values)) {
-          issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${e.name}') is type enum but has no values list` });
+          issues.push({ severity: "error", message: `frontmatter.optional[${i}] ('${name}') is type enum but has no values list` });
         }
       });
     }
@@ -390,6 +398,7 @@ export function validateSchemaNote(
     } else {
       inl.allowed.forEach((entry: unknown, i: number) => {
         const e = entry as Record<string, unknown>;
+        const name = stringifySchemaValue(e.name);
         if (!e || typeof e !== "object") {
           issues.push({ severity: "error", message: `inline.allowed[${i}] must be an object` });
           return;
@@ -399,9 +408,9 @@ export function validateSchemaNote(
         }
         if (e.required_when) {
           const rw = e.required_when as Record<string, unknown>;
-          if (!rw.field) issues.push({ severity: "error", message: `inline.allowed[${i}] ('${e.name}') required_when is missing 'field'` });
+          if (!rw.field) issues.push({ severity: "error", message: `inline.allowed[${i}] ('${name}') required_when is missing 'field'` });
           if (!Array.isArray(rw.values) || rw.values.length === 0) {
-            issues.push({ severity: "error", message: `inline.allowed[${i}] ('${e.name}') required_when.values must be a non-empty list` });
+            issues.push({ severity: "error", message: `inline.allowed[${i}] ('${name}') required_when.values must be a non-empty list` });
           }
         }
       });
@@ -493,14 +502,14 @@ function coerceFieldArray(raw: unknown): SchemaField[] {
         }
       }
       return {
-        name: String(item.name ?? ""),
+        name: stringifySchemaValue(item.name),
         type: (item.type as SchemaField["type"]) ?? "string",
         values: Array.isArray(item.values) ? item.values.map(String) : undefined,
         values_meta,
         severity: (item.severity as SchemaField["severity"]) ?? "warning",
         min_items: item.min_items !== undefined ? Number(item.min_items) : undefined,
         strict_parse: item.strict_parse !== undefined ? Boolean(item.strict_parse) : undefined,
-        description: item.description ? String(item.description) : undefined,
+        description: item.description ? stringifySchemaValue(item.description) : undefined,
       };
     })
     .filter((f) => f.name.length > 0);
@@ -511,14 +520,14 @@ function coerceInlineFieldArray(raw: unknown): SchemaInlineField[] {
   return raw
     .filter((item): item is Record<string, unknown> => item !== null && typeof item === "object")
     .map((item) => {
-      const field: SchemaInlineField = { name: String(item.name ?? "") };
+      const field: SchemaInlineField = { name: stringifySchemaValue(item.name) };
       if (item.severity) {
         field.severity = item.severity as SchemaInlineField["severity"];
       }
       if (item.required_when && typeof item.required_when === "object") {
         const rw = item.required_when as Record<string, unknown>;
         field.required_when = {
-          field: String(rw.field ?? ""),
+          field: stringifySchemaValue(rw.field),
           values: Array.isArray(rw.values) ? rw.values.map(String) : [],
         };
       }

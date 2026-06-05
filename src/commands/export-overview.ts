@@ -51,7 +51,7 @@ export async function runExportOverview(
   const { silent = false } = options;
 
   if (!settings.exportEnabled) {
-    if (!silent) new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
+    if (!silent) new Notice("Forge: Export is not enabled — enable it in settings → export.", 5000);
     return;
   }
 
