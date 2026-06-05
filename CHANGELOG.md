@@ -1,3 +1,17 @@
+# 1.6.6
+
+## Changed
+
+- Fixed the remaining local Community Plugins review-linter findings across commands, settings, dashboard views, and utility code.
+- Standardized command names, modal titles, button labels, and notices to sentence case for Community Plugins UI consistency.
+- Tightened async callback handling and improved TypeScript safety around JSON parsing, unknown values, and string conversion.
+
+## Compatibility
+
+- No migration is required.
+
+---
+
 # 1.6.5
 
 ## Changed
