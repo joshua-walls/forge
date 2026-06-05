@@ -16,7 +16,6 @@ import { App, Modal, Notice, TFile, Setting } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import { loadSchema, VaultSchema, allFrontmatterFields } from "../utils/schema";
-import { readNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { runApplyPatch } from "./apply-patch";
 
@@ -39,6 +38,21 @@ interface RepairOp {
   new_tag?: string;
 }
 
+function stringifyRepairValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
+
+function isLintError(value: unknown): value is LintError {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.file === "string"
+    && typeof candidate.severity === "string"
+    && typeof candidate.rule === "string"
+    && typeof candidate.message === "string";
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function runVaultRepair(plugin: ForgePlugin): Promise<void> {
@@ -48,14 +62,21 @@ export async function runVaultRepair(plugin: ForgePlugin): Promise<void> {
   // Load lint report
   const reportFile = app.vault.getAbstractFileByPath(paths.lintReportJson);
   if (!(reportFile instanceof TFile)) {
-    new Notice("Forge: No lint report found. Run Vault Lint first.", 5000);
+    new Notice("Forge: No lint report found. Run vault lint first.", 5000);
     return;
   }
 
-  let report: any;
+  let report: { results?: LintError[] } = {};
   try {
     const raw = await app.vault.read(reportFile);
-    report = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    report = typeof parsed === "object" && parsed !== null
+      ? {
+          results: Array.isArray((parsed as { results?: unknown }).results)
+            ? (parsed as { results: unknown[] }).results.filter(isLintError)
+            : undefined,
+        }
+      : {};
   } catch {
     new Notice("Forge: Could not parse lint-report.json.", 5000);
     return;
@@ -180,7 +201,7 @@ class VaultRepairModal extends Modal {
 
         if (field.type === "enum" && field.values) {
           const suggestion = this.getSuggestion(fieldName, fileErrors);
-          const initialVal = suggestion ? String(suggestion) : field.values[0];
+          const initialVal = stringifyRepairValue(suggestion) || field.values[0];
           fieldValues.set(fieldName, initialVal);
 
           new Setting(contentEl)
@@ -195,36 +216,36 @@ class VaultRepairModal extends Modal {
             });
         } else if (field.type === "boolean") {
           const suggestion = this.getSuggestion(fieldName, fileErrors);
-          const initialVal = suggestion !== null ? String(suggestion) : "false";
+          const initialVal = suggestion !== null ? stringifyRepairValue(suggestion) : "false";
           fieldValues.set(fieldName, initialVal === "true");
 
           new Setting(contentEl)
             .setName(fieldName)
             .addDropdown((dd) => {
-              dd.addOption("false", "false");
-              dd.addOption("true", "true");
+              dd.addOption("false", "False");
+              dd.addOption("true", "True");
               dd.setValue(initialVal);
               dd.onChange((val) => fieldValues.set(fieldName, val === "true"));
             });
         } else if (field.type === "date") {
           const suggestion = this.getSuggestion(fieldName, fileErrors);
-          const initialVal = suggestion ? String(suggestion) : todayString();
+          const initialVal = stringifyRepairValue(suggestion) || todayString();
           fieldValues.set(fieldName, initialVal);
 
           new Setting(contentEl)
             .setName(fieldName)
-            .setDesc("Format: yyyy-MM-dd")
+            .setDesc("Format: Yyyy-mm-dd")
             .addText((t) => {
-              t.setPlaceholder("yyyy-MM-dd");
+              t.setPlaceholder("Yyyy-mm-dd");
               t.setValue(initialVal);
               t.onChange((val) => fieldValues.set(fieldName, val));
             });
         } else if (field.type === "list" && fieldName === "tags") {
           new Setting(contentEl)
-            .setName("tags")
+            .setName("Tags")
             .setDesc(`Comma-separated. Namespaces: ${this.schema.tag_rules.allowed_namespaces.join(", ")}`)
             .addText((t) => {
-              t.setPlaceholder("topic/identity, skill/governance");
+              t.setPlaceholder("Topic/identity, skill/governance");
               t.onChange((val) => {
                 fieldValues.set("tags", val.split(",").map((s) => s.trim()).filter(Boolean));
               });
@@ -236,7 +257,7 @@ class VaultRepairModal extends Modal {
           new Setting(contentEl)
             .setName(fieldName)
             .addText((t) => {
-              if (suggestion) t.setValue(String(suggestion));
+              if (suggestion) t.setValue(stringifyRepairValue(suggestion));
               t.onChange((val) => fieldValues.set(fieldName, val));
             });
         }
@@ -255,7 +276,7 @@ class VaultRepairModal extends Modal {
     const tagDecisions = new Map<string, TagAction>();
 
     if (badTagErrors.length > 0) {
-      contentEl.createEl("h3", { text: "Tag Namespace Issues" });
+      contentEl.createEl("h3", { text: "Tag namespace issues" });
 
       // Resolve full tags from metadataCache so we can emit precise patch ops.
       // Lint messages only embed the namespace, not the full tag — look them up here.
@@ -359,7 +380,7 @@ class VaultRepairModal extends Modal {
       // Collect field ops for this file
       for (const [fieldName, value] of fieldValues) {
         if (fieldName === "tags" && Array.isArray(value)) {
-          for (const tag of value) {
+          for (const tag of value.filter((item): item is string => typeof item === "string")) {
             this.ops.push({ op: "add_tag", target: filePath, tag });
           }
         } else if (value !== "" && value !== undefined) {
@@ -387,7 +408,7 @@ class VaultRepairModal extends Modal {
     });
 
     if (hasAnyFixes) {
-      const skipBtn = buttonRow.createEl("button", { text: "Skip File" });
+      const skipBtn = buttonRow.createEl("button", { text: "Skip file" });
       skipBtn.addEventListener("click", () => {
         this.skippedCount++;
         this.currentIndex++;
@@ -395,7 +416,7 @@ class VaultRepairModal extends Modal {
       });
     }
 
-    const cancelBtn = buttonRow.createEl("button", { text: "Cancel All" });
+    const cancelBtn = buttonRow.createEl("button", { text: "Cancel all" });
     cancelBtn.addEventListener("click", () => this.close());
   }
 
@@ -403,7 +424,7 @@ class VaultRepairModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Repair Summary" });
+    contentEl.createEl("h2", { text: "Repair summary" });
 
     if (this.ops.length === 0) {
       contentEl.createEl("p", { text: "No operations collected — nothing to patch." });
@@ -428,28 +449,34 @@ class VaultRepairModal extends Modal {
     const buttonRow = contentEl.createDiv("forge-button-row");
 
     const writeAndApplyBtn = buttonRow.createEl("button", {
-      text: "Write Patch & Apply",
+      text: "Write patch & apply",
       cls: "mod-cta",
     });
-    writeAndApplyBtn.addEventListener("click", async () => {
-      this.close();
-      await this.writePatch();
-      await runApplyPatch(this.plugin);
+    writeAndApplyBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.writePatch();
+        await runApplyPatch(this.plugin);
+      })();
     });
 
-    const writeBtn = buttonRow.createEl("button", { text: "Write Patch Only" });
-    writeBtn.addEventListener("click", async () => {
-      this.close();
-      await this.writePatch();
-      new Notice("Forge: Repair patch written. Run Apply Vault Patch when ready.", 5000);
+    const writeBtn = buttonRow.createEl("button", { text: "Write patch only" });
+    writeBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.writePatch();
+        new Notice("Forge: Repair patch written. Run apply vault patch when ready.", 5000);
+      })();
     });
 
-    const openBtn = buttonRow.createEl("button", { text: "Write & Open Patch" });
-    openBtn.addEventListener("click", async () => {
-      this.close();
-      await this.writePatch();
-      const paths = getVaultPaths(this.plugin.settings);
-      this.app.workspace.openLinkText(paths.patchFile, "", false);
+    const openBtn = buttonRow.createEl("button", { text: "Write & open patch" });
+    openBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.writePatch();
+        const paths = getVaultPaths(this.plugin.settings);
+        void this.app.workspace.openLinkText(paths.patchFile, "", false);
+      })();
     });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
@@ -507,9 +534,9 @@ class VaultRepairModal extends Modal {
         if (typeof op.value === "string") {
           lines.push(`    value: "${op.value}"`);
         } else if (typeof op.value === "boolean") {
-          lines.push(`    value: ${op.value}`);
+          lines.push(`    value: ${stringifyRepairValue(op.value)}`);
         } else {
-          lines.push(`    value: ${op.value}`);
+          lines.push(`    value: ${stringifyRepairValue(op.value)}`);
         }
       }
     }

@@ -65,12 +65,12 @@ export async function runExportOntology(
   } = options;
 
   if (!settings.exportEnabled) {
-    if (!silent) new Notice("Forge: Export is not enabled — enable it in Settings → Export.", 5000);
+    if (!silent) new Notice("Forge: Export is not enabled — enable it in settings → export.", 5000);
     return null;
   }
 
   if (!settings.exportFilterField || settings.exportFilterValues.length === 0) {
-    if (!silent) new Notice("Forge: No filter configured — set a field and values in Settings → Export.", 7000);
+    if (!silent) new Notice("Forge: No filter configured — set a field and values in settings → export.", 7000);
     return null;
   }
 
@@ -81,7 +81,7 @@ export async function runExportOntology(
   // Ensure inventory — auto-run if missing
   let inventory = await loadInventory(app, settings.exportsFolder);
   if (!inventory) {
-    if (!silent) new Notice("Forge: No inventory found — running Export Inventory first…", 4000);
+    if (!silent) new Notice("Forge: No inventory found — running export inventory first…", 4000);
     await runExportOverview(plugin, { silent });
     inventory = await loadInventory(app, settings.exportsFolder);
     if (!inventory) {

@@ -32,7 +32,6 @@ import { getVaultPaths } from "./vault-paths";
 import {
   VaultSchema,
   SchemaField,
-  SchemaInlineField,
   loadSchema,
   allFrontmatterFields,
   inlineFieldNameSet,
@@ -72,6 +71,10 @@ export interface LintRunResult {
   errors: LintResult[];
   warnings: LintResult[];
   infos: LintResult[];
+}
+
+interface VaultAdapterWithBasePath {
+  basePath?: string;
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -117,7 +120,7 @@ export async function runLint(
   }
 
   const envelope: LintRunEnvelope = {
-    vault_path: (app.vault.adapter as any).basePath ?? "",
+    vault_path: (app.vault.adapter as VaultAdapterWithBasePath).basePath ?? "",
     timestamp: localTimestamp(),
     schema_version: schema.version,
     notes_scanned: allFiles.length,
@@ -441,7 +444,7 @@ function testTagNamespaces(
     }
 
     if (tag_rules.unknown_tags !== "off" && !allowedNs.has(ns)) {
-      const unknownSeverity = tag_rules.unknown_tags as LintSeverity;
+      const unknownSeverity = tag_rules.unknown_tags;
       results.push(newResult(path, unknownSeverity, "unknown_tag_namespace",
         `Tag namespace '${ns}' is not in allowed_namespaces`));
     }
@@ -659,10 +662,10 @@ function levenshtein(a: string, b: string, maxDist: number): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
 
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  let prev: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
 
   for (let i = 1; i <= a.length; i++) {
-    const curr = new Array(b.length + 1).fill(0);
+    const curr: number[] = Array.from({ length: b.length + 1 }, () => 0);
     curr[0] = i;
     let rowMin = i;
 

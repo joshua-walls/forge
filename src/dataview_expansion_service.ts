@@ -111,7 +111,7 @@ export class DataviewExpansionService {
 
   async refreshActiveFile(showNotice = true): Promise<void> {
     if (!this.isDataviewAvailable()) {
-      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use Dataview Expansion.", 5000);
+      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use dataview expansion.", 5000);
       return;
     }
 
@@ -125,7 +125,7 @@ export class DataviewExpansionService {
     if (!showNotice) return;
 
     if (result.removed) {
-      new Notice("Forge: Removed Dataview Expansion block.", 4000);
+      new Notice("Forge: Removed dataview expansion block.", 4000);
       return;
     }
 
@@ -137,12 +137,12 @@ export class DataviewExpansionService {
       return;
     }
 
-    new Notice("Forge: Dataview Expansion already up to date.", 4000);
+    new Notice("Forge: Dataview expansion already up to date.", 4000);
   }
 
   async refreshCurrentFolder(showNotice = true): Promise<void> {
     if (!this.isDataviewAvailable()) {
-      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use Dataview Expansion.", 5000);
+      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use dataview expansion.", 5000);
       return;
     }
 
@@ -159,7 +159,7 @@ export class DataviewExpansionService {
 
   async refreshWholeVault(showNotice = true): Promise<void> {
     if (!this.isDataviewAvailable()) {
-      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use Dataview Expansion.", 5000);
+      if (showNotice) new Notice("Forge: Dataview must be installed and enabled to use dataview expansion.", 5000);
       return;
     }
 
@@ -527,8 +527,8 @@ function relativeLinkPath(sourceFilePath: string, targetFilePath: string, omitMd
     shared++;
   }
 
-  const upSegments = new Array(sourceParts.length - shared).fill("..");
-  const downSegments = targetParts.slice(shared);
+  const upSegments = Array.from({ length: sourceParts.length - shared }, () => "..");
+  const downSegments: string[] = targetParts.slice(shared);
   const fileName = omitMdExtension ? targetFileName.replace(/\.md$/i, "") : targetFileName;
   const combined = [...upSegments, ...downSegments, fileName].filter(Boolean);
   return combined.length > 0 ? combined.join("/") : fileName;

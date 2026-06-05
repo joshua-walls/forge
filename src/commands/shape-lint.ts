@@ -158,7 +158,7 @@ export async function lintShapeHeadings(
   if (!templateHeadings || templateHeadings.length === 0) return results;
 
   const lines = content.split("\n");
-  const { frontmatterLines, bodyLines } = splitFrontmatter(lines);
+  const { bodyLines } = splitFrontmatter(lines);
   const templateRoots = buildTemplateTree(templateHeadings);
   const { roots: docRoots } = buildDocSectionTree(bodyLines);
 

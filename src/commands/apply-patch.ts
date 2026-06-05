@@ -9,14 +9,13 @@
 //   5. Show result notice
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
-import { App, Modal, Notice, Setting, TFile, normalizePath } from "obsidian";
+import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import {
   loadPatchFile,
   applyPatch,
   PatchRunResult,
-  PatchOpResult,
 } from "../patch-engine";
 import {
   writeRestoreManifest,
@@ -105,7 +104,7 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
     // Open the report
     const reportFile = app.vault.getAbstractFileByPath(normalizePath(reportPath));
     if (reportFile) {
-      app.workspace.openLinkText(reportPath, "", false);
+      void app.workspace.openLinkText(reportPath, "", false);
     }
 
     // Auto-lint after patch apply
@@ -194,7 +193,7 @@ class PatchConfirmModal extends Modal {
     const skipped = this.dryResult.results.filter((r) => r.status === "skipped");
     const errors  = this.dryResult.results.filter((r) => r.status === "error");
 
-    contentEl.createEl("h2", { text: "Apply Vault Patch" });
+    contentEl.createEl("h2", { text: "Apply vault patch" });
 
     if (this.description) {
       contentEl.createEl("p", {
@@ -276,9 +275,11 @@ class PatchConfirmModal extends Modal {
         text: "Apply",
         cls: "mod-cta",
       });
-      applyBtn.addEventListener("click", async () => {
-        this.close();
-        await this.onConfirm();
+      applyBtn.addEventListener("click", () => {
+        void (async () => {
+          this.close();
+          await this.onConfirm();
+        })();
       });
     }
 

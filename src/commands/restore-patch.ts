@@ -34,6 +34,24 @@ interface PatchManifest {
   operations?: PatchOperationChange[];
 }
 
+function isManifestChange(value: unknown): value is ManifestChange {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.file === "string" && typeof candidate.backup === "string";
+}
+
+function isPatchManifest(value: unknown): value is PatchManifest {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.run_id === "string"
+    && typeof candidate.patch_file === "string"
+    && typeof candidate.description === "string"
+    && typeof candidate.applied_at === "string"
+    && typeof candidate.schema_version === "string"
+    && Array.isArray(candidate.changes)
+    && candidate.changes.every(isManifestChange);
+}
+
 type RestoreStatus =
   | "reversible"
   | "conflicted"
@@ -85,7 +103,10 @@ export async function runRestorePatch(plugin: ForgePlugin): Promise<void> {
   for (const file of manifestFiles) {
     try {
       const raw = await app.vault.read(file);
-      manifests.push(JSON.parse(raw));
+      const parsed: unknown = JSON.parse(raw);
+      if (isPatchManifest(parsed)) {
+        manifests.push(parsed);
+      }
     } catch {
       // Skip unreadable manifests.
     }
@@ -121,7 +142,7 @@ class RestorePatchModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Restore Patch Run" });
+    contentEl.createEl("h2", { text: "Restore patch run" });
     contentEl.createEl("p", {
       text: "Select a patch run. Newer manifests can restore selected operations without overwriting later edits.",
       cls: "setting-item-description",
@@ -134,21 +155,23 @@ class RestorePatchModal extends Modal {
       const legacyFiles = manifest.changes?.length ?? 0;
       const isV2 = ops > 0;
       const item = list.createDiv("forge-restore-item");
-      item.addEventListener("click", async () => {
-        this.selected = manifest;
-        if (isV2) {
-          this.candidates = await evaluateRestoreCandidates(this.app, manifest);
-          this.renderOperationRestore();
-        } else {
-          const synthesized = await synthesizeLegacyOperationCandidates(this.app, this.plugin, manifest);
-          if (synthesized.length > 0) {
-            manifest.operations = synthesized.map((candidate) => candidate.operation);
-            this.candidates = synthesized;
+      item.addEventListener("click", () => {
+        void (async () => {
+          this.selected = manifest;
+          if (isV2) {
+            this.candidates = await evaluateRestoreCandidates(this.app, manifest);
             this.renderOperationRestore();
           } else {
-            this.renderLegacyConfirm();
+            const synthesized = await synthesizeLegacyOperationCandidates(this.app, this.plugin, manifest);
+            if (synthesized.length > 0) {
+              manifest.operations = synthesized.map((candidate) => candidate.operation);
+              this.candidates = synthesized;
+              this.renderOperationRestore();
+            } else {
+              this.renderLegacyConfirm();
+            }
           }
-        }
+        })();
       });
 
       const date = manifest.applied_at ? new Date(manifest.applied_at).toLocaleString() : "Unknown date";
@@ -177,7 +200,7 @@ class RestorePatchModal extends Modal {
     );
     const selectedCount = this.candidates.filter((c) => c.selected).length;
 
-    contentEl.createEl("h2", { text: "Restore Patch Operations" });
+    contentEl.createEl("h2", { text: "Restore patch operations" });
     contentEl.createEl("p", {
       text: manifest.description || manifest.run_id,
       cls: "forge-patch-description",
@@ -225,10 +248,12 @@ class RestorePatchModal extends Modal {
       cls: "mod-cta",
     });
     restoreBtn.disabled = selectedCount === 0;
-    restoreBtn.addEventListener("click", async () => {
-      const selected = this.candidates.filter((c) => c.selected);
-      this.close();
-      await this.applyOperationRestore(manifest, selected);
+    restoreBtn.addEventListener("click", () => {
+      void (async () => {
+        const selected = this.candidates.filter((c) => c.selected);
+        this.close();
+        await this.applyOperationRestore(manifest, selected);
+      })();
     });
 
     const backBtn = buttonRow.createEl("button", { text: "Back" });
@@ -243,7 +268,7 @@ class RestorePatchModal extends Modal {
     const manifest = this.selected!;
     contentEl.empty();
 
-    contentEl.createEl("h2", { text: "Confirm Legacy Restore" });
+    contentEl.createEl("h2", { text: "Confirm legacy restore" });
     contentEl.createEl("p", {
       text: manifest.description || manifest.run_id,
       cls: "forge-patch-description",
@@ -271,9 +296,11 @@ class RestorePatchModal extends Modal {
     const buttonRow = contentEl.createDiv("forge-button-row");
 
     const restoreBtn = buttonRow.createEl("button", { text: "Restore files", cls: "mod-cta mod-warning" });
-    restoreBtn.addEventListener("click", async () => {
-      this.close();
-      await this.applyLegacyRestore(manifest);
+    restoreBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.applyLegacyRestore(manifest);
+      })();
     });
 
     const backBtn = buttonRow.createEl("button", { text: "Back" });
@@ -319,7 +346,7 @@ class RestorePatchModal extends Modal {
       `Forge: Restored ${restored} operation(s). ${conflicts} conflict(s), ${errors} error(s).`,
       errors || conflicts ? 7000 : 5000
     );
-    this.app.workspace.openLinkText(reportPath, "", false);
+    void this.app.workspace.openLinkText(reportPath, "", false);
   }
 
   private async applyLegacyRestore(manifest: PatchManifest): Promise<void> {
@@ -478,7 +505,7 @@ async function loadArchivedPatchFile(
       if (!yaml.trim()) continue;
       const parsed = parseYaml(yaml) as Record<string, unknown>;
       return {
-        meta: (parsed?.meta ?? {}) as PatchFile["meta"],
+        meta: (parsed?.meta ?? {}),
         operations: Array.isArray(parsed?.operations)
           ? (parsed.operations as PatchFile["operations"])
           : [],
@@ -768,7 +795,7 @@ function sortDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortDeep);
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    for (const key of Object.keys(value).sort()) {
       out[key] = sortDeep((value as Record<string, unknown>)[key]);
     }
     return out;

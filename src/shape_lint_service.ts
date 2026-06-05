@@ -31,6 +31,10 @@ export interface ShapeLintRunResult {
   infos: LintResult[];
 }
 
+interface VaultAdapterWithBasePath {
+  basePath?: string;
+}
+
 export class ShapeLintService {
   private cache: DashboardCache;
 
@@ -68,9 +72,9 @@ export class ShapeLintService {
       (file) => !isExempt(file.path, exemptPaths)
     );
 
-    const headingCache = this.settings.shapeLintEnabled
+    const headingCache: Map<string, import("./commands/shape-lint").ParsedHeading[]> = this.settings.shapeLintEnabled
       ? await buildShapeHeadingCache(this.app, this.settings)
-      : new Map();
+      : new Map<string, import("./commands/shape-lint").ParsedHeading[]>();
 
     const results: LintResult[] = [];
 
@@ -89,7 +93,7 @@ export class ShapeLintService {
 
     return {
       envelope: {
-        vault_path: (this.app.vault.adapter as any).basePath ?? "",
+        vault_path: (this.app.vault.adapter as VaultAdapterWithBasePath).basePath ?? "",
         timestamp: localTimestamp(),
         schema_version: schema?.version ?? "",
         notes_scanned: files.length,

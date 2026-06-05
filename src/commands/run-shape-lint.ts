@@ -75,12 +75,12 @@ class ShapeLintResultsModal extends Modal {
     const buttonRow = footer.createDiv("forge-button-row");
 
     const viewBtn = buttonRow.createEl("button", {
-      text: "View Shape Lint Run Note",
+      text: "View shape lint run note",
       cls: "mod-cta",
     });
     viewBtn.addEventListener("click", () => {
       this.close();
-      this.app.workspace.openLinkText(this.runNotePath, "", false);
+      void this.app.workspace.openLinkText(this.runNotePath, "", false);
     });
 
     const closeBtn = buttonRow.createEl("button", { text: "Close" });

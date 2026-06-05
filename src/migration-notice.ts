@@ -61,7 +61,7 @@ export class MigrationNoticeModal extends Modal {
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container" });
 
     const openGuide = buttonRow.createEl("button", {
-      text: "Open Upgrade Guide",
+      text: "Open upgrade guide",
       cls: "mod-cta",
     });
     openGuide.addEventListener("click", () => {

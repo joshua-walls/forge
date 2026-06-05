@@ -40,8 +40,13 @@ import {
   localTimestamp,
   safeTimestamp,
   todayString,
-  getDomain,
 } from "./utils/files";
+
+function formatPatchValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -334,7 +339,7 @@ async function applySetField(
   // when condition — skip unless field equals expected value
   if (op.when) {
     const whenVal = fm[op.when.field];
-    const whenCurrent = whenVal === undefined ? "" : String(whenVal);
+    const whenCurrent = whenVal === undefined ? "" : formatPatchValue(whenVal);
     if (whenCurrent !== op.when.equals) {
       return opSkipped("set_field", file, `Condition not met: '${op.when.field}' is '${whenCurrent}', expected '${op.when.equals}'`);
     }
@@ -591,7 +596,7 @@ async function applyComputeField(
         }
 
         const skipIf = op.skip_if ?? [];
-        const currentVal = fm[fieldName] ? String(fm[fieldName]).trim() : "";
+        const currentVal = formatPatchValue(fm[fieldName]).trim();
         if (skipIf.includes(currentVal)) {
           return opSkipped("compute_field", file, `Field '${fieldName}' is '${currentVal}' — excluded by skip_if`);
         }
@@ -611,7 +616,7 @@ async function applyComputeField(
     return opError("compute_field", file, String(e));
   }
 
-  const currentVal = fm[fieldName] !== undefined ? String(fm[fieldName]) : "<missing>";
+  const currentVal = fm[fieldName] !== undefined ? formatPatchValue(fm[fieldName]) : "<missing>";
   if (currentVal === newValue) {
     return opSkipped("compute_field", file, `Field '${fieldName}' already = '${newValue}'`);
   }
@@ -726,7 +731,7 @@ async function applyMoveNote(
       }
 
       await app.vault.create(destPath, content);
-      await app.vault.delete(file);
+      await app.fileManager.trashFile(file);
     } else {
       await app.vault.rename(file, destPath);
     }

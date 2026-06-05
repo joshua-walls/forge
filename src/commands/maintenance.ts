@@ -17,7 +17,7 @@
 import { App, Modal, Notice, TFile, TFolder } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { getMarkdownFiles, todayString } from "../utils/files";
+import { getMarkdownFiles } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,32 @@ interface MaintenanceResult {
   target: string;
   status: MaintenanceStatus;
   detail: string;
+}
+
+interface TimestampedEntry {
+  timestamp?: string;
+}
+
+interface ShapeRepairHistoryEntry {
+  ranAt?: string;
+  repaired?: number;
+}
+
+async function trashFile(app: App, file: TFile): Promise<void> {
+  await app.fileManager.trashFile(file);
+}
+
+function parseArray<T>(raw: string, isItem: (value: unknown) => value is T): T[] {
+  const parsed: unknown = JSON.parse(raw);
+  return Array.isArray(parsed) ? parsed.filter(isItem) : [];
+}
+
+function hasTimestamp(value: unknown): value is TimestampedEntry {
+  return typeof value === "object" && value !== null;
+}
+
+function isShapeRepairHistoryEntry(value: unknown): value is ShapeRepairHistoryEntry {
+  return typeof value === "object" && value !== null;
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -107,11 +133,10 @@ async function trimLintHistory(
     return [{ task: "lint_history", target: paths.lintHistoryJson, status: "skipped", detail: "lint-history.json does not exist yet" }];
   }
 
-  let history: any[] = [];
+  let history: TimestampedEntry[] = [];
   try {
     const raw = await app.vault.read(histFile);
-    history = JSON.parse(raw);
-    if (!Array.isArray(history)) history = [];
+    history = parseArray(raw, hasTimestamp);
   } catch {
     return [{ task: "lint_history", target: paths.lintHistoryJson, status: "error", detail: "Could not parse lint-history.json" }];
   }
@@ -121,7 +146,8 @@ async function trimLintHistory(
   cutoff.setDate(cutoff.getDate() - settings.lintHistoryRetentionDays);
 
   history = history.filter((e) => {
-    try { return new Date(e.timestamp) >= cutoff; } catch { return false; }
+    if (!e.timestamp) return false;
+    return !Number.isNaN(new Date(e.timestamp).valueOf()) && new Date(e.timestamp) >= cutoff;
   });
 
   if (history.length > settings.lintHistoryMaxEntries) {
@@ -161,7 +187,7 @@ async function trimLintRunNotes(
 
   for (const file of toRemove) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     results.push({ task: "lint_runs", target: file.path, status: "removed",
       detail: `Lint report note over retention limit of ${settings.lintRunRetentionCount}` });
@@ -190,7 +216,7 @@ async function trimPatchReportNotes(
 
   for (const file of toRemove) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     results.push({ task: "patch_reports", target: file.path, status: "removed",
       detail: `Patch report over retention limit of ${settings.patchReportRetentionCount}` });
@@ -220,7 +246,7 @@ async function trimShapeLintRunNotes(
 
   for (const file of toRemove) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     results.push({ task: "shape_lint_runs", target: file.path, status: "removed",
       detail: `Shape lint run note over retention limit of ${settings.shapeLintRunRetentionCount}` });
@@ -242,11 +268,10 @@ async function trimShapeRepairHistory(
       detail: "shape-repair-history.json does not exist yet" }];
   }
 
-  let history: any[] = [];
+  let history: ShapeRepairHistoryEntry[] = [];
   try {
     const raw = await app.vault.read(histFile);
-    history = JSON.parse(raw);
-    if (!Array.isArray(history)) history = [];
+    history = parseArray(raw, isShapeRepairHistoryEntry);
   } catch {
     return [{ task: "shape_repair_history", target: paths.shapeRepairHistory, status: "error",
       detail: "Could not parse shape-repair-history.json" }];
@@ -293,7 +318,7 @@ async function trimShapeRepairRunNotes(
 
   for (const file of toRemove) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     results.push({ task: "shape_repair_runs", target: file.path, status: "removed",
       detail: `Shape repair run note over retention limit of ${max}` });
@@ -330,7 +355,7 @@ async function cleanPatchBackups(
 
   for (const file of stale) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     const age = Math.floor((Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24));
     results.push({ task: "patch_backups", target: file.path, status: "removed",
@@ -374,7 +399,7 @@ async function cleanInbox(
 
   for (const file of staleFiles) {
     if (!dryRun) {
-      await app.vault.delete(file);
+      await trashFile(app, file);
     }
     const age = Math.floor((Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24));
     results.push({ task: "inbox", target: file.path, status: "removed",
@@ -411,7 +436,7 @@ class MaintenanceConfirmModal extends Modal {
     const errors  = this.results.filter((r) => r.status === "error");
     const { settings } = this.plugin;
 
-    contentEl.createEl("h2", { text: "Vault Maintenance" });
+    contentEl.createEl("h2", { text: "Vault maintenance" });
 
     // Policy summary
     const policy = contentEl.createDiv("forge-maintenance-policy");
@@ -450,9 +475,11 @@ class MaintenanceConfirmModal extends Modal {
     const buttonRow = contentEl.createDiv("forge-button-row");
 
     const applyBtn = buttonRow.createEl("button", { text: "Apply", cls: "mod-cta" });
-    applyBtn.addEventListener("click", async () => {
-      this.close();
-      await this.onConfirm();
+    applyBtn.addEventListener("click", () => {
+      void (async () => {
+        this.close();
+        await this.onConfirm();
+      })();
     });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });

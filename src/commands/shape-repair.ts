@@ -30,7 +30,7 @@
 import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { buildShapeHeadingCache, extractHeadings, buildTemplateTree, flattenTemplateTree } from "./shape-lint";
+import { buildShapeHeadingCache, buildTemplateTree, flattenTemplateTree } from "./shape-lint";
 import type { ParsedHeading, TemplateNode } from "./shape-lint";
 import { readNote, backupNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
@@ -150,6 +150,10 @@ export interface ShapeRepairHistoryEntry {
   files: RepairFileResult[];
 }
 
+function isShapeRepairHistoryEntry(value: unknown): value is ShapeRepairHistoryEntry {
+  return typeof value === "object" && value !== null;
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function runShapeRepair(
@@ -159,12 +163,12 @@ export async function runShapeRepair(
   const { app, settings } = plugin;
 
   if (!settings.shapesEnabled) {
-    new Notice("Forge: Shapes is not enabled. Enable it in Settings → Shapes.", 5000);
+    new Notice("Forge: Shapes is not enabled. Enable it in settings → shapes.", 5000);
     return;
   }
 
   if (!settings.shapeRepairEnabled) {
-    new Notice("Forge: Shape repair is not enabled. Enable it in Settings → Shapes.", 5000);
+    new Notice("Forge: Shape repair is not enabled. Enable it in settings → shapes.", 5000);
     return;
   }
 
@@ -497,8 +501,8 @@ export async function appendShapeRepairHistory(
   if (histFile instanceof TFile) {
     try {
       const raw = await app.vault.read(histFile);
-      history = JSON.parse(raw);
-      if (!Array.isArray(history)) history = [];
+      const parsed: unknown = JSON.parse(raw);
+      history = Array.isArray(parsed) ? parsed.filter(isShapeRepairHistoryEntry) : [];
     } catch { history = []; }
   }
 
@@ -664,20 +668,20 @@ class ShapeRepairModal extends Modal {
     const footer = contentEl.createDiv("forge-modal-footer");
     const buttonRow = footer.createDiv("forge-button-row");
 
-    const viewBtn = buttonRow.createEl("button", { text: "View Run Note", cls: "mod-cta" });
+    const viewBtn = buttonRow.createEl("button", { text: "View run note", cls: "mod-cta" });
     viewBtn.addEventListener("click", () => {
       this.close();
       if (this.runNotePath) {
-        this.app.workspace.openLinkText(this.runNotePath, "", false);
+        void this.app.workspace.openLinkText(this.runNotePath, "", false);
       }
     });
     if (!this.runNotePath) viewBtn.disabled = true;
 
     if (this.dryRun && r.repaired > 0) {
-      const applyBtn = buttonRow.createEl("button", { text: "Apply Repair Now" });
+      const applyBtn = buttonRow.createEl("button", { text: "Apply repair now" });
       applyBtn.addEventListener("click", () => {
         this.close();
-        runShapeRepair(this.plugin, false);
+        void runShapeRepair(this.plugin, false);
       });
     }
 
@@ -685,7 +689,7 @@ class ShapeRepairModal extends Modal {
       (f) => f.status === "repaired" && f.backupPath
     );
     if (!this.dryRun && repairedWithBackup.length > 0) {
-      const restoreBtn = buttonRow.createEl("button", { text: "Restore Files…" });
+      const restoreBtn = buttonRow.createEl("button", { text: "Restore files…" });
       restoreBtn.addEventListener("click", () => {
         this.close();
         new ShapeRepairRestoreModal(this.app, repairedWithBackup).open();
@@ -716,7 +720,7 @@ class ShapeRepairRestoreModal extends Modal {
     contentEl.empty();
     this.modalEl.addClass("forge-modal");
 
-    contentEl.createEl("h2", { text: "Restore Repaired Files" });
+    contentEl.createEl("h2", { text: "Restore repaired files" });
     contentEl.createEl("p", {
       text: "Each file below was backed up before repair. Restoring replaces the current " +
             "note content with the pre-repair backup. This cannot be undone.",
@@ -737,32 +741,40 @@ class ShapeRepairRestoreModal extends Modal {
       });
 
       const btn = row.createEl("button", { text: "Restore" });
-      btn.addEventListener("click", async () => {
-        btn.setText("Restoring…");
-        btn.disabled = true;
+      btn.addEventListener("click", () => {
+        void (async () => {
+          btn.setText("Restoring…");
+          btn.disabled = true;
 
-        try {
-          const backupFile = this.app.vault.getAbstractFileByPath(f.backupPath!);
-          if (!(backupFile instanceof TFile)) {
-            btn.setText("Backup not found");
-            return;
+          try {
+            const backupPath = f.backupPath;
+            if (!backupPath) {
+              btn.setText("Backup not found");
+              return;
+            }
+
+            const backupFile = this.app.vault.getAbstractFileByPath(backupPath);
+            if (!(backupFile instanceof TFile)) {
+              btn.setText("Backup not found");
+              return;
+            }
+
+            const originalFile = this.app.vault.getAbstractFileByPath(f.path);
+            if (!(originalFile instanceof TFile)) {
+              btn.setText("Original not found");
+              return;
+            }
+
+            const backupContent = await this.app.vault.read(backupFile);
+            await this.app.vault.modify(originalFile, backupContent);
+
+            btn.setText("✓ restored");
+            row.addClass("forge-restore-done");
+          } catch (error) {
+            btn.setText("Error");
+            console.error("[Forge] Restore failed:", error);
           }
-
-          const originalFile = this.app.vault.getAbstractFileByPath(f.path);
-          if (!(originalFile instanceof TFile)) {
-            btn.setText("Original not found");
-            return;
-          }
-
-          const backupContent = await this.app.vault.read(backupFile);
-          await this.app.vault.modify(originalFile, backupContent);
-
-          btn.setText("✓ Restored");
-          row.addClass("forge-restore-done");
-        } catch (e) {
-          btn.setText("Error");
-          console.error("[Forge] Restore failed:", e);
-        }
+        })();
       });
     }
 

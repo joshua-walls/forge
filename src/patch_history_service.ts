@@ -20,6 +20,15 @@ interface PatchManifest {
   operations?: unknown[];
 }
 
+interface RepairHistoryEntry {
+  ranAt?: string;
+  repaired?: number;
+}
+
+function isRepairHistoryEntry(value: unknown): value is RepairHistoryEntry {
+  return typeof value === "object" && value !== null;
+}
+
 export class PatchHistoryService {
   private cache: DashboardCache;
 
@@ -94,7 +103,7 @@ export class PatchHistoryService {
     if (!(file instanceof TFile)) return 0;
 
     try {
-      const parsed = JSON.parse(await this.app.vault.read(file));
+      const parsed: unknown = JSON.parse(await this.app.vault.read(file));
       return Array.isArray(parsed) ? parsed.length : 0;
     } catch {
       return 0;
@@ -115,11 +124,12 @@ export class PatchHistoryService {
     if (!(file instanceof TFile)) return [];
 
     try {
-      const parsed = JSON.parse(await this.app.vault.read(file));
+      const parsed: unknown = JSON.parse(await this.app.vault.read(file));
       if (!Array.isArray(parsed)) return [];
 
       return parsed
-        .map((entry: any): PatchRunSummary | null => {
+        .filter(isRepairHistoryEntry)
+        .map((entry): PatchRunSummary | null => {
           const ranAt = typeof entry.ranAt === "string" ? entry.ranAt : "";
           if (!ranAt) return null;
           return {
