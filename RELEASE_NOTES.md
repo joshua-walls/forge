@@ -1,6 +1,6 @@
-# Forge 1.6.6
+# Forge 1.6.7
 
-Forge 1.6.6 is a maintenance release focused on Community Plugins review-linter cleanup and code-quality hardening.
+Forge 1.6.7 is a maintenance release focused on Community Plugins review-linter cleanup and code-quality hardening.
 
 ## What changed
 
