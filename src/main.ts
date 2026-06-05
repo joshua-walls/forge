@@ -36,6 +36,7 @@ import { runShapeRepair } from "./commands/shape-repair";
 import { runShapeLint } from "./commands/run-shape-lint";
 import { getVaultPaths } from "./vault-paths";
 import { DataviewExpansionService } from "./dataview_expansion_service";
+import { ActiveFileLintService } from "./active_file_lint_service";
 
 type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;
@@ -63,6 +64,7 @@ export default class ForgePlugin extends Plugin {
   patchHistoryService: PatchHistoryService;
   dashboardService: DashboardService;
   dataviewExpansionService: DataviewExpansionService;
+  activeFileLintService: ActiveFileLintService;
   hasPendingExternalSettingsReload = false;
   private lastKnownSettingsMtime = 0;
   private readonly settingsPollIntervalMs = 5_000;
@@ -137,6 +139,7 @@ export default class ForgePlugin extends Plugin {
       this.manifest.version  // stamped into cache on every write
     );
     this.dataviewExpansionService = new DataviewExpansionService(this.app, this, this.settings);
+    this.activeFileLintService = new ActiveFileLintService(this.app, this, this.settings);
 
     this.registerView(
       FORGE_HEALTH_DASHBOARD_VIEW,
@@ -455,12 +458,26 @@ export default class ForgePlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
         this.dataviewExpansionService.onFileModified(file);
+        this.activeFileLintService.onFileModified(file);
+      })
+    );
+
+    this.registerEvent(
+      this.app.workspace.on("editor-change", (_editor, info) => {
+        this.activeFileLintService.onEditorChanged(info.file);
       })
     );
 
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
         this.dataviewExpansionService.onFileOpened(file);
+        this.activeFileLintService.onFileOpened(file);
+      })
+    );
+
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        this.activeFileLintService.onLayoutChanged();
       })
     );
 
@@ -527,14 +544,27 @@ export default class ForgePlugin extends Plugin {
   async recomposeHealthDashboard(): Promise<void> {
     try {
       await this.dashboardService.composeSnapshotFromLatest();
-      const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
-      for (const leaf of leaves) {
-        if (leaf.view instanceof ForgeHealthDashboardView) {
-          await leaf.view.reloadFromCache();
-        }
-      }
+      await this.reloadHealthDashboardViewsFromCache();
     } catch (e) {
       console.warn("[Forge] Could not recompose health dashboard:", e);
+    }
+  }
+
+  renderHealthDashboardViews(): void {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof ForgeHealthDashboardView) {
+        leaf.view.render();
+      }
+    }
+  }
+
+  async reloadHealthDashboardViewsFromCache(): Promise<void> {
+    const leaves = this.app.workspace.getLeavesOfType(FORGE_HEALTH_DASHBOARD_VIEW);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof ForgeHealthDashboardView) {
+        await leaf.view.reloadFromCache();
+      }
     }
   }
 
@@ -595,6 +625,7 @@ export default class ForgePlugin extends Plugin {
     if (this.shapeLintService) this.shapeLintService = new ShapeLintService(this.app, this.settings);
     if (this.patchHistoryService) this.patchHistoryService = new PatchHistoryService(this.app, this.settings, this.manifest.version);
     if (this.dataviewExpansionService) this.dataviewExpansionService.updateSettings(this.settings);
+    if (this.activeFileLintService) this.activeFileLintService.updateSettings(this.settings);
     if (this.dashboardService) {
       this.dashboardService = new DashboardService(
         this.app,

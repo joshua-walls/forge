@@ -73,7 +73,7 @@ export class DataviewExpansionService {
       return;
     }
 
-    this.scheduleRefresh(file, 5_000);
+    this.scheduleRefresh(file, this.getAutoUpdateDelayMs());
   }
 
   onFileOpened(file: TFile | null): void {
@@ -107,6 +107,11 @@ export class DataviewExpansionService {
     }, delayMs);
 
     this.pendingTimers.set(file.path, timer);
+  }
+
+  private getAutoUpdateDelayMs(): number {
+    const delay = Math.floor(this.settings.dataviewExpansionAutoUpdateDelayMs);
+    return Number.isFinite(delay) && delay >= 0 ? delay : 5_000;
   }
 
   async refreshActiveFile(showNotice = true): Promise<void> {

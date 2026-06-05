@@ -1,3 +1,26 @@
+# 1.6.8
+
+## Added
+
+- Active-file auto-lint mode for note-level linting during editing.
+- Settings toggle for turning active-file auto-lint on or off.
+- Active-file lint triggers for note open, edit idle, leaving the note, switching the same note into reading view, and fast relint after current-note frontmatter or properties edits from reading view.
+
+## Changed
+
+- Active-file auto-lint waits 10 seconds after typing stops by default.
+- Dataview Expansion auto-update delay is now configurable in seconds instead of being fixed at 5 seconds.
+- Auto-lint now shows a small failure notice with the note name and error or warning counts when the current note fails lint.
+- Single-file linting now reuses the existing lint engine without replacing full-vault lint for dashboard and report workflows.
+- Fixed the remaining Obsidian Community Plugins sentence-case lint issue in the new active-file lint settings copy.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.6.6 & 1.6.7
 
 ## Changed

@@ -12,6 +12,7 @@ export type FieldPointerLocation = "frontmatter" | "inline";
 export type DashboardAutoRefreshIntervalMinutes = 1 | 3 | 5 | 15 | 30;
 export type InboxRetentionAction = "delete" | "warning";
 export type DataviewExpansionAutoUpdateMode = "off" | "edit_idle";
+export type ActiveFileLintAutoMode = "off" | "edit_idle";
 
 export interface FieldPointer {
   location: FieldPointerLocation;
@@ -40,6 +41,8 @@ export interface ForgeSettings {
   lintInlineMetadata: boolean;
   lintExcludeInboxFolder: boolean;
   lintRepairThreshold: "errors_only" | "errors_and_warnings";
+  activeFileLintAutoMode: ActiveFileLintAutoMode;
+  activeFileLintIdleDelayMs: number;
 
   // ── Stale review ──────────────────────────────────────────────────
   staleReviewEnabled: boolean;
@@ -122,6 +125,7 @@ export interface ForgeSettings {
   frontmatterFieldOrder: string[];
   dataviewExpansionEnabled: boolean;
   dataviewExpansionAutoUpdateMode: DataviewExpansionAutoUpdateMode;
+  dataviewExpansionAutoUpdateDelayMs: number;
   dataviewExpansionTitle: string;
   dataviewExpansionMaxLinks: number;
 
@@ -151,6 +155,8 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   lintInlineMetadata: true,
   lintExcludeInboxFolder: false,
   lintRepairThreshold: "errors_only",
+  activeFileLintAutoMode: "off",
+  activeFileLintIdleDelayMs: 10_000,
 
   // Stale review
   staleReviewEnabled: false,
@@ -230,6 +236,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   frontmatterFieldOrder: [],
   dataviewExpansionEnabled: false,
   dataviewExpansionAutoUpdateMode: "edit_idle",
+  dataviewExpansionAutoUpdateDelayMs: 5_000,
   dataviewExpansionTitle: "Dataview Expansion",
   dataviewExpansionMaxLinks: 250,
 

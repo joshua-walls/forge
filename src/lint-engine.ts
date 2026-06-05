@@ -83,6 +83,23 @@ export async function runLint(
   app: App,
   settings: ForgeSettings
 ): Promise<LintRunResult | null> {
+  const allFiles = getMarkdownFiles(app);
+  return runLintForFiles(app, settings, allFiles);
+}
+
+export async function runLintForFile(
+  app: App,
+  settings: ForgeSettings,
+  file: TFile
+): Promise<LintRunResult | null> {
+  return runLintForFiles(app, settings, [file]);
+}
+
+export async function runLintForFiles(
+  app: App,
+  settings: ForgeSettings,
+  files: TFile[]
+): Promise<LintRunResult | null> {
   const schema = await loadSchema(app, settings);
   if (!schema) return null;
 
@@ -93,9 +110,7 @@ export async function runLint(
     settings.lintExcludeInboxFolder ? [settings.inboxFolder] : []
   );
 
-  const allFiles = getMarkdownFiles(app).filter(
-    (f) => !isExempt(f.path, exemptPaths)
-  );
+  const allFiles = uniqueMarkdownFiles(files).filter((f) => !isExempt(f.path, exemptPaths));
 
   const validShapes = getValidShapeNames(app, paths.shapes);
 
@@ -116,7 +131,7 @@ export async function runLint(
   }
 
   if (settings.inboxRetentionAction === "warning") {
-    allResults.push(...runInboxRetentionLint(app, settings));
+    allResults.push(...runInboxRetentionLintForFiles(allFiles, settings));
   }
 
   const envelope: LintRunEnvelope = {
@@ -135,14 +150,14 @@ export async function runLint(
   };
 }
 
-function runInboxRetentionLint(
-  app: App,
+function runInboxRetentionLintForFiles(
+  files: TFile[],
   settings: ForgeSettings
 ): LintResult[] {
   const paths = getVaultPaths(settings);
   const cutoff = Date.now() - settings.inboxRetentionDays * 24 * 60 * 60 * 1000;
 
-  return app.vault.getFiles()
+  return files
     .filter((file) => file.path.startsWith(`${paths.inbox}/`) && file.stat.mtime < cutoff)
     .map((file) => {
       const age = Math.floor((Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24));
@@ -153,6 +168,19 @@ function runInboxRetentionLint(
         `Inbox note is ${age} days old and exceeds the ${settings.inboxRetentionDays}-day retention threshold`
       );
     });
+}
+
+function uniqueMarkdownFiles(files: TFile[]): TFile[] {
+  const seen = new Set<string>();
+  const unique: TFile[] = [];
+
+  for (const file of files) {
+    if (file.extension !== "md" || seen.has(file.path)) continue;
+    seen.add(file.path);
+    unique.push(file);
+  }
+
+  return unique;
 }
 
 // ── Per-file lint ─────────────────────────────────────────────────────────────

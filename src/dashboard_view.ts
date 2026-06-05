@@ -59,6 +59,29 @@ export class ForgeHealthDashboardView extends ItemView {
     return "activity";
   }
 
+  private currentNoteLintStatus() {
+    return this.plugin.activeFileLintService?.currentFileStatus() ?? null;
+  }
+
+  private currentNoteFilePath(): string | null {
+    return this.plugin.activeFileLintService?.currentFilePath() ?? null;
+  }
+
+  private currentNoteStatusLabel(): string {
+    const filePath = this.currentNoteFilePath();
+    if (!filePath) return "No note";
+    if (!this.plugin.activeFileLintService?.isEnabledForCurrentSession()) return "Off";
+    if (this.plugin.activeFileLintService.isCurrentFileLintInFlight()) return "Linting";
+    if (this.plugin.activeFileLintService.isCurrentFileDirty()) return "Pending";
+
+    const status = this.currentNoteLintStatus();
+    if (!status) return "Not checked";
+    if (status.errors > 0) return `${status.errors} error${status.errors === 1 ? "" : "s"}`;
+    if (status.warnings > 0) return `${status.warnings} warning${status.warnings === 1 ? "" : "s"}`;
+    if (status.infos > 0) return `${status.infos} info${status.infos === 1 ? "" : "s"}`;
+    return "Clear";
+  }
+
   async onOpen(): Promise<void> {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
     this.render();
@@ -237,6 +260,7 @@ export class ForgeHealthDashboardView extends ItemView {
       return;
     }
     this.renderSummary(contentEl, this.snapshot);
+    this.renderCurrentNote(contentEl);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
     if (this.shouldShowOntologySection()) {
@@ -389,6 +413,7 @@ export class ForgeHealthDashboardView extends ItemView {
     const metrics = [
       ["Notes scanned", snapshot.summary.notes_scanned],
       ["Lint issues", snapshot.summary.lint_issue_count],
+      ["Current note", this.currentNoteStatusLabel()],
       ["Schema violations", snapshot.summary.schema_violation_count],
       ["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count],
       ["Normalization candidates", snapshot.summary.normalization_candidates ?? "—"],
@@ -399,6 +424,80 @@ export class ForgeHealthDashboardView extends ItemView {
       item.createDiv({ text: String(value), cls: "forge-health-metric-value" });
       item.createDiv({ text: String(label), cls: "forge-health-metric-label" });
     }
+  }
+
+  private renderCurrentNote(container: HTMLElement): void {
+    const filePath = this.currentNoteFilePath();
+    const current = this.currentNoteLintStatus();
+    const enabled = this.plugin.activeFileLintService?.isEnabledForCurrentSession() ?? false;
+    const dirty = this.plugin.activeFileLintService?.isCurrentFileDirty() ?? false;
+    const inFlight = this.plugin.activeFileLintService?.isCurrentFileLintInFlight() ?? false;
+
+    const status: SectionStatus = !filePath
+      ? { label: "No note", tone: "muted" }
+      : !enabled
+        ? { label: "Off", tone: "muted" }
+        : inFlight
+          ? { label: "Linting", tone: "warning" }
+          : dirty
+            ? { label: "Pending", tone: "warning" }
+            : current?.errors
+              ? { label: `${current.errors} error${current.errors === 1 ? "" : "s"}`, tone: "critical" }
+              : (current?.warnings ?? 0) > 0
+                ? { label: `${current?.warnings} warning${current?.warnings === 1 ? "" : "s"}`, tone: "warning" }
+                : (current?.infos ?? 0) > 0
+                  ? { label: `${current?.infos} info${current?.infos === 1 ? "" : "s"}`, tone: "muted" }
+                : current
+                  ? { label: "Clear", tone: "good" }
+                  : { label: "Not checked", tone: "muted" };
+
+    const section = createSection(container, "Current Note", status);
+
+    if (!filePath) {
+      section.createDiv({ text: "Open a markdown note to see its active lint status here.", cls: "forge-health-muted" });
+      return;
+    }
+
+    section.createDiv({ text: filePath, cls: "forge-health-section-meta" });
+
+    if (!enabled) {
+      section.createDiv({ text: "Active-file auto-lint is turned off in settings.", cls: "forge-health-muted" });
+      return;
+    }
+
+    if (inFlight) {
+      section.createDiv({ text: "Linting the current note now.", cls: "forge-health-muted" });
+      return;
+    }
+
+    if (dirty) {
+      section.createDiv({ text: "Current note has changes waiting for the next auto-lint run.", cls: "forge-health-muted" });
+      return;
+    }
+
+    if (!current) {
+      section.createDiv({ text: "Current note has not been linted yet in this session.", cls: "forge-health-muted" });
+      return;
+    }
+
+    section.createDiv({
+      text: `Last checked ${formatRelativeWithExactDate(current.generatedAt)}`,
+      cls: "forge-health-section-meta",
+    });
+
+    const summary = section.createDiv("forge-health-inline-summary");
+    summary.createSpan({ text: `${current.errors} error${current.errors === 1 ? "" : "s"}` });
+    summary.createSpan({ text: " • " });
+    summary.createSpan({ text: `${current.warnings} warning${current.warnings === 1 ? "" : "s"}` });
+    summary.createSpan({ text: " • " });
+    summary.createSpan({ text: `${current.infos} info${current.infos === 1 ? "" : "s"}` });
+
+    if (current.issues.length === 0) {
+      section.createDiv({ text: "No issues found for the current note.", cls: "forge-health-muted" });
+      return;
+    }
+
+    this.renderGroupedIssues(section, current.issues, "current-note");
   }
 
   private renderSchemaHealth(container: HTMLElement, snapshot: DashboardSnapshot): void {
