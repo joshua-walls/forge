@@ -242,14 +242,16 @@ async function normalizeFrontmatterPass(
 
     // Lowercase values for enum fields
     for (const field of lowercaseFields) {
-      if (field in fm && typeof fm[field] === "string") {
-        const original = fm[field];
-        const lower = original.toLowerCase();
-        if (original !== lower) {
-          fm[field] = lower;
-          changed = true;
-          details.push(`${field} value lowercased`);
-        }
+      if (!(field in fm)) continue;
+
+      const original = fm[field];
+      if (typeof original !== "string") continue;
+
+      const lower = original.toLowerCase();
+      if (original !== lower) {
+        fm[field] = lower;
+        changed = true;
+        details.push(`${field} value lowercased`);
       }
     }
 
