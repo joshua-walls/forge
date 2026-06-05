@@ -1,3 +1,21 @@
+# 1.6.9
+
+## Changed
+
+- Differentiate auto-lint popups between lint, shape lint, and combined failures.
+- Keep Current Note context while interacting with the Forge dashboard.
+- Make dashboard sections collapsible.
+- Remove the redundant Current Note summary metric.
+- Add a seconds-based Dataview Expansion auto-update delay setting.
+- Improve current-note relint behavior for read-view frontmatter or Properties edits and source-to-read-view transitions.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.6.8
 
 ## Added
@@ -13,11 +31,6 @@
 - Auto-lint now shows a small failure notice with the note name and error or warning counts when the current note fails lint.
 - Single-file linting now reuses the existing lint engine without replacing full-vault lint for dashboard and report workflows.
 - Fixed the remaining Obsidian Community Plugins sentence-case lint issue in the new active-file lint settings copy.
-
-## Compatibility
-
-- `minAppVersion` remains `1.7.2`.
-- No migration is required.
 
 ---
 

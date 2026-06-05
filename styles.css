@@ -797,10 +797,39 @@
   flex-wrap: wrap;
 }
 
+.forge-health-section-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.forge-health-section-toggle {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.forge-health-section-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
 .forge-health-section-header h3 {
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.forge-health-section.is-collapsed > :not(.forge-health-section-header) {
+  display: none;
 }
 
 .forge-health-section-status {
