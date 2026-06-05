@@ -1,44 +1,90 @@
-name: Tag Release
+name: Release
 
 on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish manually"
+        required: true
+        type: string
 
 jobs:
-  tag:
-    if: "github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')"
+  release:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.base_ref == 'main' &&
+       startsWith(github.head_ref, 'release/'))
     runs-on: ubuntu-latest
 
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.release_ref.outputs.tag }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract version from branch name
-        id: version
+      - name: Resolve release ref
+        id: release_ref
         run: |
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          VERSION="${BRANCH#release/}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "checkout_ref=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+            VERSION="${BRANCH#release/}"
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "checkout_ref=${{ github.event.pull_request.merge_commit_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.release_ref.outputs.checkout_ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Obsidian lint
+        run: npm run lint:obsidian
+
+      - name: Build
+        run: npm run build
 
       - name: Create and push tag
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.release_ref.outputs.tag }}"
           git tag "$VERSION"
           git push origin "$VERSION"
 
-  release:
-    needs: tag
-    uses: ./.github/workflows/release.yml
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    with:
-      tag: ${{ needs.tag.outputs.version }}
+      - name: Attest main.js
+        uses: actions/attest@v4
+        with:
+          subject-path: main.js
+
+      - name: Attest styles.css
+        uses: actions/attest@v4
+        with:
+          subject-path: styles.css
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_ref.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            main.js
+            manifest.json
+            styles.css
