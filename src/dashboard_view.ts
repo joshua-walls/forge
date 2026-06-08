@@ -443,9 +443,11 @@ export class ForgeHealthDashboardView extends ItemView {
                 ? { label: `${current?.warnings} warning${current?.warnings === 1 ? "" : "s"}`, tone: "warning" }
                 : (current?.infos ?? 0) > 0
                   ? { label: `${current?.infos} info${current?.infos === 1 ? "" : "s"}`, tone: "muted" }
-                : current
-                  ? { label: "Clear", tone: "good" }
-                  : { label: "Not checked", tone: "muted" };
+                  : current?.exempt
+                    ? { label: "Exempt", tone: "muted" }
+                    : current
+                      ? { label: "Clear", tone: "good" }
+                      : { label: "Not checked", tone: "muted" };
 
     const section = createSection(container, "current-note", "Current Note", status, this.collapsedSections.has("current-note"), () => {
       this.toggleSection("current-note");
@@ -482,6 +484,11 @@ export class ForgeHealthDashboardView extends ItemView {
       text: `Last checked ${formatRelativeWithExactDate(current.generatedAt)}`,
       cls: "forge-health-section-meta",
     });
+
+    if (current.exempt && current.issues.length === 0) {
+      section.createDiv({ text: "This note is exempt from lint checks.", cls: "forge-health-muted" });
+      return;
+    }
 
     const summary = section.createDiv("forge-health-inline-summary");
     summary.createSpan({ text: `${current.errors} error${current.errors === 1 ? "" : "s"}` });

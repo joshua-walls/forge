@@ -21,6 +21,7 @@ export type ActiveFileLintStatus = {
   errors: number;
   warnings: number;
   infos: number;
+  exempt: boolean;
 };
 
 export class ActiveFileLintService {
@@ -189,6 +190,7 @@ export class ActiveFileLintService {
       const errors = lintErrors + shapeErrors;
       const warnings = lintWarnings + shapeWarnings;
       const infos = lintResult.infos.length + (shapeLintResult?.infos.length ?? 0);
+      const exempt = lintResult.envelope.notes_scanned === 0;
 
       this.dirtyFiles.delete(file.path);
       this.lastResultsByFile.set(file.path, {
@@ -198,6 +200,7 @@ export class ActiveFileLintService {
         errors,
         warnings,
         infos,
+        exempt,
       });
       this.maybeShowNotice(file, {
         lintErrors,
