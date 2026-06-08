@@ -1,3 +1,17 @@
+# 1.6.10
+
+## Changed
+
+- Current Note now shows `Exempt` in a muted status pill when note-level lint skips the file because it matches Forge exempt paths.
+- Exempt current notes no longer appear as `Clear` or show the no-issues message in the dashboard.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.6.9
 
 ## Changed

@@ -1,14 +1,11 @@
-# Forge 1.6.9
+# Forge 1.6.10
 
-Forge 1.6.9 improves active-note feedback and dashboard usability.
+Forge 1.6.10 fixes Current Note exempt-state visibility in the dashboard.
 
 ## What changed
 
-- Active note auto-lint notices now distinguish between note lint failures, shape lint failures, and combined failures.
-- Current Note tracking in the dashboard now stays stable when you click inside the panel.
-- Dashboard sections are now collapsible, so lower-priority areas like maintenance history can stay hidden until needed.
-- Dataview Expansion auto-update delay is now configurable in seconds.
-- Current-note linting now responds better to read-view metadata edits and mode changes.
+- Current Note now shows `Exempt` with a muted status when note-level lint skips a file because it is exempt.
+- Exempt current notes no longer appear as `Clear` or show the no-issues message.
 
 ## Compatibility
 
