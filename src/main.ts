@@ -20,7 +20,7 @@ import {
   ForgeHealthDashboardView,
 } from "./dashboard_view";
 import { MigrationNoticeModal } from "./migration-notice";
-import { runApplyPatch } from "./commands/apply-patch";
+import { runApplyPatch, runApplyPatchFromPatchesFolder } from "./commands/apply-patch";
 import { runVaultLint } from "./commands/run-lint";
 import { runValidateSchema } from "./commands/validate-schema";
 import { runNormalizeTags, runNormalizeFrontmatter } from "./commands/normalize";
@@ -155,6 +155,16 @@ export default class ForgePlugin extends Plugin {
       callback: () => {
         void runApplyPatch(this).catch((error: unknown) => {
           this.handleCommandError("apply-vault-patch", error);
+        });
+      },
+    });
+
+    this.addCommand({
+      id: "apply-patch-from-patches-folder",
+      name: "Apply patch from patches folder",
+      callback: () => {
+        void runApplyPatchFromPatchesFolder(this).catch((error: unknown) => {
+          this.handleCommandError("apply-patch-from-patches-folder", error);
         });
       },
     });

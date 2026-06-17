@@ -1,7 +1,7 @@
 // src/commands/apply-patch.ts
 // Apply Vault Patch command.
 //
-// Flow:
+// Default command flow:
 //   1. Load patch file from settings.patchDefaultFile
 //   2. Run dry-run pass — collect what would change
 //   3. Show modal: summary of changes, errors, confirm/cancel
@@ -9,7 +9,7 @@
 //   5. Show result notice
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
-import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
+import { App, FuzzySuggestModal, Modal, Notice, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import {
@@ -27,27 +27,29 @@ import { ensureFolder, todayString } from "../utils/files";
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
+export async function runApplyPatch(
+  plugin: ForgePlugin,
+  patchFilePath?: string
+): Promise<void> {
   const { app, settings } = plugin;
   const paths = getVaultPaths(settings);
+  const patchPath = patchFilePath ?? paths.patchFile;
 
   // Load patch file. If the default patch note does not exist yet,
   // create a schema-valid template so the user has a real note to edit.
-  let patchFile = await loadPatchFile(app, paths.patchFile);
+  const patchFile = await loadPatchFile(app, patchPath);
 
   if (!patchFile) {
-    const created = await createPatchTemplateIfMissing(app, paths.patchFile);
-
-    if (created) {
+    if (!patchFilePath && await createPatchTemplateIfMissing(app, patchPath)) {
       new Notice(
-        `Forge: Created patch note at ${paths.patchFile}. Add operations, then run Apply Vault Patch again.`,
+        `Forge: Created patch note at ${patchPath}. Add operations, then run Apply Vault Patch again.`,
         7000
       );
       return;
     }
 
     new Notice(
-      `Forge: Patch file not found or has no YAML block at ${paths.patchFile}`,
+      `Forge: Patch file not found or has no YAML block at ${patchPath}`,
       7000
     );
     return;
@@ -64,7 +66,7 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
     app,
     settings,
     patchFile,
-    paths.patchFile,
+    patchPath,
     true
   );
 
@@ -76,7 +78,7 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
       app,
       settings,
       patchFile,
-      paths.patchFile,
+      patchPath,
       false
     );
 
@@ -114,6 +116,59 @@ export async function runApplyPatch(plugin: ForgePlugin): Promise<void> {
       await plugin.recomposeHealthDashboard();
     }
   }).open();
+}
+
+export async function runApplyPatchFromPatchesFolder(plugin: ForgePlugin): Promise<void> {
+  const paths = getVaultPaths(plugin.settings);
+  const patchesFolder = `${normalizePath(paths.patches).toLowerCase()}/`;
+  const excludedFolders = [
+    paths.patchApplied,
+    paths.patchBackups,
+    paths.patchReports,
+  ].map((path) => `${normalizePath(path).toLowerCase()}/`);
+
+  const patchFiles = plugin.app.vault.getFiles()
+    .filter((file) => {
+      const path = normalizePath(file.path).toLowerCase();
+      return (
+        path.startsWith(patchesFolder) &&
+        !excludedFolders.some((folder) => path.startsWith(folder)) &&
+        path.endsWith(".md")
+      );
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  if (patchFiles.length === 0) {
+    new Notice(`Forge: No patch notes found in ${paths.patches}.`, 5000);
+    return;
+  }
+
+  new PatchFileSuggestModal(plugin.app, patchFiles, (file) => {
+    void runApplyPatch(plugin, file.path);
+  }).open();
+}
+
+class PatchFileSuggestModal extends FuzzySuggestModal<TFile> {
+  constructor(
+    app: App,
+    private files: TFile[],
+    private onChoose: (file: TFile) => void
+  ) {
+    super(app);
+    this.setPlaceholder("Choose a patch from the patches folder...");
+  }
+
+  getItems(): TFile[] {
+    return this.files;
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.onChoose(file);
+  }
 }
 
 async function createPatchTemplateIfMissing(
