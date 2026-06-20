@@ -16,10 +16,32 @@ const AUTO_REFRESH_INTERVALS: DashboardAutoRefreshIntervalMinutes[] = [1, 3, 5, 
 
 type AppCommandRegistry = {
   executeCommandById?: (commandId: string) => boolean;
+  commands?: Record<string, AppCommand>;
+};
+
+type AppCommand = {
+  id?: string;
+  name?: string;
+};
+
+type AppPluginManifest = {
+  id?: string;
+  name?: string;
+};
+
+type AppPluginManager = {
+  enabledPlugins?: Set<string> | string[];
+  manifests?: Record<string, AppPluginManifest>;
+  plugins?: Record<string, unknown>;
+  getPlugin?: (pluginId: string) => unknown;
 };
 
 type AppWithCommandRegistry = ItemView["app"] & {
   commands?: AppCommandRegistry;
+};
+
+type AppWithPlugins = AppWithCommandRegistry & {
+  plugins?: AppPluginManager;
 };
 
 export class ForgeHealthDashboardView extends ItemView {
@@ -38,6 +60,8 @@ export class ForgeHealthDashboardView extends ItemView {
   private pollInterval: number | null = null;
   private autoRefreshInterval: number | null = null;
   private lastKnownCacheMtime = 0;
+  private lastKnownLockblockAvailable: boolean | null = null;
+  private lastKnownDataviewAvailable: boolean | null = null;
 
   // Set to true by main.ts when the plugin version changed since last load.
   // Triggers the update banner until the user reloads the leaf.
@@ -70,6 +94,8 @@ export class ForgeHealthDashboardView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
+    this.lastKnownLockblockAvailable = this.isLockblockAvailable();
+    this.lastKnownDataviewAvailable = this.isDataviewAvailable();
     this.render();
     this.startLiveReload();
     this.updateAutoRefreshTimer();
@@ -148,9 +174,22 @@ export class ForgeHealthDashboardView extends ItemView {
     );
 
     // Fallback poll: catches iCloud and other filesystem syncs that bypass
-    // the vault event system for remote writes.
+    // the vault event system for remote writes, and keeps optional plugin
+    // integrations in sync when another plugin is enabled or disabled.
     this.pollInterval = window.setInterval(() => {
       void (async () => {
+        const lockblockAvailable = this.isLockblockAvailable();
+        if (lockblockAvailable !== this.lastKnownLockblockAvailable) {
+          this.lastKnownLockblockAvailable = lockblockAvailable;
+          this.render();
+        }
+
+        const dataviewAvailable = this.isDataviewAvailable();
+        if (dataviewAvailable !== this.lastKnownDataviewAvailable) {
+          this.lastKnownDataviewAvailable = dataviewAvailable;
+          this.render();
+        }
+
         try {
           const stat = await this.app.vault.adapter.stat(cachePath);
           const mtime = stat?.mtime ?? 0;
@@ -243,10 +282,12 @@ export class ForgeHealthDashboardView extends ItemView {
       const empty = contentEl.createDiv("forge-health-empty");
       empty.createEl("h2", { text: "No cached health snapshot" });
       empty.createEl("p", { text: "Run a manual refresh to scan the vault and populate this dashboard." });
+      this.renderLockblockControls(contentEl);
       return;
     }
     this.renderSummary(contentEl, this.snapshot);
     this.renderCurrentNote(contentEl);
+    this.renderLockblockControls(contentEl);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
     if (this.shouldShowOntologySection()) {
@@ -572,6 +613,7 @@ export class ForgeHealthDashboardView extends ItemView {
   private renderOntology(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const ontology = snapshot.ontology;
     const exportEnabled = this.plugin.settings.exportEnabled;
+    const dataviewAvailable = this.isDataviewAvailable();
     const section = createSection(
       container,
       "ontology",
@@ -593,17 +635,13 @@ export class ForgeHealthDashboardView extends ItemView {
       const ontologyExportButton = actions.createEl("button", { text: "Export ontology index", cls: "forge-health-action-button forge-health-action-secondary" });
       ontologyExportButton.addEventListener("click", () => this.executeCommand("export-ontology-index"));
     }
-    if (this.plugin.settings.dataviewExpansionEnabled) {
+    if (this.plugin.settings.dataviewExpansionEnabled && dataviewAvailable) {
       const expansionActions = section.createDiv("forge-health-section-actions");
-      const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
       const refreshNoteButton = expansionActions.createEl("button", {
         text: "Refresh note expansion",
         cls: "forge-health-action-button forge-health-action-secondary",
       });
-      refreshNoteButton.disabled = !dataviewAvailable;
-      refreshNoteButton.title = dataviewAvailable
-        ? "Refresh Dataview Expansion for the active note"
-        : "Dataview must be installed and enabled";
+      refreshNoteButton.title = "Refresh dataview expansion for the active note";
       refreshNoteButton.addEventListener("click", () => {
         void this.plugin.dataviewExpansionService.refreshActiveFile(true);
       });
@@ -612,10 +650,7 @@ export class ForgeHealthDashboardView extends ItemView {
         text: "Refresh folder expansion",
         cls: "forge-health-action-button forge-health-action-secondary",
       });
-      refreshFolderButton.disabled = !dataviewAvailable;
-      refreshFolderButton.title = dataviewAvailable
-        ? "Refresh Dataview Expansion in the active note's folder"
-        : "Dataview must be installed and enabled";
+      refreshFolderButton.title = "Refresh dataview expansion in the active note's folder";
       refreshFolderButton.addEventListener("click", () => {
         void this.plugin.dataviewExpansionService.refreshCurrentFolder(true);
       });
@@ -624,10 +659,7 @@ export class ForgeHealthDashboardView extends ItemView {
         text: "Refresh vault expansion",
         cls: "forge-health-action-button forge-health-action-secondary",
       });
-      refreshVaultButton.disabled = !dataviewAvailable;
-      refreshVaultButton.title = dataviewAvailable
-        ? "Refresh Dataview Expansion across the whole vault"
-        : "Dataview must be installed and enabled";
+      refreshVaultButton.title = "Refresh dataview expansion across the whole vault";
       refreshVaultButton.addEventListener("click", () => {
         void this.plugin.dataviewExpansionService.refreshWholeVault(true);
       });
@@ -721,11 +753,89 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   private shouldShowOntologySection(): boolean {
-    return this.plugin.settings.exportEnabled || this.plugin.settings.dataviewExpansionEnabled;
+    return this.plugin.settings.exportEnabled ||
+      (this.plugin.settings.dataviewExpansionEnabled && this.isDataviewAvailable());
   }
 
   private shouldShowShapeSection(): boolean {
     return this.plugin.settings.shapesEnabled;
+  }
+
+  private isDataviewAvailable(): boolean {
+    return this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
+  }
+
+  private renderLockblockControls(container: HTMLElement): void {
+    const integration = this.lockblockIntegration();
+    if (!integration) return;
+
+    const section = createSection(
+      container,
+      "lockblock",
+      "Lockblock",
+      { label: "Enabled", tone: "good" },
+      this.collapsedSections.has("lockblock"),
+      () => {
+        this.toggleSection("lockblock");
+      }
+    );
+
+    const actions = section.createDiv("forge-health-section-actions");
+    const unlockCommand = findCommandById(integration.commands, integration.pluginId, "unlock");
+    const lockCommand = findCommandById(integration.commands, integration.pluginId, "lock");
+    const changePasswordCommand = findCommandById(integration.commands, integration.pluginId, "change-unlock-password");
+
+    this.renderLockblockCommandButton(actions, "Unlock vault", unlockCommand);
+    this.renderLockblockCommandButton(actions, "Lock vault", lockCommand);
+    this.renderLockblockCommandButton(actions, "Change password", changePasswordCommand);
+
+    if (!lockCommand && !unlockCommand && !changePasswordCommand) {
+      section.createDiv({
+        text: "Lockblock is enabled, but Forge could not find basic vault commands exposed by that plugin.",
+        cls: "forge-health-muted",
+      });
+    }
+  }
+
+  private renderLockblockCommandButton(container: HTMLElement, label: string, command: AppCommand | null): void {
+    const button = container.createEl("button", {
+      text: label,
+      cls: "forge-health-action-button forge-health-action-primary",
+    });
+    button.disabled = !command?.id;
+    button.title = command?.name ?? "Lockblock command not available";
+    button.addEventListener("click", () => {
+      if (command?.id) this.executeCommandByFullId(command.id);
+    });
+  }
+
+  private isLockblockAvailable(): boolean {
+    return this.lockblockIntegration() !== null;
+  }
+
+  private lockblockIntegration(): { pluginId: string; commands: AppCommand[] } | null {
+    const app = this.app as AppWithPlugins;
+    const plugins = app.plugins;
+    if (!plugins) return null;
+
+    const enabledPluginIds = enabledPluginIdList(plugins.enabledPlugins);
+    const pluginId = enabledPluginIds.find((id) => isLockblockPlugin(id, plugins.manifests?.[id]));
+    if (!pluginId) return null;
+
+    const plugin = plugins.getPlugin?.(pluginId) ?? plugins.plugins?.[pluginId];
+    if (!plugin) return null;
+
+    return {
+      pluginId,
+      commands: this.lockblockCommands(pluginId),
+    };
+  }
+
+  private lockblockCommands(pluginId: string): AppCommand[] {
+    const commandMap = (this.app as AppWithCommandRegistry).commands?.commands ?? {};
+    return Object.values(commandMap)
+      .filter((command) => command.id?.startsWith(`${pluginId}:`))
+      .sort((a, b) => (a.name ?? a.id ?? "").localeCompare(b.name ?? b.id ?? ""));
   }
 
   private renderHistory(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -904,6 +1014,10 @@ export class ForgeHealthDashboardView extends ItemView {
 
   private executeCommand(commandId: string): void {
     const fullId = `forge:${commandId}`;
+    this.executeCommandByFullId(fullId);
+  }
+
+  private executeCommandByFullId(fullId: string): void {
     const commands = (this.app as AppWithCommandRegistry).commands;
     if (commands?.executeCommandById) {
       commands.executeCommandById(fullId);
@@ -1022,6 +1136,22 @@ function isAutoRefreshInterval(value: number): value is DashboardAutoRefreshInte
 
 function normalizeAutoRefreshInterval(value: number): DashboardAutoRefreshIntervalMinutes {
   return isAutoRefreshInterval(value) ? value : 5;
+}
+
+function enabledPluginIdList(enabledPlugins: AppPluginManager["enabledPlugins"]): string[] {
+  if (!enabledPlugins) return [];
+  return Array.isArray(enabledPlugins) ? enabledPlugins : [...enabledPlugins];
+}
+
+function isLockblockPlugin(pluginId: string, manifest?: AppPluginManifest): boolean {
+  const id = pluginId.toLowerCase();
+  const name = (manifest?.name ?? "").toLowerCase();
+  return id === "lockblock" || id.includes("lockblock") || name === "lockblock" || name.includes("lockblock");
+}
+
+function findCommandById(commands: AppCommand[], pluginId: string, commandId: string): AppCommand | null {
+  const fullId = `${pluginId}:${commandId}`;
+  return commands.find((command) => command.id === fullId) ?? null;
 }
 
 function formatDate(value: string): string {

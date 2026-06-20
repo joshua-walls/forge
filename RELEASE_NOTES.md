@@ -1,11 +1,14 @@
-# Forge 1.6.10
+# Forge 1.7.0
 
-Forge 1.6.10 fixes Current Note exempt-state visibility in the dashboard.
+Forge 1.7.0 adds basic Lockblock controls to the Forge health dashboard.
 
 ## What changed
 
-- Current Note now shows `Exempt` with a muted status when note-level lint skips a file because it is exempt.
-- Exempt current notes no longer appear as `Clear` or show the no-issues message.
+- When Lockblock is installed and enabled, the dashboard now shows a Lockblock section.
+- The section exposes basic vault actions: `Unlock vault`, `Lock vault`, and `Change password`.
+- Forge calls Lockblock's exact command IDs so unlock, lock, and password-change actions stay separate.
+- The section appears or disappears automatically when Lockblock is enabled or disabled.
+- Dataview Expansion dashboard controls also appear or disappear automatically when Dataview is enabled or disabled.
 
 ## Compatibility
 
