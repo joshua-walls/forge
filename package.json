@@ -1,12 +1,12 @@
 {
   "name": "forge",
-  "version": "1.6.10",
+  "version": "1.7.0",
   "description": "Define your vault's structure and let Forge enforce it — lint, normalize, patch, and maintain with confidence.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-    "lint:obsidian": "eslint --no-warn-ignored \"src/**/*.ts\" \"manifest.json\" \"styles.css\"",
+    "lint:obsidian": "npm exec -- eslint --no-warn-ignored \"src/**/*.ts\" \"manifest.json\" \"styles.css\"",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
   "keywords": [],

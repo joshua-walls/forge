@@ -1,3 +1,23 @@
+# 1.7.0
+
+## Added
+
+- Added a Lockblock section to the Forge health dashboard when Lockblock is installed and enabled.
+- Added basic Lockblock actions for unlocking the vault, locking the vault, and changing the unlock password.
+- The Lockblock dashboard section now appears or disappears automatically when Lockblock is enabled or disabled.
+- Dataview Expansion dashboard controls now appear or disappear automatically when Dataview is enabled or disabled.
+
+## Changed
+
+- Forge now calls Lockblock's exact command IDs for those actions so unlock, lock, and password changes remain distinct.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.6.10
 
 ## Changed
