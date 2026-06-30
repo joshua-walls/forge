@@ -17,8 +17,8 @@ import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import { readNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
-import { stringifyYaml } from "obsidian";
 import { VaultSchema, SchemaRelationship } from "../utils/schema";
+import { serializeYaml, trimTrailingWhitespace } from "../utils/yaml";
 
 function formatScalarValue(value: unknown): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
@@ -176,7 +176,7 @@ async function processShape(
     : null;
 
   const fm = buildTemplateFrontmatter(settings, shapeName, today, existingCreated);
-  const yaml = stringifyYaml(fm).trimEnd();
+  const yaml = trimTrailingWhitespace(serializeYaml(fm));
   const newContent = `---\n${yaml}\n---\n\n${body}\n`;
 
   if (existingTemplate instanceof TFile) {

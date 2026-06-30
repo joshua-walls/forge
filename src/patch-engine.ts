@@ -19,7 +19,7 @@
 // The engine collects all results and returns a PatchRunResult
 // which the command uses to write the report and manifest.
 
-import { App, TFile, normalizePath, parseYaml, stringifyYaml } from "obsidian";
+import { App, TFile, normalizePath, parseYaml } from "obsidian";
 import type { ForgeSettings } from "./settings";
 import {
   readNote,
@@ -41,6 +41,7 @@ import {
   safeTimestamp,
   todayString,
 } from "./utils/files";
+import { serializeYaml, trimTrailingWhitespace } from "./utils/yaml";
 
 function formatPatchValue(value: unknown): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
@@ -724,7 +725,7 @@ async function applyMoveNote(
         // Merge — op.frontmatter wins on conflicts, existing fields survive
         const merged = { ...note.frontmatter, ...op.frontmatter };
         const sorted = sortFrontmatterFields(merged, settings.frontmatterFieldOrder);
-        const yamlStr = stringifyYaml(sorted).trimEnd();
+        const yamlStr = trimTrailingWhitespace(serializeYaml(sorted));
         const bodyMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
         const body = bodyMatch ? bodyMatch[1] : content;
         content = `---\n${yamlStr}\n---\n${body}`;

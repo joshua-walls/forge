@@ -10,6 +10,7 @@ import { App, Modal, Notice, Setting, TFile } from "obsidian";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import { getMarkdownFiles } from "../utils/files";
+import { trimLineEnd } from "../utils/yaml";
 
 // ── Rename Dataview Folder ────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ function updateDataviewFolderRefs(
   let inDataview = false;
 
   for (const line of lines) {
-    const trimmed = line.trimEnd();
+    const trimmed = trimLineEnd(line);
 
     if (/^(?:```|~~~)dataview\s*$/.test(trimmed)) {
       inDataview = true;

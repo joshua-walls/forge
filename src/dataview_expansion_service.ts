@@ -2,6 +2,7 @@ import { App, Notice, TAbstractFile, TFile, normalizePath } from "obsidian";
 import type ForgePlugin from "./main";
 import type { ForgeSettings } from "./settings";
 import { getMarkdownFiles } from "./utils/files";
+import { trimLineEnd } from "./utils/yaml";
 
 const START_MARKER = "<!-- FORGE-DV-EXPANSION:START -->";
 const END_MARKER = "<!-- FORGE-DV-EXPANSION:END -->";
@@ -334,7 +335,7 @@ function stripQuotePrefix(line: string, prefix: string): string {
   if (!prefix) return line;
   if (line.startsWith(prefix)) return line.slice(prefix.length);
 
-  const trimmedPrefix = prefix.trimEnd();
+  const trimmedPrefix = trimLineEnd(prefix);
   if (trimmedPrefix && line === trimmedPrefix) return "";
   return line;
 }

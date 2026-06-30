@@ -73,7 +73,9 @@ function countMarkdownInFolder(files: TFile[], folder: string): number {
 }
 
 function sortRecord(record: Record<string, number>): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(record).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  );
+  const sorted: Record<string, number> = {};
+  for (const [key, value] of Object.entries(record).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    sorted[key] = value;
+  }
+  return sorted;
 }

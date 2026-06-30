@@ -1,11 +1,12 @@
-# Forge 1.8.2
+# Forge 1.8.3
 
-Forge 1.8.2 tightens the Forge Health dashboard layout in narrow Obsidian panes and makes dashboard controls more resilient across themes.
+Forge 1.8.3 removes unsafe TypeScript patterns flagged by Obsidian source review after the dashboard layout release.
 
 ## What changed
 
-- Improved Forge Health dashboard spacing in narrow panes, including compact Maintenance History rows, stable metric-card wrapping, and clearer spacing around action rows and issue groups.
-- Added stronger Forge-scoped sizing for dashboard buttons and toggles so Obsidian themes cannot inflate controls or cause action rows to overflow.
+- Added typed YAML serialization helpers so frontmatter/template writes avoid unsafe `any` call and assignment warnings.
+- Replaced direct `trimEnd()` use in review-flagged code paths with typed trimming helpers.
+- Replaced `Object.fromEntries()` ontology sorting with an explicit typed record build to avoid unsafe return warnings.
 
 ## Compatibility
 

@@ -9,8 +9,9 @@
 // Uses Obsidian's built-in parseYaml / stringifyYaml — no external dependency.
 // These are thin wrappers around js-yaml, the same library Obsidian uses internally.
 
-import { App, TFile, normalizePath, parseYaml, stringifyYaml } from "obsidian";
+import { App, TFile, normalizePath, parseYaml } from "obsidian";
 import { ensureFolder, safeTimestamp } from "./files";
+import { serializeYaml, trimTrailingWhitespace } from "./yaml";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ export async function writeNote(
   fieldOrder?: string[]
 ): Promise<void> {
   const sorted = sortFrontmatterFields(note.frontmatter, fieldOrder);
-  const yaml = stringifyYaml(sorted).trimEnd();
+  const yaml = trimTrailingWhitespace(serializeYaml(sorted));
   const newContent = `---\n${yaml}\n---\n${note.body}`;
   await app.vault.modify(note.file, newContent);
 }
