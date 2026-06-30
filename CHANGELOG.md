@@ -1,3 +1,20 @@
+# 1.8.0
+
+## Changed
+
+- Forge Health dashboard styling now adapts through standard Obsidian theme variables instead of Forge-specific theme overrides.
+- Dashboard status colors now use semantic state attributes and Obsidian text tokens for good, warning, critical, and muted states.
+- Dashboard surfaces, borders, hover states, controls, metrics, tables, and chips now avoid fixed Forge color assumptions.
+- Improved mobile dashboard spacing so content is less likely to sit behind floating Obsidian navigation.
+- Improved dashboard table padding, line-height, and button wrapping for narrow panes.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.7.0
 
 ## Added

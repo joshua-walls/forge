@@ -254,6 +254,9 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderAutoRefreshControls(contentEl);
 
     const header = contentEl.createDiv("forge-health-header");
+    if (this.snapshot) {
+      header.dataset.status = healthStatus(this.snapshot);
+    }
     const titleBlock = header.createDiv();
     titleBlock.createEl("h2", { text: "Vault health" });
 
@@ -261,7 +264,8 @@ export class ForgeHealthDashboardView extends ItemView {
     if (this.snapshot) {
       actions.createDiv({
         text: `${healthLabel(this.snapshot)} • ${this.snapshot.duration_ms} ms`,
-        cls: `forge-health-pill ${healthClass(this.snapshot)}`,
+        cls: "forge-health-pill",
+        attr: { "data-status": healthStatus(this.snapshot) },
       });
     }
 
@@ -1092,11 +1096,16 @@ function createSection(
   collapsed = false,
   onToggle?: () => void
 ): HTMLElement {
+  const attrs: Record<string, string> = { "data-section-key": sectionKey };
+  if (status) attrs["data-status"] = status.tone;
   const section = container.createDiv({
     cls: ["forge-health-section", collapsed ? "is-collapsed" : ""],
-    attr: { "data-section-key": sectionKey },
+    attr: attrs,
   });
-  const header = section.createDiv("forge-health-section-header");
+  const header = section.createDiv({
+    cls: "forge-health-section-header",
+    attr: status ? { "data-status": status.tone } : undefined,
+  });
   const titleWrap = header.createDiv("forge-health-section-title-wrap");
   const toggle = titleWrap.createEl("button", {
     text: collapsed ? "+" : "-",
@@ -1108,7 +1117,8 @@ function createSection(
   if (status) {
     header.createDiv({
       text: status.label,
-      cls: `forge-health-section-status is-${status.tone}`,
+      cls: "forge-health-section-status",
+      attr: { "data-status": status.tone },
     });
   }
   return section;
@@ -1122,12 +1132,12 @@ function healthLabel(snapshot: DashboardSnapshot): string {
   return "Healthy";
 }
 
-function healthClass(snapshot: DashboardSnapshot): string {
+function healthStatus(snapshot: DashboardSnapshot): SectionStatus["tone"] {
   if (snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0) {
-    return "is-critical";
+    return "critical";
   }
-  if (snapshot.summary.lint_issue_count > 0) return "is-warning";
-  return "is-good";
+  if (snapshot.summary.lint_issue_count > 0) return "warning";
+  return "good";
 }
 
 function isAutoRefreshInterval(value: number): value is DashboardAutoRefreshIntervalMinutes {
