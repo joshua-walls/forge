@@ -795,7 +795,7 @@
 }
 
 .forge-health-section-message {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .forge-health-actions {
@@ -819,7 +819,7 @@
 .forge-health-empty,
 .forge-health-section {
   border-top: 1px solid var(--background-modifier-border);
-  padding: 14px 0;
+  padding: 16px 0;
 }
 
 .forge-health-section-header {
@@ -827,7 +827,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin: 0 0 8px 0;
+  margin: 0 0 10px 0;
   flex-wrap: wrap;
 }
 
@@ -849,6 +849,19 @@
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.forge-health-dashboard button.forge-health-section-toggle {
+  align-items: center;
+  border-radius: 4px;
+  box-shadow: none;
+  display: inline-flex;
+  font-size: var(--font-ui-smaller);
+  justify-content: center;
+  line-height: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
 }
 
 .forge-health-section-toggle:hover {
@@ -881,26 +894,40 @@
 .forge-health-section-meta {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
-  margin: -2px 0 10px 0;
-}
-
-.forge-health-section-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
   margin: 0 0 10px 0;
 }
 
-.forge-health-action-button,
-.forge-health-issue-controls button {
+.forge-health-section-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 10px 0;
+}
+
+.forge-health-dashboard button.forge-health-action-button,
+.forge-health-dashboard .forge-health-issue-controls button {
+  --button-radius: 6px;
+  --button-height: auto;
+  appearance: none;
+  align-items: center;
+  border-radius: 6px;
+  box-shadow: none;
+  display: inline-flex;
+  flex: 0 1 auto;
+  font-size: var(--font-ui-smaller);
+  justify-content: center;
+  line-height: 1.2;
   max-width: 100%;
-  min-height: 32px;
+  min-height: 0;
   overflow-wrap: anywhere;
+  padding: 5px 10px;
   white-space: normal;
 }
 
-.forge-health-action-button {
+.forge-health-dashboard button.forge-health-action-button {
   min-width: 0;
+  width: auto;
 }
 
 .forge-health-action-primary {
@@ -914,7 +941,7 @@
 .forge-health-inline-summary {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   overflow-wrap: anywhere;
 }
 
@@ -922,12 +949,13 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
+  margin: 10px 0 12px 0;
 }
 
 .forge-health-metric {
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
-  padding: 9px 10px;
+  padding: 8px 10px;
   background: var(--background-secondary);
   min-width: 0;
 }
@@ -953,15 +981,16 @@
 
 .forge-health-issue-controls {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin: 0 0 10px 0;
+  margin: 8px 0 10px 0;
 }
 
 .forge-health-issue-group-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 10px;
 }
 
 .forge-health-issue-group {
@@ -987,6 +1016,18 @@
   padding: 0;
   text-align: center;
   font-family: var(--font-monospace);
+}
+
+.forge-health-dashboard button.forge-health-issue-group-toggle {
+  align-items: center;
+  border-radius: 4px;
+  box-shadow: none;
+  display: inline-flex;
+  font-size: var(--font-ui-small);
+  justify-content: center;
+  line-height: 1;
+  min-height: 0;
+  padding: 0;
 }
 
 .forge-health-issue-group-toggle,
@@ -1084,6 +1125,12 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  margin: 10px 0 12px 0;
+}
+
+.forge-health-table tr,
+.forge-health-table td {
+  background: transparent;
 }
 
 .forge-health-table td {
@@ -1120,13 +1167,74 @@
   }
 }
 
-@container (max-width: 520px) {
+@container (max-width: 680px) {
   .forge-health-dashboard {
     padding: 12px 12px 72px;
   }
 
+  .forge-health-section {
+    padding: 14px 0;
+  }
+
   .forge-health-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .forge-health-metric-grid > .forge-health-metric:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .forge-health-table,
+  .forge-health-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .forge-health-table tr {
+    display: grid;
+    grid-template-columns: minmax(7rem, 42%) minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 5px 0;
+  }
+
+  .forge-health-table td {
+    display: block;
+    border-bottom: 0;
+    padding: 0;
+    line-height: 1.35;
+  }
+
+  .forge-health-table td:first-child {
+    color: var(--text-muted);
+  }
+
+  .forge-health-table td:last-child {
+    text-align: left;
+    color: var(--text-normal);
+  }
+
+  .forge-health-section-actions {
+    gap: 6px;
+    margin: 10px 0 10px 0;
+  }
+
+  .forge-health-dashboard .forge-health-section-actions button.forge-health-action-button {
+    flex: 0 1 auto;
+    max-inline-size: calc(50% - 3px);
+  }
+}
+
+@container (max-width: 280px) {
+  .forge-health-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-health-table tr {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
   }
 
   .forge-health-issue-group-header {
@@ -1138,47 +1246,13 @@
     justify-self: start;
   }
 
-  .forge-health-table,
-  .forge-health-table tbody,
-  .forge-health-table tr,
-  .forge-health-table td {
-    display: block;
-    width: 100%;
-  }
-
-  .forge-health-table tr {
-    border-bottom: 1px solid var(--background-modifier-border);
-    padding: 8px 0;
-  }
-
-  .forge-health-table td {
-    border-bottom: 0;
-    padding: 3px 0;
-  }
-
-  .forge-health-table td:last-child {
-    text-align: left;
-  }
-}
-
-@container (max-width: 280px) {
-  .forge-health-metric-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@container (max-width: 520px) {
   .forge-health-section-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (max-width: 300px) {
-  .forge-health-section-actions {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .forge-health-issue-controls button {
+  .forge-health-dashboard .forge-health-section-actions button.forge-health-action-button,
+  .forge-health-dashboard .forge-health-issue-controls button {
     width: 100%;
   }
 }
