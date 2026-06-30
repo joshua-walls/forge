@@ -1,6 +1,6 @@
 {
   "name": "forge",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Define your vault's structure and let Forge enforce it — lint, normalize, patch, and maintain with confidence.",
   "main": "main.js",
   "scripts": {

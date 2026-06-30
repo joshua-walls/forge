@@ -1,3 +1,17 @@
+# 1.8.2
+
+## Fixed
+
+- Tightened Forge Health dashboard spacing in narrow panes, including compact Maintenance History key/value rows, intentional odd metric-card spanning, and consistent gaps around action rows, issue groups, metrics, and tables.
+- Scoped stronger Forge Health button and toggle sizing rules so theme styles cannot inflate dashboard controls or make action rows overflow.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.1
 
 ## Fixed
