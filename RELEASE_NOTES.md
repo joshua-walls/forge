@@ -1,14 +1,13 @@
-# Forge 1.8.0
+# Forge 1.8.1
 
-Forge 1.8.0 makes the Forge health dashboard theme-adaptable without requiring theme-specific Forge CSS overrides.
+Forge 1.8.1 finishes the dashboard theme cleanup and removes a deprecated settings slider API call flagged by Obsidian review.
 
 ## What changed
 
-- Dashboard status colors now use semantic `data-status` attributes and standard Obsidian theme variables.
-- Good, warning, critical, and muted states now render through `--text-success`, `--text-warning`, `--text-error`, and `--text-muted`.
-- The dashboard no longer depends on fixed Forge color tokens such as `--color-yellow`.
-- Dashboard cards, metrics, issue groups, chips, tables, toggles, and buttons now use generic Obsidian background, border, hover, and interactive variables.
-- Mobile dashboard spacing, table readability, and button wrapping have been tightened for narrow panes and floating navigation.
+- Removed deprecated `setDynamicTooltip()` calls from settings sliders.
+- Added more consistent spacing below the Shape Health no-issues message on mobile.
+- Remaining health issue severity styling now uses semantic `data-severity` attributes instead of Forge-specific severity classes.
+- Severity colors still render through Obsidian semantic variables, not fixed Forge colors.
 
 ## Compatibility
 

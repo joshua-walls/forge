@@ -410,7 +410,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
         s
           .setLimits(5, 50, 5)
           .setValue(this.plugin.settings.lintRunRetentionCount)
-          .setDynamicTooltip()
           .onChange((v) => {
             this.runAsync(async () => {
               this.plugin.settings.lintRunRetentionCount = v;
@@ -708,7 +707,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Backup retention (days)")
       .setDesc("Delete patch backup files older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).setDynamicTooltip().onChange((v) => {
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.backupRetentionDays = v;
             await this.plugin.saveSettings();
@@ -720,7 +719,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Inbox retention (days)")
       .setDesc("Age threshold used for stale inbox handling.")
       .addSlider((s) =>
-        s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).setDynamicTooltip().onChange((v) => {
+        s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.inboxRetentionDays = v;
             await this.plugin.saveSettings();
@@ -748,7 +747,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history retention (days)")
       .setDesc("Trim lint history entries older than this many days.")
       .addSlider((s) =>
-        s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).setDynamicTooltip().onChange((v) => {
+        s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.lintHistoryRetentionDays = v;
             await this.plugin.saveSettings();
@@ -760,7 +759,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Lint history max entries")
       .setDesc("Hard cap on the number of lint history entries to retain.")
       .addSlider((s) =>
-        s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).setDynamicTooltip().onChange((v) => {
+        s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.lintHistoryMaxEntries = v;
             await this.plugin.saveSettings();
@@ -784,7 +783,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Patch report retention")
       .setDesc("Number of patch report notes to keep.")
       .addSlider((s) =>
-        s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).setDynamicTooltip().onChange((v) => {
+        s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.patchReportRetentionCount = v;
             await this.plugin.saveSettings();
@@ -796,7 +795,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Shape lint run retention")
       .setDesc("Number of shape lint run notes to keep.")
       .addSlider((s) =>
-        s.setLimits(5, 50, 5).setValue(this.plugin.settings.shapeLintRunRetentionCount).setDynamicTooltip().onChange((v) => {
+        s.setLimits(5, 50, 5).setValue(this.plugin.settings.shapeLintRunRetentionCount).onChange((v) => {
           this.runAsync(async () => {
             this.plugin.settings.shapeLintRunRetentionCount = v;
             await this.plugin.saveSettings();
@@ -1722,7 +1721,6 @@ export class ForgeSettingsTab extends PluginSettingTab {
           sl
             .setLimits(5, 50, 5)
             .setValue(s.shapeRepairHistoryRetentionCount)
-            .setDynamicTooltip()
             .onChange((v) => {
               this.runAsync(async () => {
                 s.shapeRepairHistoryRetentionCount = v;

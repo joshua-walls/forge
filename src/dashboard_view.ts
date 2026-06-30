@@ -741,7 +741,7 @@ export class ForgeHealthDashboardView extends ItemView {
       if (shape.issues.length > 0) {
         this.renderGroupedIssues(section, shape.issues, "shape");
       } else {
-        section.createDiv({ text: "No Shape lint issues found.", cls: "forge-health-muted" });
+        section.createDiv({ text: "No Shape lint issues found.", cls: "forge-health-section-message" });
       }
     }
 
@@ -964,7 +964,8 @@ export class ForgeHealthDashboardView extends ItemView {
       header.createSpan({ text: group.issueType, cls: "forge-health-issue-group-title" });
       header.createSpan({
         text: `${group.issues.length} issue${group.issues.length === 1 ? "" : "s"}`,
-        cls: `forge-health-issue-group-count is-${group.maxSeverity}`,
+        cls: "forge-health-issue-group-count",
+        attr: { "data-severity": group.maxSeverity },
       });
       toggleButton.addEventListener("click", () => {
         if (expanded) {
@@ -1000,7 +1001,10 @@ export class ForgeHealthDashboardView extends ItemView {
   }
 
   private renderIssueRow(container: HTMLElement, issue: DashboardIssue): void {
-    const row = container.createDiv(`forge-health-issue forge-health-issue-${issue.severity}`);
+    const row = container.createDiv({
+      cls: "forge-health-issue",
+      attr: { "data-severity": issue.severity },
+    });
     const main = row.createDiv("forge-health-issue-main");
     main.createDiv({ text: issue.file_path, cls: "forge-health-issue-path" });
     main.createDiv({ text: issue.message, cls: "forge-health-issue-message" });

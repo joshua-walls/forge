@@ -1,3 +1,18 @@
+# 1.8.1
+
+## Fixed
+
+- Removed deprecated `setDynamicTooltip()` calls from Forge settings sliders so Obsidian source-code review no longer flags the slider API.
+- Added spacing below the Shape Health no-issues message so action buttons do not crowd the status text on mobile.
+- Replaced remaining Forge-specific issue severity classes with `data-severity` attributes styled through Obsidian semantic text variables.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.0
 
 ## Changed

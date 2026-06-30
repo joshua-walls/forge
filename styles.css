@@ -788,9 +788,14 @@
 
 .forge-health-subtitle,
 .forge-health-muted,
-.forge-health-issue-action {
+.forge-health-issue-action,
+.forge-health-section-message {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
+}
+
+.forge-health-section-message {
+  margin: 0 0 10px;
 }
 
 .forge-health-actions {
@@ -1006,15 +1011,15 @@
   max-width: 100%;
 }
 
-.forge-health-issue-group-count.is-critical {
+.forge-health-issue-group-count[data-severity="critical"] {
   color: var(--text-error);
 }
 
-.forge-health-issue-group-count.is-warning {
+.forge-health-issue-group-count[data-severity="warning"] {
   color: var(--text-warning);
 }
 
-.forge-health-issue-group-count.is-info {
+.forge-health-issue-group-count[data-severity="info"] {
   color: var(--text-accent);
 }
 
@@ -1034,15 +1039,15 @@
   background: var(--background-secondary);
 }
 
-.forge-health-issue-critical {
+.forge-health-issue[data-severity="critical"] {
   border-left-color: var(--text-error);
 }
 
-.forge-health-issue-warning {
+.forge-health-issue[data-severity="warning"] {
   border-left-color: var(--text-warning);
 }
 
-.forge-health-issue-info {
+.forge-health-issue[data-severity="info"] {
   border-left-color: var(--text-accent);
 }
 
