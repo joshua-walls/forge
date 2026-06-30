@@ -1,3 +1,16 @@
+# 1.8.3
+
+## Fixed
+
+- Removed unsafe TypeScript patterns flagged by Obsidian source review in YAML serialization, dataview fence trimming, ontology sorting, and frontmatter write paths.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.2
 
 ## Fixed
