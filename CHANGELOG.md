@@ -1,3 +1,25 @@
+# 1.10.0
+
+## Added
+
+- Added operation-level patch scopes so any patch operation can narrow matched files before it runs.
+- Added frontmatter date scopes: `updated_since`, `updated_before`, `created_since`, `created_before`, and `updated_field`.
+- Added filesystem date scopes: `file_modified_since`, `file_modified_before`, `file_created_since`, and `file_created_before`.
+- Added predicate scopes for frontmatter fields, tags, paths, common `type`/`status` matching, and a scoped `limit`.
+
+## Changed
+
+- Applied patch notes are now copied into the `Applied` folder instead of moved, so reusable patch notes can stay in place.
+- Patch Engine documentation and examples now describe scoped targets using generic, non-identifying examples.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- Existing patches continue to work without changes.
+- No migration is required.
+
+---
+
 # 1.9.1
 
 ## Changed
