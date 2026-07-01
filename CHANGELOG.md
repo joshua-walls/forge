@@ -1,3 +1,38 @@
+# 1.9.1
+
+## Changed
+
+- Added right-aligned value labels to Forge settings sliders, matching the Lockblock settings pattern.
+- Converted Dataview Expansion auto-update delay from a text input to a `0-60s` slider with a live value label.
+- Slider value labels now update while dragging.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
+# 1.9.0
+
+## Added
+
+- Added `Apply patch from patches folder` so any patch note under the configured patches folder can be applied without changing the default patch file setting.
+
+## Changed
+
+- Patch picker lists Markdown patch notes under the configured patches folder.
+- Generated patch operation folders are excluded from the picker: `Applied`, `Backups`, and `Reports`.
+- Selected patch notes reuse the existing dry-run, confirmation, apply, report, archive, manifest, and auto-lint flow.
+- Picker-launched patch runs now surface async errors with a Forge notice instead of failing silently.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.6
 
 ## Changed
