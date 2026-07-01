@@ -36,6 +36,7 @@ import {
 } from "./utils/tags";
 import {
   resolveTargets,
+  matchesGlob,
   ensureFolder,
   localTimestamp,
   safeTimestamp,
@@ -121,6 +122,7 @@ export interface PatchOperation {
   op: string;
   target?: string;
   target_pattern?: string;
+  scope?: PatchScope;
   field?: string;
   value?: unknown;
   value_from?: string;
@@ -146,6 +148,29 @@ export interface PatchOperation {
   source_root?: string;
   destination_folder?: string;
   strip_frontmatter?: boolean;
+}
+
+export interface PatchScope {
+  created_since?: string | Date;
+  created_before?: string | Date;
+  updated_since?: string | Date;
+  updated_before?: string | Date;
+  updated_field?: string;
+  file_created_since?: string | Date;
+  file_created_before?: string | Date;
+  file_modified_since?: string | Date;
+  file_modified_before?: string | Date;
+  field_equals?: Record<string, unknown>;
+  field_not_equals?: Record<string, unknown>;
+  field_present?: string | string[];
+  field_missing?: string | string[];
+  has_tag?: string | string[];
+  missing_tag?: string | string[];
+  path_in?: string | string[];
+  path_not_in?: string | string[];
+  type_in?: string | string[];
+  status_in?: string | string[];
+  limit?: number;
 }
 
 export interface PatchFile {
@@ -245,9 +270,30 @@ export async function applyPatch(
       continue;
     }
 
+    let scopedTargetCount = 0;
+
     // Apply operation to each target
     for (const file of targets) {
       let result: PatchOpResult;
+      const scopeResult = await evaluatePatchScope(app, op, file, opName);
+
+      if (scopeResult) {
+        results.push(scopeResult);
+        continue;
+      }
+
+      if (op.scope?.limit !== undefined) {
+        if (op.scope.limit < 1) {
+          results.push(opError(opName, file, "Scope limit must be greater than 0"));
+          continue;
+        }
+        if (scopedTargetCount >= op.scope.limit) {
+          results.push(opSkipped(opName, file, `Scope limit reached: ${op.scope.limit}`));
+          continue;
+        }
+      }
+
+      scopedTargetCount++;
 
       switch (opName) {
         case "set_field":
@@ -814,6 +860,266 @@ function resolveFieldValue(op: PatchOperation, file: TFile): unknown {
   if (op.uppercase) value = value.toUpperCase();
 
   return value;
+}
+
+async function evaluatePatchScope(
+  app: App,
+  op: PatchOperation,
+  file: TFile,
+  opName: string
+): Promise<PatchOpResult | null> {
+  const scope = op.scope;
+  if (!scope) return null;
+
+  if (scope.path_in && !scopePathMatches(file.path, scope.path_in)) {
+    return opSkipped(opName, file, "Scope not met: path not in scoped paths");
+  }
+  if (scope.path_not_in && scopePathMatches(file.path, scope.path_not_in)) {
+    return opSkipped(opName, file, "Scope not met: path in excluded paths");
+  }
+
+  const frontmatterDateChecks: Array<{
+    field: string;
+    since?: string | Date;
+    before?: string | Date;
+    label: string;
+  }> = [];
+  if (scope.created_since) {
+    frontmatterDateChecks.push({
+      field: "created",
+      since: scope.created_since,
+      label: "created_since",
+    });
+  }
+  if (scope.created_before) {
+    frontmatterDateChecks.push({
+      field: "created",
+      before: scope.created_before,
+      label: "created_before",
+    });
+  }
+  if (scope.updated_since) {
+    frontmatterDateChecks.push({
+      field: scope.updated_field ?? "updated",
+      since: scope.updated_since,
+      label: "updated_since",
+    });
+  }
+  if (scope.updated_before) {
+    frontmatterDateChecks.push({
+      field: scope.updated_field ?? "updated",
+      before: scope.updated_before,
+      label: "updated_before",
+    });
+  }
+  const needsFrontmatter =
+    frontmatterDateChecks.length > 0 ||
+    Boolean(scope.field_equals) ||
+    Boolean(scope.field_not_equals) ||
+    Boolean(scope.field_present) ||
+    Boolean(scope.field_missing) ||
+    Boolean(scope.has_tag) ||
+    Boolean(scope.missing_tag) ||
+    Boolean(scope.type_in) ||
+    Boolean(scope.status_in);
+
+  let noteFrontmatter: Record<string, unknown> | null = null;
+  if (needsFrontmatter) {
+    const note = await readNote(app, file);
+    if (!note) return opError(opName, file, "Could not read file for scope check");
+    noteFrontmatter = note.frontmatter;
+  }
+
+  for (const check of frontmatterDateChecks) {
+    const raw = noteFrontmatter?.[check.field];
+    const timestamp = parseScopeDate(raw);
+    if (timestamp === null) {
+      return opSkipped(opName, file, `Scope not met: '${check.field}' is missing or not a date`);
+    }
+
+    if (check.since) {
+      const cutoff = parseScopeDate(check.since);
+      if (cutoff === null) {
+        return opError(opName, file, `Invalid scope date '${formatScopeDate(check.since)}' for '${check.label}'`);
+      }
+      if (timestamp < cutoff) {
+        return opSkipped(opName, file, `Scope not met: '${check.field}' before ${formatScopeDate(check.since)}`);
+      }
+    }
+
+    if (check.before) {
+      const cutoff = parseScopeDate(check.before);
+      if (cutoff === null) {
+        return opError(opName, file, `Invalid scope date '${formatScopeDate(check.before)}' for '${check.label}'`);
+      }
+      if (timestamp > cutoff) {
+        return opSkipped(opName, file, `Scope not met: '${check.field}' after ${formatScopeDate(check.before)}`);
+      }
+    }
+  }
+
+  if (noteFrontmatter) {
+    const fieldEquals = { ...(scope.field_equals ?? {}) };
+    if (scope.type_in) fieldEquals.type = toScopeList(scope.type_in);
+    if (scope.status_in) fieldEquals.status = toScopeList(scope.status_in);
+
+    for (const [field, expected] of Object.entries(fieldEquals)) {
+      const actual = noteFrontmatter[field];
+      if (!scopeValueMatches(actual, expected)) {
+        return opSkipped(opName, file, `Scope not met: '${field}' does not match`);
+      }
+    }
+
+    for (const [field, expected] of Object.entries(scope.field_not_equals ?? {})) {
+      const actual = noteFrontmatter[field];
+      if (scopeValueMatches(actual, expected)) {
+        return opSkipped(opName, file, `Scope not met: '${field}' matches excluded value`);
+      }
+    }
+
+    for (const field of toScopeList(scope.field_present)) {
+      if (!isFieldPresent(noteFrontmatter, field)) {
+        return opSkipped(opName, file, `Scope not met: '${field}' missing`);
+      }
+    }
+
+    for (const field of toScopeList(scope.field_missing)) {
+      if (isFieldPresent(noteFrontmatter, field)) {
+        return opSkipped(opName, file, `Scope not met: '${field}' present`);
+      }
+    }
+
+    const currentTags = getTags(noteFrontmatter).map((tag) => tag.toLowerCase());
+    for (const tag of toScopeList(scope.has_tag)) {
+      if (!currentTags.includes(tag.toLowerCase())) {
+        return opSkipped(opName, file, `Scope not met: tag '${tag}' missing`);
+      }
+    }
+
+    for (const tag of toScopeList(scope.missing_tag)) {
+      if (currentTags.includes(tag.toLowerCase())) {
+        return opSkipped(opName, file, `Scope not met: tag '${tag}' present`);
+      }
+    }
+  }
+
+  if (scope.file_created_since) {
+    const cutoff = parseScopeDate(scope.file_created_since);
+    if (cutoff === null) {
+      return opError(opName, file, `Invalid scope date '${formatScopeDate(scope.file_created_since)}' for 'file_created_since'`);
+    }
+    if (file.stat.ctime < cutoff) {
+      return opSkipped(opName, file, `Scope not met: file created before ${formatScopeDate(scope.file_created_since)}`);
+    }
+  }
+  if (scope.file_created_before) {
+    const cutoff = parseScopeDate(scope.file_created_before);
+    if (cutoff === null) {
+      return opError(opName, file, `Invalid scope date '${formatScopeDate(scope.file_created_before)}' for 'file_created_before'`);
+    }
+    if (file.stat.ctime > cutoff) {
+      return opSkipped(opName, file, `Scope not met: file created after ${formatScopeDate(scope.file_created_before)}`);
+    }
+  }
+
+  if (scope.file_modified_since) {
+    const cutoff = parseScopeDate(scope.file_modified_since);
+    if (cutoff === null) {
+      return opError(opName, file, `Invalid scope date '${formatScopeDate(scope.file_modified_since)}' for 'file_modified_since'`);
+    }
+    if (file.stat.mtime < cutoff) {
+      return opSkipped(opName, file, `Scope not met: file modified before ${formatScopeDate(scope.file_modified_since)}`);
+    }
+  }
+  if (scope.file_modified_before) {
+    const cutoff = parseScopeDate(scope.file_modified_before);
+    if (cutoff === null) {
+      return opError(opName, file, `Invalid scope date '${formatScopeDate(scope.file_modified_before)}' for 'file_modified_before'`);
+    }
+    if (file.stat.mtime > cutoff) {
+      return opSkipped(opName, file, `Scope not met: file modified after ${formatScopeDate(scope.file_modified_before)}`);
+    }
+  }
+
+  return null;
+}
+
+function scopePathMatches(path: string, patterns: string | string[]): boolean {
+  return toScopeList(patterns).some((pattern) =>
+    matchesGlob(path, pattern) || normalizePath(path).toLowerCase() === normalizePath(pattern).toLowerCase()
+  );
+}
+
+function toScopeList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  return [];
+}
+
+function scopeValueMatches(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return expected.some((value) => scopeValueMatches(actual, value));
+  }
+
+  if (Array.isArray(actual)) {
+    return actual.some((value) => scopeValueMatches(value, expected));
+  }
+
+  return normalizeScopeValue(actual) === normalizeScopeValue(expected);
+}
+
+function normalizeScopeValue(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim().toLowerCase();
+  }
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value).toLowerCase();
+}
+
+function parseScopeDate(value: unknown): number | null {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return parseDateOnly(value.toISOString().slice(0, 10));
+  }
+
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const dateOnly = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    return parseDateOnly(trimmed);
+  }
+
+  const time = new Date(trimmed).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function formatScopeDate(value: string | Date): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return value;
+}
+
+function parseDateOnly(value: string): number | null {
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateOnly) return null;
+
+  const year = Number(dateOnly[1]);
+  const month = Number(dateOnly[2]) - 1;
+  const day = Number(dateOnly[3]);
+  const time = new Date(year, month, day).getTime();
+  return Number.isNaN(time) ? null : time;
 }
 
 function formatDate(date: Date, format: string): string {

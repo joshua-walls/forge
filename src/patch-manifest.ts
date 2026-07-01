@@ -1,5 +1,5 @@
 // src/patch-manifest.ts
-// Writes the restore manifest JSON, archives the applied patch note,
+// Writes the restore manifest JSON, copies the applied patch note,
 // and writes the patch report note after a patch run.
 //
 // Restore manifest:
@@ -9,7 +9,7 @@
 //   System/Forge/Patches/Reports/{runId}-patch-report-apply.md
 //   System/Exports/{runId}-patch-report-dry-run.md
 //
-// Archived patch note:
+// Applied patch copy:
 //   System/Forge/Patches/Applied/{runId}-vault-patch.md
 
 import { App, TFile, normalizePath } from "obsidian";
@@ -55,10 +55,10 @@ export async function writeRestoreManifest(
   await app.vault.create(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
-// ── Archive patch file ────────────────────────────────────────────────────────
+// ── Applied patch copy ────────────────────────────────────────────────────────
 
 /**
- * Moves the applied patch note into the Applied archive folder.
+ * Copies the applied patch note into the Applied archive folder.
  */
 export async function archivePatchFile(
   app: App,
@@ -83,7 +83,8 @@ export async function archivePatchFile(
 
   if (app.vault.getAbstractFileByPath(archivePath)) return;
 
-  await app.vault.rename(sourceFile, archivePath);
+  const content = await app.vault.read(sourceFile);
+  await app.vault.create(archivePath, content);
 }
 
 // ── Report note ───────────────────────────────────────────────────────────────
