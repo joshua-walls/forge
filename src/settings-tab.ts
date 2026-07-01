@@ -12,6 +12,7 @@ import {
   Notice,
   PluginSettingTab,
   Setting,
+  SliderComponent,
   TAbstractFile,
   TFile,
   TFolder,
@@ -56,6 +57,27 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
   private setStringSetting<K extends StringSettingKey>(key: K, value: ForgeSettings[K]): void {
     this.plugin.settings[key] = value;
+  }
+
+  private addSliderWithValue(
+    setting: Setting,
+    initialValue: number,
+    configure: (slider: SliderComponent, setValueText: (value: number) => void) => void,
+    formatValue: (value: number) => string = (value) => String(value)
+  ): Setting {
+    const valueEl = createSpan({
+      text: formatValue(initialValue),
+      cls: "forge-slider-value",
+    });
+
+    setting.addSlider((slider) => {
+      slider.setInstant(true);
+      configure(slider, (value) => {
+        valueEl.setText(formatValue(value));
+      });
+    });
+    setting.controlEl.appendChild(valueEl);
+    return setting;
   }
 
   private renderTab(): void {
@@ -185,23 +207,26 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     if (s.dataviewExpansionAutoUpdateMode !== "off") {
-      new Setting(el)
-        .setName("Auto-update delay (seconds)")
-        .setDesc("How long forge waits after typing stops before refreshing the current note's dataview expansion.")
-        .addText((text) =>
-          text
-            .setPlaceholder("5")
-            .setValue(String(s.dataviewExpansionAutoUpdateDelayMs / 1000))
+      const delaySeconds = Math.round(s.dataviewExpansionAutoUpdateDelayMs / 1000);
+      this.addSliderWithValue(
+        new Setting(el)
+          .setName("Auto-update delay (seconds)")
+          .setDesc("How long forge waits after typing stops before refreshing the current note's dataview expansion."),
+        delaySeconds,
+        (slider, setValueText) => {
+          slider
+            .setLimits(0, 60, 1)
+            .setValue(delaySeconds)
             .onChange((value) => {
+              setValueText(value);
               this.runAsync(async () => {
-                const parsed = Number.parseFloat(value.trim());
-                s.dataviewExpansionAutoUpdateDelayMs = Number.isFinite(parsed) && parsed >= 0
-                  ? Math.round(parsed * 1000)
-                  : 5_000;
+                s.dataviewExpansionAutoUpdateDelayMs = value * 1000;
                 await this.plugin.saveSettings();
               });
-            })
-        );
+            });
+        },
+        (value) => `${value}s`
+      );
     }
 
     new Setting(el)
@@ -403,20 +428,24 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
-    new Setting(el)
-      .setName("Lint run retention")
-      .setDesc("Number of lint run notes to keep.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Lint run retention")
+        .setDesc("Number of lint run notes to keep."),
+      this.plugin.settings.lintRunRetentionCount,
+      (s, setValueText) => {
         s
           .setLimits(5, 50, 5)
           .setValue(this.plugin.settings.lintRunRetentionCount)
           .onChange((v) => {
+            setValueText(v);
             this.runAsync(async () => {
               this.plugin.settings.lintRunRetentionCount = v;
               await this.plugin.saveSettings();
             });
-          })
-      );
+          });
+      }
+    );
 
     new Setting(el)
       .setName("Lint file links")
@@ -703,29 +732,37 @@ export class ForgeSettingsTab extends PluginSettingTab {
   // ── Maintenance ───────────────────────────────────────────────────────────
 
   private renderMaintenance(el: HTMLElement): void {
-    new Setting(el)
-      .setName("Backup retention (days)")
-      .setDesc("Delete patch backup files older than this many days.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Backup retention (days)")
+        .setDesc("Delete patch backup files older than this many days."),
+      this.plugin.settings.backupRetentionDays,
+      (s, setValueText) => {
         s.setLimits(1, 60, 1).setValue(this.plugin.settings.backupRetentionDays).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.backupRetentionDays = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
 
-    new Setting(el)
-      .setName("Inbox retention (days)")
-      .setDesc("Age threshold used for stale inbox handling.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Inbox retention (days)")
+        .setDesc("Age threshold used for stale inbox handling."),
+      this.plugin.settings.inboxRetentionDays,
+      (s, setValueText) => {
         s.setLimits(1, 60, 1).setValue(this.plugin.settings.inboxRetentionDays).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.inboxRetentionDays = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
 
     new Setting(el)
       .setName("Inbox retention action")
@@ -743,29 +780,37 @@ export class ForgeSettingsTab extends PluginSettingTab {
           })
       );
 
-    new Setting(el)
-      .setName("Lint history retention (days)")
-      .setDesc("Trim lint history entries older than this many days.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Lint history retention (days)")
+        .setDesc("Trim lint history entries older than this many days."),
+      this.plugin.settings.lintHistoryRetentionDays,
+      (s, setValueText) => {
         s.setLimits(1, 90, 1).setValue(this.plugin.settings.lintHistoryRetentionDays).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.lintHistoryRetentionDays = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
 
-    new Setting(el)
-      .setName("Lint history max entries")
-      .setDesc("Hard cap on the number of lint history entries to retain.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Lint history max entries")
+        .setDesc("Hard cap on the number of lint history entries to retain."),
+      this.plugin.settings.lintHistoryMaxEntries,
+      (s, setValueText) => {
         s.setLimits(10, 100, 10).setValue(this.plugin.settings.lintHistoryMaxEntries).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.lintHistoryMaxEntries = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
 
     new Setting(el)
       .setName("Auto-run on dashboard refresh")
@@ -779,29 +824,37 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
-    new Setting(el)
-      .setName("Patch report retention")
-      .setDesc("Number of patch report notes to keep.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Patch report retention")
+        .setDesc("Number of patch report notes to keep."),
+      this.plugin.settings.patchReportRetentionCount,
+      (s, setValueText) => {
         s.setLimits(5, 50, 5).setValue(this.plugin.settings.patchReportRetentionCount).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.patchReportRetentionCount = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
 
-    new Setting(el)
-      .setName("Shape lint run retention")
-      .setDesc("Number of shape lint run notes to keep.")
-      .addSlider((s) =>
+    this.addSliderWithValue(
+      new Setting(el)
+        .setName("Shape lint run retention")
+        .setDesc("Number of shape lint run notes to keep."),
+      this.plugin.settings.shapeLintRunRetentionCount,
+      (s, setValueText) => {
         s.setLimits(5, 50, 5).setValue(this.plugin.settings.shapeLintRunRetentionCount).onChange((v) => {
+          setValueText(v);
           this.runAsync(async () => {
             this.plugin.settings.shapeLintRunRetentionCount = v;
             await this.plugin.saveSettings();
           });
-        })
-      );
+        });
+      }
+    );
   }
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -1714,20 +1767,24 @@ export class ForgeSettingsTab extends PluginSettingTab {
           })
         );
 
-      new Setting(el)
-        .setName("Repair history retention")
-        .setDesc("Maximum number of repair run entries to keep in shape-repair-history.json.")
-        .addSlider((sl) =>
+      this.addSliderWithValue(
+        new Setting(el)
+          .setName("Repair history retention")
+          .setDesc("Maximum number of repair run entries to keep in shape-repair-history.json."),
+        s.shapeRepairHistoryRetentionCount,
+        (sl, setValueText) => {
           sl
             .setLimits(5, 50, 5)
             .setValue(s.shapeRepairHistoryRetentionCount)
             .onChange((v) => {
+              setValueText(v);
               this.runAsync(async () => {
                 s.shapeRepairHistoryRetentionCount = v;
                 await this.plugin.saveSettings();
               });
-            })
-        );
+            });
+        }
+      );
 
       new Setting(el)
         .setName("Run shape repair")

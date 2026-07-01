@@ -1,14 +1,13 @@
-# Forge 1.9.0
+# Forge 1.9.1
 
-Forge 1.9.0 adds a patch picker command so you can apply any patch note from the configured patches folder without changing the default patch file setting.
+Forge 1.9.1 improves settings sliders so their current values are visible and update live while dragging.
 
 ## What changed
 
-- Added `Apply patch from patches folder`.
-- Patch picker lists Markdown patch notes under the configured patches folder.
-- Generated patch operation folders are excluded from the picker: `Applied`, `Backups`, and `Reports`.
-- Selected patch notes reuse the existing dry-run, confirmation, apply, report, archive, manifest, and auto-lint flow.
-- Picker-launched patch runs now surface async errors with a Forge notice instead of failing silently.
+- Added right-side value labels to Forge settings sliders.
+- Slider values now update live while dragging.
+- Converted Dataview Expansion auto-update delay from a text box to a `0-60s` slider.
+- Kept the same saved setting for Dataview Expansion delay, stored internally in milliseconds.
 
 ## Compatibility
 

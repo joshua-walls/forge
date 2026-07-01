@@ -81,6 +81,14 @@
   /* intentionally unstyled — content uses standard Setting layout */
 }
 
+.forge-slider-value {
+  min-width: 3ch;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-variant-numeric: tabular-nums;
+}
+
 
 /* ── Multi-select widget (namespace/folder pickers) ──────────────────────── */
 
