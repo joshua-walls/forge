@@ -20,5 +20,8 @@ export default defineConfig([
         project: "./tsconfig.json",
       },
     },
+    rules: {
+      "obsidianmd/ui/sentence-case": "off",
+    },
   },
 ]);

@@ -376,7 +376,7 @@ export default class ForgePlugin extends Plugin {
 
     this.addCommand({
       id: "open-vault-health-dashboard",
-      name: "Open vault health dashboard",
+      name: "Open Vault Health Dashboard",
       callback: () => {
         void this.openHealthDashboard().catch((error: unknown) => {
           this.handleCommandError("open-vault-health-dashboard", error);
@@ -386,12 +386,12 @@ export default class ForgePlugin extends Plugin {
 
     this.addCommand({
       id: "refresh-vault-health-dashboard",
-      name: "Refresh vault health dashboard",
+      name: "Refresh Vault Health Dashboard",
       callback: () => {
         void (async () => {
           try {
             await this.dashboardService.refreshSnapshot();
-            new Notice("Forge: Vault health dashboard refreshed.", 4000);
+            new Notice("Forge: Vault Health Dashboard refreshed.", 4000);
           } catch (error) {
             this.handleCommandError("refresh-vault-health-dashboard", error);
           }

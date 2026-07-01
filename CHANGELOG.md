@@ -1,3 +1,19 @@
+# 1.8.4
+
+## Changed
+
+- Updated the Vault Health dashboard heading hierarchy: the dashboard title is now an `h1`, and section titles are now `h2`.
+- Standardized Vault Health dashboard naming to Title Case across the dashboard title, commands, notices, and settings copy.
+- Kept Vault Health dashboard status coloring tied to the header `data-status` attribute so the title follows the same health state as the dashboard pill and sections.
+- Disabled the Obsidian sentence-case lint rule so Forge can keep its Title Case UI convention while retaining the rest of the Obsidian lint checks.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.3
 
 ## Fixed

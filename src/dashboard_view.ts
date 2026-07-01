@@ -255,10 +255,10 @@ export class ForgeHealthDashboardView extends ItemView {
 
     const header = contentEl.createDiv("forge-health-header");
     if (this.snapshot) {
-      header.dataset.status = healthStatus(this.snapshot);
+      header.setAttr("data-status", healthStatus(this.snapshot));
     }
     const titleBlock = header.createDiv();
-    titleBlock.createEl("h2", { text: "Vault health" });
+    titleBlock.createEl("h1", { text: "Vault Health" });
 
     const actions = header.createDiv("forge-health-actions");
     if (this.snapshot) {
@@ -1117,7 +1117,7 @@ function createSection(
   });
   toggle.setAttr("aria-label", collapsed ? `Expand ${title}` : `Collapse ${title}`);
   toggle.addEventListener("click", () => onToggle?.());
-  titleWrap.createEl("h3", { text: title });
+  titleWrap.createEl("h2", { text: title });
   if (status) {
     header.createDiv({
       text: status.label,
