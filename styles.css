@@ -780,8 +780,9 @@
   font-size: var(--font-ui-smaller);
 }
 
-.forge-health-header h2 {
+.forge-health-header h1 {
   color: var(--forge-health-status-color);
+  font-size: var(--h2-size, 1.5em);
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -869,8 +870,9 @@
   color: var(--text-normal);
 }
 
-.forge-health-section-header h3 {
+.forge-health-section-header h2 {
   color: var(--forge-health-status-color);
+  font-size: var(--h3-size, 1.17em);
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;

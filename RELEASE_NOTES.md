@@ -1,12 +1,14 @@
-# Forge 1.8.3
+# Forge 1.8.4
 
-Forge 1.8.3 removes unsafe TypeScript patterns flagged by Obsidian source review after the dashboard layout release.
+Forge 1.8.4 refines the Vault Health dashboard heading structure and keeps its status-aware title styling aligned with the rest of Forge.
 
 ## What changed
 
-- Added typed YAML serialization helpers so frontmatter/template writes avoid unsafe `any` call and assignment warnings.
-- Replaced direct `trimEnd()` use in review-flagged code paths with typed trimming helpers.
-- Replaced `Object.fromEntries()` ontology sorting with an explicit typed record build to avoid unsafe return warnings.
+- The Vault Health dashboard title is now an `h1`.
+- Dashboard section titles are now `h2`.
+- Vault Health naming now uses Title Case across the dashboard title, commands, notices, and settings copy.
+- The dashboard header now explicitly carries the health `data-status` attribute so title coloring follows the same status context as the health pill and sections.
+- Forge linting now allows the project's Title Case UI convention while keeping the other Obsidian lint checks.
 
 ## Compatibility
 

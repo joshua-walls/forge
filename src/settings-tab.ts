@@ -769,7 +769,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Auto-run on dashboard refresh")
-      .setDesc("Run vault maintenance silently whenever the vault health dashboard is refreshed.")
+      .setDesc("Run vault maintenance silently whenever the Vault Health Dashboard is refreshed.")
       .addToggle((t) =>
         t.setValue(this.plugin.settings.maintenanceAutoRunOnDashboardRefresh).onChange((v) => {
           this.runAsync(async () => {
