@@ -36,6 +36,13 @@ type AppPluginManager = {
   getPlugin?: (pluginId: string) => unknown;
 };
 
+type LockblockVaultState = "locked" | "unlocked" | "not-setup" | "unknown";
+
+type LockblockPluginLike = {
+  getVaultLockState?: () => LockblockVaultState;
+  onLockStateChange?: (callback: (state: LockblockVaultState) => void) => () => void;
+};
+
 type AppWithCommandRegistry = ItemView["app"] & {
   commands?: AppCommandRegistry;
 };
@@ -61,7 +68,10 @@ export class ForgeHealthDashboardView extends ItemView {
   private autoRefreshInterval: number | null = null;
   private lastKnownCacheMtime = 0;
   private lastKnownLockblockAvailable: boolean | null = null;
+  private lastKnownLockblockState: LockblockVaultState | null = null;
   private lastKnownDataviewAvailable: boolean | null = null;
+  private lockblockStateUnsubscribe: (() => void) | null = null;
+  private subscribedLockblockPluginId: string | null = null;
 
   // Set to true by main.ts when the plugin version changed since last load.
   // Triggers the update banner until the user reloads the leaf.
@@ -95,7 +105,9 @@ export class ForgeHealthDashboardView extends ItemView {
   async onOpen(): Promise<void> {
     this.snapshot = await this.plugin.dashboardService.loadSnapshot();
     this.lastKnownLockblockAvailable = this.isLockblockAvailable();
+    this.lastKnownLockblockState = this.lockblockVaultState();
     this.lastKnownDataviewAvailable = this.isDataviewAvailable();
+    this.syncLockblockStateSubscription();
     this.render();
     this.startLiveReload();
     this.updateAutoRefreshTimer();
@@ -104,6 +116,7 @@ export class ForgeHealthDashboardView extends ItemView {
   onClose(): Promise<void> {
     this.stopLiveReload();
     this.stopAutoRefresh();
+    this.clearLockblockStateSubscription();
     return Promise.resolve();
   }
 
@@ -181,6 +194,13 @@ export class ForgeHealthDashboardView extends ItemView {
         const lockblockAvailable = this.isLockblockAvailable();
         if (lockblockAvailable !== this.lastKnownLockblockAvailable) {
           this.lastKnownLockblockAvailable = lockblockAvailable;
+          this.syncLockblockStateSubscription();
+          this.render();
+        }
+
+        const lockblockState = this.lockblockVaultState();
+        if (lockblockState !== this.lastKnownLockblockState) {
+          this.lastKnownLockblockState = lockblockState;
           this.render();
         }
 
@@ -772,12 +792,20 @@ export class ForgeHealthDashboardView extends ItemView {
   private renderLockblockControls(container: HTMLElement): void {
     const integration = this.lockblockIntegration();
     if (!integration) return;
+    const vaultState = lockblockVaultState(integration.plugin);
+    const status = vaultState === "unlocked"
+      ? { label: "Unlocked", tone: "warning" as const }
+      : vaultState === "locked"
+        ? { label: "Locked", tone: "good" as const }
+        : vaultState === "not-setup"
+          ? { label: "Not set up", tone: "muted" as const }
+          : { label: "Enabled", tone: "good" as const };
 
     const section = createSection(
       container,
       "lockblock",
       "Lockblock",
-      { label: "Enabled", tone: "good" },
+      status,
       this.collapsedSections.has("lockblock"),
       () => {
         this.toggleSection("lockblock");
@@ -785,15 +813,25 @@ export class ForgeHealthDashboardView extends ItemView {
     );
 
     const actions = section.createDiv("forge-health-section-actions");
+    const setupCommand = findCommandById(integration.commands, integration.pluginId, "setup");
     const unlockCommand = findCommandById(integration.commands, integration.pluginId, "unlock");
     const lockCommand = findCommandById(integration.commands, integration.pluginId, "lock");
     const changePasswordCommand = findCommandById(integration.commands, integration.pluginId, "change-unlock-password");
 
-    this.renderLockblockCommandButton(actions, "Unlock vault", unlockCommand);
-    this.renderLockblockCommandButton(actions, "Lock vault", lockCommand);
-    this.renderLockblockCommandButton(actions, "Change password", changePasswordCommand);
+    if (vaultState === "not-setup") {
+      this.renderLockblockCommandButton(actions, "Set up", setupCommand);
+    }
+    if (vaultState === "locked" || vaultState === "unknown") {
+      this.renderLockblockCommandButton(actions, "Unlock vault", unlockCommand);
+    }
+    if (vaultState === "unlocked" || vaultState === "unknown") {
+      this.renderLockblockCommandButton(actions, "Lock vault", lockCommand);
+    }
+    if (vaultState !== "not-setup") {
+      this.renderLockblockCommandButton(actions, "Change password", changePasswordCommand);
+    }
 
-    if (!lockCommand && !unlockCommand && !changePasswordCommand) {
+    if (!setupCommand && !lockCommand && !unlockCommand && !changePasswordCommand) {
       section.createDiv({
         text: "Lockblock is enabled, but Forge could not find basic vault commands exposed by that plugin.",
         cls: "forge-health-muted",
@@ -809,7 +847,10 @@ export class ForgeHealthDashboardView extends ItemView {
     button.disabled = !command?.id;
     button.title = command?.name ?? "Lockblock command not available";
     button.addEventListener("click", () => {
-      if (command?.id) this.executeCommandByFullId(command.id);
+      if (command?.id) {
+        this.executeCommandByFullId(command.id);
+        window.setTimeout(() => this.render(), 500);
+      }
     });
   }
 
@@ -817,7 +858,36 @@ export class ForgeHealthDashboardView extends ItemView {
     return this.lockblockIntegration() !== null;
   }
 
-  private lockblockIntegration(): { pluginId: string; commands: AppCommand[] } | null {
+  private lockblockVaultState(): LockblockVaultState {
+    const integration = this.lockblockIntegration();
+    return integration ? lockblockVaultState(integration.plugin) : "unknown";
+  }
+
+  private syncLockblockStateSubscription(): void {
+    const integration = this.lockblockIntegration();
+    const plugin = integration?.plugin;
+    const api = isLockblockApi(plugin) ? plugin : null;
+    if (!integration || !api?.onLockStateChange) {
+      this.clearLockblockStateSubscription();
+      return;
+    }
+    if (this.subscribedLockblockPluginId === integration.pluginId) return;
+
+    this.clearLockblockStateSubscription();
+    this.subscribedLockblockPluginId = integration.pluginId;
+    this.lockblockStateUnsubscribe = api.onLockStateChange((state) => {
+      this.lastKnownLockblockState = normalizeLockblockVaultState(state);
+      this.render();
+    });
+  }
+
+  private clearLockblockStateSubscription(): void {
+    this.lockblockStateUnsubscribe?.();
+    this.lockblockStateUnsubscribe = null;
+    this.subscribedLockblockPluginId = null;
+  }
+
+  private lockblockIntegration(): { pluginId: string; plugin: unknown; commands: AppCommand[] } | null {
     const app = this.app as AppWithPlugins;
     const plugins = app.plugins;
     if (!plugins) return null;
@@ -831,6 +901,7 @@ export class ForgeHealthDashboardView extends ItemView {
 
     return {
       pluginId,
+      plugin,
       commands: this.lockblockCommands(pluginId),
     };
   }
@@ -1166,9 +1237,31 @@ function isLockblockPlugin(pluginId: string, manifest?: AppPluginManifest): bool
   return id === "lockblock" || id.includes("lockblock") || name === "lockblock" || name.includes("lockblock");
 }
 
+function lockblockVaultState(plugin: unknown): LockblockVaultState {
+  if (!isLockblockApi(plugin) || !plugin.getVaultLockState) return "unknown";
+  try {
+    return normalizeLockblockVaultState(plugin.getVaultLockState());
+  } catch {
+    return "unknown";
+  }
+}
+
+function isLockblockApi(plugin: unknown): plugin is LockblockPluginLike {
+  return isRecord(plugin) &&
+    (typeof plugin.getVaultLockState === "function" || typeof plugin.onLockStateChange === "function");
+}
+
+function normalizeLockblockVaultState(state: unknown): LockblockVaultState {
+  return state === "locked" || state === "unlocked" || state === "not-setup" ? state : "unknown";
+}
+
 function findCommandById(commands: AppCommand[], pluginId: string, commandId: string): AppCommand | null {
   const fullId = `${pluginId}:${commandId}`;
   return commands.find((command) => command.id === fullId) ?? null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function formatDate(value: string): string {

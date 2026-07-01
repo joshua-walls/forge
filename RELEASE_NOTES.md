@@ -1,14 +1,15 @@
-# Forge 1.8.5
+# Forge 1.8.6
 
-Forge 1.8.5 gives Vault Health dashboard section titles stable status hooks for theme authors.
+Forge 1.8.6 improves Vault Health Lockblock controls when Lockblock exposes its lock state.
 
 ## What changed
 
-- Section title elements now carry `data-status` with the same good, warning, critical, or muted state as their section.
-- Existing section, section header, and status badge status hooks still work.
-- Theme CSS can now color headings like `Health Summary`, `Schema Health`, `Active Issues`, and `Ontology` by DOM state instead of hard-coding section names or parsing visible text.
+- The Lockblock section now uses Lockblock's public `getVaultLockState()` API when available.
+- Forge now shows the relevant Lockblock action for the current state: `Set up`, `Unlock vault`, or `Lock vault`.
+- The Lockblock status badge can now show `Not set up`, `Locked`, or `Unlocked`.
 
 ## Compatibility
 
 - No migration is required.
 - `minAppVersion` remains `1.7.2`.
+- Lockblock state-aware controls require a Lockblock build with `getVaultLockState()`; Forge falls back gracefully if the API is unavailable.
