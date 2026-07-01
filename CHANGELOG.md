@@ -1,3 +1,19 @@
+# 1.8.6
+
+## Changed
+
+- Updated Vault Health Lockblock controls to use Lockblock's public lock-state API when available.
+- The Lockblock dashboard section now shows only the relevant action for the current state: setup, unlock, or lock.
+- The Lockblock dashboard status badge now reflects `Not set up`, `Locked`, or `Unlocked` when Lockblock exposes that state.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- Lockblock state-aware controls require a Lockblock build that exposes `getVaultLockState()`; Forge falls back to the previous generic controls if state is unavailable.
+- No migration is required.
+
+---
+
 # 1.8.5
 
 ## Changed
