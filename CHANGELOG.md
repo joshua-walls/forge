@@ -1,3 +1,17 @@
+# 1.8.5
+
+## Changed
+
+- Added `data-status` to Vault Health dashboard section title elements so themes can color section headings by their real health state without matching visible text.
+- Kept existing Vault Health section, section header, and status badge CSS variable behavior for good, warning, critical, and muted states.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.8.4
 
 ## Changed

@@ -1117,7 +1117,10 @@ function createSection(
   });
   toggle.setAttr("aria-label", collapsed ? `Expand ${title}` : `Collapse ${title}`);
   toggle.addEventListener("click", () => onToggle?.());
-  titleWrap.createEl("h2", { text: title });
+  titleWrap.createEl("h2", {
+    text: title,
+    attr: status ? { "data-status": status.tone } : undefined,
+  });
   if (status) {
     header.createDiv({
       text: status.label,

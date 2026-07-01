@@ -695,6 +695,7 @@
 .forge-health-header,
 .forge-health-section,
 .forge-health-section-header,
+.forge-health-section-header h2,
 .forge-health-pill,
 .forge-health-section-status {
   --forge-health-status-color: var(--text-normal);
@@ -703,6 +704,7 @@
 .forge-health-header[data-status="good"],
 .forge-health-section[data-status="good"],
 .forge-health-section-header[data-status="good"],
+.forge-health-section-header h2[data-status="good"],
 .forge-health-pill[data-status="good"],
 .forge-health-section-status[data-status="good"] {
   --forge-health-status-color: var(--text-success);
@@ -711,6 +713,7 @@
 .forge-health-header[data-status="warning"],
 .forge-health-section[data-status="warning"],
 .forge-health-section-header[data-status="warning"],
+.forge-health-section-header h2[data-status="warning"],
 .forge-health-pill[data-status="warning"],
 .forge-health-section-status[data-status="warning"] {
   --forge-health-status-color: var(--text-warning);
@@ -719,6 +722,7 @@
 .forge-health-header[data-status="critical"],
 .forge-health-section[data-status="critical"],
 .forge-health-section-header[data-status="critical"],
+.forge-health-section-header h2[data-status="critical"],
 .forge-health-pill[data-status="critical"],
 .forge-health-section-status[data-status="critical"] {
   --forge-health-status-color: var(--text-error);
@@ -727,6 +731,7 @@
 .forge-health-header[data-status="muted"],
 .forge-health-section[data-status="muted"],
 .forge-health-section-header[data-status="muted"],
+.forge-health-section-header h2[data-status="muted"],
 .forge-health-pill[data-status="muted"],
 .forge-health-section-status[data-status="muted"] {
   --forge-health-status-color: var(--text-muted);

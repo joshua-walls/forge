@@ -1,14 +1,12 @@
-# Forge 1.8.4
+# Forge 1.8.5
 
-Forge 1.8.4 refines the Vault Health dashboard heading structure and keeps its status-aware title styling aligned with the rest of Forge.
+Forge 1.8.5 gives Vault Health dashboard section titles stable status hooks for theme authors.
 
 ## What changed
 
-- The Vault Health dashboard title is now an `h1`.
-- Dashboard section titles are now `h2`.
-- Vault Health naming now uses Title Case across the dashboard title, commands, notices, and settings copy.
-- The dashboard header now explicitly carries the health `data-status` attribute so title coloring follows the same status context as the health pill and sections.
-- Forge linting now allows the project's Title Case UI convention while keeping the other Obsidian lint checks.
+- Section title elements now carry `data-status` with the same good, warning, critical, or muted state as their section.
+- Existing section, section header, and status badge status hooks still work.
+- Theme CSS can now color headings like `Health Summary`, `Schema Health`, `Active Issues`, and `Ontology` by DOM state instead of hard-coding section names or parsing visible text.
 
 ## Compatibility
 
