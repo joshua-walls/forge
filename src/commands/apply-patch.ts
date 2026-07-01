@@ -144,7 +144,11 @@ export async function runApplyPatchFromPatchesFolder(plugin: ForgePlugin): Promi
   }
 
   new PatchFileSuggestModal(plugin.app, patchFiles, (file) => {
-    void runApplyPatch(plugin, file.path);
+    void runApplyPatch(plugin, file.path).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      new Notice(`Forge: ${message}`, 6000);
+      console.error("[Forge] apply-patch-from-patches-folder error:", error);
+    });
   }).open();
 }
 
