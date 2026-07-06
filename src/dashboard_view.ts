@@ -314,6 +314,9 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderLockblockControls(contentEl);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
+    if (this.plugin.settings.shapeLintEnabled) {
+      this.renderShapeLintIssues(contentEl, this.snapshot);
+    }
     this.renderNeedsReview(contentEl, this.snapshot);
     if (this.shouldShowOntologySection()) {
       this.renderOntology(contentEl, this.snapshot);
@@ -450,7 +453,7 @@ export class ForgeHealthDashboardView extends ItemView {
   private renderSummary(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const summaryStatus: SectionStatus = snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0
       ? { label: "Needs attention", tone: "critical" }
-      : snapshot.summary.lint_issue_count > 0
+      : snapshot.summary.lint_issue_count > 0 || snapshot.summary.broken_shape_count > 0
         ? { label: "Watch", tone: "warning" }
         : { label: "Healthy", tone: "good" };
 
@@ -478,14 +481,28 @@ export class ForgeHealthDashboardView extends ItemView {
       ["Lint issues", snapshot.summary.lint_issue_count],
       ["Needs review", snapshot.summary.review_item_count ?? 0],
       ["Schema violations", snapshot.summary.schema_violation_count],
-      ["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count],
-      ["Normalization candidates", snapshot.summary.normalization_candidates ?? "—"],
     ];
+    if (snapshot.summary.invalid_frontmatter_count > 0) {
+      metrics.push(["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count]);
+    }
+    if (snapshot.summary.normalization_candidates !== null) {
+      metrics.push(["Normalization candidates", snapshot.summary.normalization_candidates]);
+    }
+    if (this.plugin.settings.shapeLintEnabled) {
+      metrics.push(["Shape lint issues", snapshot.summary.broken_shape_count]);
+    }
 
     for (const [label, value] of metrics) {
       const item = grid.createDiv("forge-health-metric");
       item.createDiv({ text: String(value), cls: "forge-health-metric-value" });
       item.createDiv({ text: String(label), cls: "forge-health-metric-label" });
+    }
+
+    if (snapshot.summary.normalization_candidates !== null) {
+      section.createDiv({
+        text: "Normalization candidates reflect the latest recorded normalization workflow.",
+        cls: "forge-health-section-message",
+      });
     }
   }
 
@@ -647,6 +664,46 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderGroupedIssues(section, issues, "active");
   }
 
+  private renderShapeLintIssues(container: HTMLElement, snapshot: DashboardSnapshot): void {
+    const shape = snapshot.shape_lint;
+    const issues = shape?.issues ?? [];
+    const critical = issues.filter((issue) => issue.severity === "critical").length;
+    const warnings = issues.filter((issue) => issue.severity === "warning").length;
+    const status: SectionStatus = !shape
+      ? { label: "Not scanned", tone: "muted" }
+      : critical > 0
+        ? { label: `${critical} critical`, tone: "critical" }
+        : warnings > 0
+          ? { label: `${warnings} warning${warnings === 1 ? "" : "s"}`, tone: "warning" }
+          : issues.length > 0
+            ? { label: `${issues.length} issue${issues.length === 1 ? "" : "s"}`, tone: "muted" }
+            : { label: "Clear", tone: "good" };
+
+    const section = createSection(container, "shape-lint-issues", "Shape Lint Issues", status, this.collapsedSections.has("shape-lint-issues"), () => {
+      this.toggleSection("shape-lint-issues");
+    });
+    const actions = section.createDiv("forge-health-section-actions");
+    const shapeLintButton = actions.createEl("button", { text: "Run shape lint", cls: "forge-health-action-button forge-health-action-primary" });
+    shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
+
+    if (!shape) {
+      section.createDiv({ text: "Shape lint issues appear after running Shape Lint or refreshing the dashboard.", cls: "forge-health-muted" });
+      return;
+    }
+
+    section.createDiv({
+      text: `Last shape lint ${formatRelativeWithExactDate(shape.generated_at)} • ${shape.summary.files_scanned} files scanned`,
+      cls: "forge-health-section-meta",
+    });
+
+    if (issues.length === 0) {
+      section.createDiv({ text: "No Shape lint issues found.", cls: "forge-health-muted" });
+      return;
+    }
+
+    this.renderGroupedIssues(section, issues, "shape-lint");
+  }
+
   private renderNeedsReview(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const items = snapshot.review_items ?? [];
     const status: SectionStatus = items.length > 0
@@ -789,11 +846,7 @@ export class ForgeHealthDashboardView extends ItemView {
         item.createDiv({ text: String(label), cls: "forge-health-metric-label" });
       }
 
-      if (shape.issues.length > 0) {
-        this.renderGroupedIssues(section, shape.issues, "shape");
-      } else {
-        section.createDiv({ text: "No Shape lint issues found.", cls: "forge-health-section-message" });
-      }
+      section.createDiv({ text: "Detailed issues appear in the Shape Lint Issues box.", cls: "forge-health-section-message" });
     }
 
     const actions = section.createDiv("forge-health-section-actions");
@@ -1241,7 +1294,7 @@ function healthLabel(snapshot: DashboardSnapshot): string {
   if (snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0) {
     return "Needs attention";
   }
-  if (snapshot.summary.lint_issue_count > 0) return "Watch";
+  if (snapshot.summary.lint_issue_count > 0 || snapshot.summary.broken_shape_count > 0) return "Watch";
   return "Healthy";
 }
 
@@ -1257,7 +1310,7 @@ function healthStatus(snapshot: DashboardSnapshot): SectionStatus["tone"] {
   if (snapshot.summary.schema_violation_count > 0 || snapshot.summary.invalid_frontmatter_count > 0) {
     return "critical";
   }
-  if (snapshot.summary.lint_issue_count > 0) return "warning";
+  if (snapshot.summary.lint_issue_count > 0 || snapshot.summary.broken_shape_count > 0) return "warning";
   return "good";
 }
 

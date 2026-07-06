@@ -1,3 +1,20 @@
+# 1.10.2
+
+## Changed
+
+- Vault Health now keeps the Health Summary quieter by hiding Invalid frontmatter when there are no invalid-frontmatter findings.
+- Vault Health now hides Normalization candidates until a real candidate count is available.
+- Vault Health now shows Shape lint issues in the summary only when Shape Lint is enabled.
+- Shape Lint issues now appear in a dedicated Shape Lint Issues section, separate from Shape Health metrics.
+- Overall Vault Health status now treats Shape Lint issues as a warning state.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.10.1
 
 ## Changed
