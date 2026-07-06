@@ -70,6 +70,10 @@ export class LintService {
       issues: result.results.map((issue) => ({
         ...lintResultToDashboardIssue(issue),
         source_command: sourceCommand,
+      })).filter((issue) => !isReviewIssue(issue.issue_type)),
+      review_items: result.reviewItems.map((issue) => ({
+        ...lintResultToDashboardIssue(issue),
+        source_command: sourceCommand,
       })),
       errors: result.errors.length,
       warnings: result.warnings.length,
@@ -84,4 +88,8 @@ export class LintService {
       console.warn("[Forge] Could not update dashboard lint cache:", e);
     }
   }
+}
+
+function isReviewIssue(issueType: string): boolean {
+  return issueType === "stale_note" || issueType === "stale_inbox_note";
 }

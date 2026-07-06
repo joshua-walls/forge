@@ -10,7 +10,7 @@
 
 export type FieldPointerLocation = "frontmatter" | "inline";
 export type DashboardAutoRefreshIntervalMinutes = 1 | 3 | 5 | 15 | 30;
-export type InboxRetentionAction = "delete" | "warning";
+export type InboxRetentionAction = "delete" | "review";
 export type DataviewExpansionAutoUpdateMode = "off" | "edit_idle";
 export type ActiveFileLintAutoMode = "off" | "edit_idle";
 
@@ -243,3 +243,12 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   // Plugin metadata
   lastInstalledVersion: undefined,
 };
+
+export function normalizeInboxRetentionAction(value: unknown): InboxRetentionAction {
+  if (value === "review" || value === "warning") return "review";
+  return "delete";
+}
+
+export function isInboxRetentionReviewAction(value: unknown): boolean {
+  return normalizeInboxRetentionAction(value) === "review";
+}

@@ -1,17 +1,18 @@
-# Forge 1.10.0
+# Forge 1.10.1
 
-Forge 1.10.0 adds scoped patch targets so bulk operations can be narrowed by dates, fields, tags, paths, and safety limits before they run.
+Forge 1.10.1 separates review backlog from lint failures. Stale review-cycle notes and stale inbox notes are still detected by Vault Lint, but they now appear as Needs Review items instead of lint warnings.
 
 ## What changed
 
-- Added `scope` support to all patch operations, including tag, field, frontmatter, compute, and move operations.
-- Added date scopes such as `updated_since`, `updated_before`, `created_since`, and filesystem modified/created date filters.
-- Added field, tag, path, `type`, `status`, and `limit` scope predicates for safer patch runs.
-- Applied patch notes are now copied into `Applied` instead of moved, so reusable patch notes can stay available.
-- Updated bundled Patch Engine docs and examples with generic scoped-target guidance.
+- Vault Lint now classifies `stale_note` and `stale_inbox_note` findings as review items, not lint warnings.
+- Vault Health now shows review backlog count in the header pill and renders a dedicated Needs Review section.
+- Current Note now shows a Needs Review flag and details inside the existing current-note panel.
+- Settings and bundled docs now describe stale inbox handling as Needs Review.
+- The legacy inbox retention action value `warning` is migrated to canonical `review` on settings load.
 
 ## Compatibility
 
-- No migration is required.
-- Existing patches continue to work without changes.
 - `minAppVersion` remains `1.7.2`.
+- Existing inbox retention settings are preserved.
+- Legacy `warning` settings are treated as `review` and saved forward automatically.
+- No manual migration is required.

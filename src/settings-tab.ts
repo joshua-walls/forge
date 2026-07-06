@@ -546,7 +546,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     new Setting(el)
       .setName("Enable stale note review")
       .setDesc(
-        "Flag notes whose review cycle has elapsed, based on frontmatter field values."
+        "List notes whose review cycle has elapsed in Needs Review, based on frontmatter field values."
       )
       .addToggle((t) =>
         t.setValue(this.plugin.settings.staleReviewEnabled).onChange((v) => {
@@ -766,15 +766,15 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Inbox retention action")
-      .setDesc("Choose whether stale inbox notes are deleted during maintenance or reported as lint warnings.")
+      .setDesc("Choose whether stale inbox notes are deleted during maintenance or listed in Needs Review after vault lint.")
       .addDropdown((d) =>
         d
           .addOption("delete", "Delete in maintenance")
-          .addOption("warning", "Warn in vault lint")
+          .addOption("review", "List under Needs Review")
           .setValue(this.plugin.settings.inboxRetentionAction)
           .onChange((v) => {
             this.runAsync(async () => {
-              this.plugin.settings.inboxRetentionAction = v as "delete" | "warning";
+              this.plugin.settings.inboxRetentionAction = v as "delete" | "review";
               await this.plugin.saveSettings();
             });
           })

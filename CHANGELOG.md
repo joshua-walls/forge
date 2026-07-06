@@ -1,3 +1,21 @@
+# 1.10.1
+
+## Changed
+
+- Vault Lint now classifies stale review-cycle notes and stale inbox notes as review items instead of lint warnings.
+- Vault Health now shows review backlog count in the header pill and renders review items in a dedicated Needs Review section.
+- Current Note now includes a Needs Review flag and details inside the existing current-note panel.
+- Settings and bundled docs now describe stale inbox handling as Needs Review instead of lint warnings.
+- Legacy inbox retention action `warning` is now migrated to canonical `review` during settings load.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- Existing inbox retention settings are preserved. The legacy stored action value `warning` is treated as `review` and saved forward.
+- No user migration is required.
+
+---
+
 # 1.10.0
 
 ## Added
@@ -392,7 +410,7 @@
 
 ## Changed
 
-- Inbox retention can now either delete stale inbox notes during maintenance or report them as Vault Lint warnings.
+- Inbox retention can now either delete stale inbox notes during maintenance or leave them for Vault Lint to report.
 
 ## Compatibility
 

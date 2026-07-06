@@ -36,6 +36,7 @@ export async function writeLintReportJson(
       errors:        run.errors.length,
       warnings:      run.warnings.length,
       info:          run.infos.length,
+      review:        run.reviewItems.length,
       notes_scanned: run.envelope.notes_scanned,
     },
     results: run.results,
@@ -76,6 +77,7 @@ export async function appendLintHistory(
     errors:         run.errors.length,
     warnings:       run.warnings.length,
     info:           run.infos.length,
+    review:         run.reviewItems.length,
   };
 
   // Load existing history
@@ -245,6 +247,7 @@ function buildLintRunNote(run: LintRunResult, today: string, fileLinks: boolean)
     `errors:: ${run.errors.length}`,
     `warnings:: ${run.warnings.length}`,
     `infos:: ${run.infos.length}`,
+    `review_items:: ${run.reviewItems.length}`,
     "",
     "# Lint Run",
     "",
@@ -255,6 +258,7 @@ function buildLintRunNote(run: LintRunResult, today: string, fileLinks: boolean)
     `| 🔴 Error   | ${run.errors.length}   |`,
     `| 🟡 Warning | ${run.warnings.length} |`,
     `| 🔵 Info    | ${run.infos.length}    |`,
+    `| Review     | ${run.reviewItems.length} |`,
     "",
   ];
 
@@ -262,6 +266,7 @@ function buildLintRunNote(run: LintRunResult, today: string, fileLinks: boolean)
     { label: "🔴 Errors",   items: run.errors   },
     { label: "🟡 Warnings", items: run.warnings },
     { label: "🔵 Info",     items: run.infos    },
+    { label: "Needs Review", items: run.reviewItems },
   ]) {
     if (items.length === 0) continue;
     lines.push(`## ${label}`, "");

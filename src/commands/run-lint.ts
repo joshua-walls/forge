@@ -183,6 +183,10 @@ class LintResultsModal extends Modal {
       text: `${r.infos.length} info`,
     });
 
+    summaryEl.createEl("div", {
+      text: `${r.reviewItems.length} needs review`,
+    });
+
     summaryEl.createEl("br");
 
     summaryEl.createEl("div", {
@@ -259,6 +263,39 @@ class LintResultsModal extends Modal {
       body.createEl("h3", { text: "Info" });
 
       for (const group of groupLintItems(r.infos)) {
+        body.createEl("div", {
+          text: `[${group.rule}]`,
+          cls: "forge-lint-rule",
+        });
+
+        body.createEl("div", {
+          text: group.summary,
+          cls: "forge-lint-message",
+        });
+
+        for (const reason of group.reasons) {
+          body.createEl("h4", {
+            text: reason.label,
+            cls: "forge-lint-reason",
+          });
+
+          const list = body.createEl("ul", {
+            cls: "forge-lint-list",
+          });
+
+          for (const file of reason.files) {
+            list.createEl("li", {
+              text: file,
+            });
+          }
+        }
+      }
+    }
+
+    if (r.reviewItems.length > 0) {
+      body.createEl("h3", { text: "Needs Review" });
+
+      for (const group of groupLintItems(r.reviewItems)) {
         body.createEl("div", {
           text: `[${group.rule}]`,
           cls: "forge-lint-rule",

@@ -22,12 +22,13 @@
 //   inline_fuzzy_schema    — inline key looks like a typo of a schema field
 //   inline_fuzzy_inline    — inline key looks like a typo of a known inline field
 //   inline_undocumented    — inline key not in schema inline.allowed list
-//   stale_note             — note's review cycle has elapsed
-//   stale_inbox_note       — inbox note is older than the configured retention threshold
+//   stale_note             — note's review cycle has elapsed; review item, not lint warning
+//   stale_inbox_note       — inbox note is older than the configured retention threshold; review item, not lint warning
 // Shape heading validation is handled by the separate Shape Lint service.
 
 import { App, TFile } from "obsidian";
 import type { ForgeSettings } from "./settings";
+import { isInboxRetentionReviewAction } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import {
   VaultSchema,
@@ -49,7 +50,7 @@ import { readNote, isFieldPresent, getFmString } from "./utils/frontmatter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type LintSeverity = "error" | "warning" | "info";
+export type LintSeverity = "error" | "warning" | "info" | "review";
 
 export interface LintResult {
   file: string;
@@ -71,6 +72,7 @@ export interface LintRunResult {
   errors: LintResult[];
   warnings: LintResult[];
   infos: LintResult[];
+  reviewItems: LintResult[];
 }
 
 interface VaultAdapterWithBasePath {
@@ -130,7 +132,7 @@ export async function runLintForFiles(
     allResults.push(...staleResults);
   }
 
-  if (settings.inboxRetentionAction === "warning") {
+  if (isInboxRetentionReviewAction(settings.inboxRetentionAction)) {
     allResults.push(...runInboxRetentionLintForFiles(allFiles, settings));
   }
 
@@ -147,6 +149,7 @@ export async function runLintForFiles(
     errors:   allResults.filter((r) => r.severity === "error"),
     warnings: allResults.filter((r) => r.severity === "warning"),
     infos:    allResults.filter((r) => r.severity === "info"),
+    reviewItems: allResults.filter((r) => r.severity === "review"),
   };
 }
 
@@ -163,7 +166,7 @@ function runInboxRetentionLintForFiles(
       const age = Math.floor((Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24));
       return newResult(
         file.path,
-        "warning",
+        "review",
         "stale_inbox_note",
         `Inbox note is ${age} days old and exceeds the ${settings.inboxRetentionDays}-day retention threshold`
       );
@@ -638,9 +641,9 @@ async function runStaleReview(
     if (ageDays > cycleDays) {
       results.push(newResult(
         file.path,
-        "warning",
+        "review",
         "stale_note",
-        `Note is overdue for review — cycle: ${cycleRaw} (${cycleDays}d), last updated: ${updatedRaw} (${Math.floor(ageDays)} days ago)`
+        `Note is overdue for review: cycle ${cycleRaw} (${cycleDays}d), last updated ${updatedRaw} (${Math.floor(ageDays)} days ago)`
       ));
     }
   }

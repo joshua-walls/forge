@@ -18,9 +18,11 @@ export type ActiveFileLintStatus = {
   filePath: string;
   generatedAt: string;
   issues: DashboardIssue[];
+  reviewIssues: DashboardIssue[];
   errors: number;
   warnings: number;
   infos: number;
+  reviewItems: number;
   exempt: boolean;
 };
 
@@ -180,9 +182,13 @@ export class ActiveFileLintService {
         ...lintResult.results.map((issue) => ({
           ...lintResultToDashboardIssue(issue),
           source_command: "auto-active-file-lint",
-        })),
+        })).filter((issue) => issue.issue_type !== "stale_note" && issue.issue_type !== "stale_inbox_note"),
         ...shapeIssues,
       ];
+      const reviewIssues = lintResult.reviewItems.map((issue) => ({
+        ...lintResultToDashboardIssue(issue),
+        source_command: "auto-active-file-lint",
+      }));
       const lintErrors = lintResult.errors.length;
       const lintWarnings = lintResult.warnings.length;
       const shapeErrors = shapeLintResult?.errors.length ?? 0;
@@ -190,6 +196,7 @@ export class ActiveFileLintService {
       const errors = lintErrors + shapeErrors;
       const warnings = lintWarnings + shapeWarnings;
       const infos = lintResult.infos.length + (shapeLintResult?.infos.length ?? 0);
+      const reviewItems = lintResult.reviewItems.length;
       const exempt = lintResult.envelope.notes_scanned === 0;
 
       this.dirtyFiles.delete(file.path);
@@ -197,9 +204,11 @@ export class ActiveFileLintService {
         filePath: file.path,
         generatedAt: new Date().toISOString(),
         issues: allIssues,
+        reviewIssues,
         errors,
         warnings,
         infos,
+        reviewItems,
         exempt,
       });
       this.maybeShowNotice(file, {
