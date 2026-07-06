@@ -4,6 +4,7 @@
 import { Plugin, Notice, WorkspaceLeaf } from "obsidian";
 import {
   DEFAULT_SETTINGS,
+  normalizeInboxRetentionAction,
   type DashboardAutoRefreshIntervalMinutes,
   ForgeSettings,
 } from "./settings";
@@ -579,8 +580,13 @@ export default class ForgePlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = sanitizeLoadedSettings((await this.loadData()) ?? {});
+    const rawSettings: unknown = (await this.loadData()) ?? {};
+    const legacyInboxRetentionAction = rawSettings && typeof rawSettings === "object"
+      ? (rawSettings as Record<string, unknown>).inboxRetentionAction
+      : undefined;
+    const loaded = sanitizeLoadedSettings(rawSettings);
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    this.settings.inboxRetentionAction = normalizeInboxRetentionAction(legacyInboxRetentionAction);
 
     if ("dataviewExpansionAutoUpdateOnSave" in loaded && !("dataviewExpansionAutoUpdateMode" in loaded)) {
       this.settings.dataviewExpansionAutoUpdateMode = (loaded as LegacyDashboardRuntimeSettings).dataviewExpansionAutoUpdateOnSave
@@ -594,6 +600,10 @@ export default class ForgePlugin extends Plugin {
       loaded.patchDefaultFile === "System/Exports/vault-patch.yaml"
     ) {
       this.settings.patchDefaultFile = DEFAULT_SETTINGS.patchDefaultFile;
+    }
+
+    if (legacyInboxRetentionAction === "warning") {
+      await this.saveData(settingsForPersistence(this.settings));
     }
   }
 
@@ -735,6 +745,10 @@ function sanitizeLoadedSettings(raw: unknown): Partial<ForgeSettings> {
   delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshEnabled;
   delete (loaded as LegacyDashboardRuntimeSettings).dashboardAutoRefreshIntervalMinutes;
   delete (loaded as LegacyDashboardRuntimeSettings).dataviewExpansionAutoUpdateMode;
+
+  if ("inboxRetentionAction" in loaded) {
+    loaded.inboxRetentionAction = normalizeInboxRetentionAction(loaded.inboxRetentionAction);
+  }
 
   return loaded;
 }

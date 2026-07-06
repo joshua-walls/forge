@@ -283,7 +283,7 @@ export class ForgeHealthDashboardView extends ItemView {
     const actions = header.createDiv("forge-health-actions");
     if (this.snapshot) {
       actions.createDiv({
-        text: `${healthLabel(this.snapshot)} • ${this.snapshot.duration_ms} ms`,
+        text: `${healthPillLabel(this.snapshot)} • ${this.snapshot.duration_ms} ms`,
         cls: "forge-health-pill",
         attr: { "data-status": healthStatus(this.snapshot) },
       });
@@ -314,6 +314,7 @@ export class ForgeHealthDashboardView extends ItemView {
     this.renderLockblockControls(contentEl);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
+    this.renderNeedsReview(contentEl, this.snapshot);
     if (this.shouldShowOntologySection()) {
       this.renderOntology(contentEl, this.snapshot);
     }
@@ -475,6 +476,7 @@ export class ForgeHealthDashboardView extends ItemView {
     const metrics = [
       ["Notes scanned", snapshot.summary.notes_scanned],
       ["Lint issues", snapshot.summary.lint_issue_count],
+      ["Needs review", snapshot.summary.review_item_count ?? 0],
       ["Schema violations", snapshot.summary.schema_violation_count],
       ["Invalid frontmatter", snapshot.summary.invalid_frontmatter_count],
       ["Normalization candidates", snapshot.summary.normalization_candidates ?? "—"],
@@ -506,6 +508,8 @@ export class ForgeHealthDashboardView extends ItemView {
               ? { label: `${current.errors} error${current.errors === 1 ? "" : "s"}`, tone: "critical" }
               : (current?.warnings ?? 0) > 0
                 ? { label: `${current?.warnings} warning${current?.warnings === 1 ? "" : "s"}`, tone: "warning" }
+                : (current?.reviewItems ?? 0) > 0
+                  ? { label: "Needs review", tone: "muted" }
                 : (current?.infos ?? 0) > 0
                   ? { label: `${current?.infos} info${current?.infos === 1 ? "" : "s"}`, tone: "muted" }
                   : current?.exempt
@@ -561,13 +565,22 @@ export class ForgeHealthDashboardView extends ItemView {
     summary.createSpan({ text: `${current.warnings} warning${current.warnings === 1 ? "" : "s"}` });
     summary.createSpan({ text: " • " });
     summary.createSpan({ text: `${current.infos} info${current.infos === 1 ? "" : "s"}` });
+    summary.createSpan({ text: " • " });
+    summary.createSpan({ text: `${current.reviewItems} needs review` });
 
-    if (current.issues.length === 0) {
+    if (current.issues.length === 0 && current.reviewIssues.length === 0) {
       section.createDiv({ text: "No issues found for the current note.", cls: "forge-health-muted" });
       return;
     }
 
-    this.renderGroupedIssues(section, current.issues, "current-note");
+    if (current.issues.length > 0) {
+      this.renderGroupedIssues(section, current.issues, "current-note");
+    }
+
+    if (current.reviewIssues.length > 0) {
+      section.createEl("h3", { text: "Needs Review" });
+      this.renderGroupedIssues(section, current.reviewIssues, "current-note-review");
+    }
   }
 
   private renderSchemaHealth(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -632,6 +645,24 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     this.renderGroupedIssues(section, issues, "active");
+  }
+
+  private renderNeedsReview(container: HTMLElement, snapshot: DashboardSnapshot): void {
+    const items = snapshot.review_items ?? [];
+    const status: SectionStatus = items.length > 0
+      ? { label: `${items.length} item${items.length === 1 ? "" : "s"}`, tone: "muted" }
+      : { label: "Clear", tone: "good" };
+
+    const section = createSection(container, "needs-review", "Needs Review", status, this.collapsedSections.has("needs-review"), () => {
+      this.toggleSection("needs-review");
+    });
+
+    if (items.length === 0) {
+      section.createDiv({ text: "No items need review.", cls: "forge-health-muted" });
+      return;
+    }
+
+    this.renderGroupedIssues(section, items, "needs-review");
   }
 
   private renderOntology(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -990,7 +1021,7 @@ export class ForgeHealthDashboardView extends ItemView {
   // ── Issue rendering ─────────────────────────────────────────────────────────
 
   private lintIssues(snapshot: DashboardSnapshot): DashboardIssue[] {
-    return snapshot.issues.filter((issue) => !isSchemaIssue(issue));
+    return snapshot.issues.filter((issue) => !isSchemaIssue(issue) && !isReviewIssue(issue));
   }
 
   private renderGroupedIssues(
@@ -1114,6 +1145,10 @@ function isSchemaIssue(issue: DashboardIssue): boolean {
     issue.issue_type === "schema_validation";
 }
 
+function isReviewIssue(issue: DashboardIssue): boolean {
+  return issue.issue_type === "stale_note" || issue.issue_type === "stale_inbox_note";
+}
+
 interface IssueGroup {
   issueType: string;
   issues: DashboardIssue[];
@@ -1208,6 +1243,14 @@ function healthLabel(snapshot: DashboardSnapshot): string {
   }
   if (snapshot.summary.lint_issue_count > 0) return "Watch";
   return "Healthy";
+}
+
+function healthPillLabel(snapshot: DashboardSnapshot): string {
+  const reviewItems = snapshot.summary.review_item_count ?? 0;
+  const reviewSuffix = reviewItems > 0
+    ? ` • ${reviewItems} review`
+    : "";
+  return `${healthLabel(snapshot)}${reviewSuffix}`;
 }
 
 function healthStatus(snapshot: DashboardSnapshot): SectionStatus["tone"] {

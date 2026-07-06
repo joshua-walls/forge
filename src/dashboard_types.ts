@@ -1,7 +1,7 @@
 import type { LintResult } from "./lint-engine";
 import type { SchemaValidationIssue } from "./utils/schema";
 
-export const DASHBOARD_CACHE_SCHEMA_VERSION = 2;
+export const DASHBOARD_CACHE_SCHEMA_VERSION = 3;
 
 export type DashboardSeverity = "info" | "warning" | "critical";
 
@@ -17,6 +17,7 @@ export interface DashboardIssue {
 export interface DashboardSummary {
   notes_scanned: number;
   lint_issue_count: number;
+  review_item_count: number;
   schema_violation_count: number;
   broken_shape_count: number;
   invalid_frontmatter_count: number;
@@ -31,6 +32,7 @@ export interface LintScanResult {
   duration_ms: number;
   files_scanned: number;
   issues: DashboardIssue[];
+  review_items: DashboardIssue[];
   errors: number;
   warnings: number;
   infos: number;
@@ -137,6 +139,7 @@ export interface DashboardSnapshot {
   vault_name: string;
   summary: DashboardSummary;
   issues: DashboardIssue[];
+  review_items: DashboardIssue[];
   lint: LintScanResult | null;
   schema: SchemaValidationResult | null;
   ontology: OntologyMetricsResult | null;
@@ -162,7 +165,7 @@ export function lintResultToDashboardIssue(result: LintResult): DashboardIssue {
   return {
     file_path: result.file,
     issue_type: result.rule,
-    severity: result.severity === "error" ? "critical" : result.severity,
+    severity: result.severity === "error" ? "critical" : result.severity === "review" ? "info" : result.severity,
     message: result.message,
     suggested_action: suggestedActionForLintRule(result.rule),
     source_command: "run-vault-lint",
@@ -207,6 +210,10 @@ function suggestedActionForLintRule(rule: string): string {
       return "Review whether this heading belongs in the shape template.";
     case "shape_section_empty":
       return "Add content to the required section or revise the template.";
+    case "stale_note":
+      return "Review this note and update its review date when complete.";
+    case "stale_inbox_note":
+      return "Review, file, or clear this inbox note.";
     default:
       return "Review this file against the current Forge schema.";
   }

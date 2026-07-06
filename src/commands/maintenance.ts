@@ -16,6 +16,7 @@
 
 import { App, Modal, Notice, TFile, TFolder } from "obsidian";
 import type ForgePlugin from "../main";
+import { isInboxRetentionReviewAction } from "../settings";
 import { getVaultPaths } from "../vault-paths";
 import { getMarkdownFiles } from "../utils/files";
 
@@ -371,12 +372,12 @@ async function cleanInbox(
   dryRun: boolean
 ): Promise<MaintenanceResult[]> {
   const paths = getVaultPaths(settings);
-  if (settings.inboxRetentionAction === "warning") {
+  if (isInboxRetentionReviewAction(settings.inboxRetentionAction)) {
     return [{
       task: "inbox",
       target: paths.inbox,
       status: "skipped",
-      detail: "Inbox retention is configured to report stale notes as lint warnings"
+      detail: "Inbox retention is configured to list stale notes under Needs Review"
     }];
   }
 
@@ -452,7 +453,7 @@ class MaintenanceConfirmModal extends Modal {
     policyList.createEl("li", {
       text: settings.inboxRetentionAction === "delete"
         ? `Inbox files: delete after ${settings.inboxRetentionDays} days`
-        : `Inbox files: report as lint warnings after ${settings.inboxRetentionDays} days`
+        : `Inbox files: list under Needs Review after ${settings.inboxRetentionDays} days`
     });
 
     if (errors.length > 0) {

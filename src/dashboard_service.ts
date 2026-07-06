@@ -145,6 +145,7 @@ export class DashboardService {
     const summary: DashboardSummary = {
       notes_scanned: latestLint?.files_scanned ?? 0,
       lint_issue_count: latestLint?.issues.length ?? 0,
+      review_item_count: latestLint?.review_items?.length ?? 0,
       schema_violation_count: latestSchema?.violations.length ?? 0,
       broken_shape_count: latestShapeLint?.issues.length ?? 0,
       invalid_frontmatter_count: latestLint?.issues.filter((issue) =>
@@ -162,6 +163,7 @@ export class DashboardService {
       vault_name: this.app.vault.getName(),
       summary,
       issues,
+      review_items: latestLint?.review_items ?? [],
       lint: latestLint,
       schema: latestSchema,
       ontology: latestOntology,
