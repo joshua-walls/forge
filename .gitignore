@@ -12,3 +12,4 @@ coverage/
 *.7z
 release.sh
 proposals/
+AGENTS.md

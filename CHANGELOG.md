@@ -1,3 +1,27 @@
+# 1.10.3
+
+## Added
+
+- Added richer Vault Lint and Shape Lint result modals with summary cards, severity filters, grouped findings, report links, and per-file open actions.
+- Added Vault Health dashboard action running states so long-running dashboard commands show progress and temporarily disable competing actions.
+- Added theme-overridable destructive action styling for Vault Health dashboard actions that mutate vault content or generated operational files.
+
+## Changed
+
+- Vault Health now preserves scroll position during refreshes, exports, lint runs, and other dashboard actions.
+- Vault Health now consolidates Shape Health into a single section and keeps current-note shape details inside the Current Note panel.
+- Vault Health now gives primary, secondary, and destructive actions clearer visual hierarchy.
+- Forge settings now refresh dependent sub-settings immediately while preserving scroll position.
+- Forge settings now show compact tab and section summaries for the active configuration.
+- Shape Lint results now share the same results-modal pattern as Vault Lint.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.10.2
 
 ## Changed

@@ -8,6 +8,7 @@
 
 import {
   App,
+  ButtonComponent,
   FuzzySuggestModal,
   Notice,
   PluginSettingTab,
@@ -25,9 +26,24 @@ import { loadSchema } from "./utils/schema";
 import type { ForgeSettings } from "./settings";
 
 type TabId = "general" | "lint" | "patch" | "maintenance" | "export" | "shapes";
+type SettingsSummaryTone = "good" | "warning" | "critical" | "muted";
 type StringSettingKey = {
   [K in keyof ForgeSettings]: ForgeSettings[K] extends string ? K : never;
 }[keyof ForgeSettings];
+
+interface SettingsSummaryItem {
+  label: string;
+  value: string;
+  tone?: SettingsSummaryTone;
+}
+
+interface SettingsActionButtonOptions {
+  key: string;
+  label: string;
+  runningLabel: string;
+  cta?: boolean;
+  task: () => Promise<void>;
+}
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "general",     label: "General"     },
@@ -41,6 +57,7 @@ const TABS: { id: TabId; label: string }[] = [
 export class ForgeSettingsTab extends PluginSettingTab {
   plugin: ForgePlugin;
   private activeTab: TabId = "general";
+  private runningActions = new Set<string>();
 
   constructor(app: App, plugin: ForgePlugin) {
     super(app, plugin);
@@ -48,7 +65,48 @@ export class ForgeSettingsTab extends PluginSettingTab {
   }
 
   private runAsync(task: () => Promise<void>): void {
-    void task();
+    void task().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      new Notice(`Forge: ${message}`, 6000);
+      console.error("[Forge] settings action error:", error);
+    });
+  }
+
+  private renderSettingsActionButton(btn: ButtonComponent, options: SettingsActionButtonOptions): ButtonComponent {
+    const running = this.runningActions.has(options.key);
+    btn.setButtonText(running ? options.runningLabel : options.label);
+    btn.setDisabled(running || this.runningActions.size > 0);
+    btn.buttonEl.setAttr("data-forge-focus-key", `action:${options.key}`);
+    if (options.cta) btn.setCta();
+    btn.onClick(() => {
+      this.runAsync(() => this.runSettingsAction(options));
+    });
+    return btn;
+  }
+
+  private async runSettingsAction(options: SettingsActionButtonOptions): Promise<void> {
+    if (this.runningActions.size > 0) return;
+    this.runningActions.add(options.key);
+    this.refreshSettingsTab();
+    try {
+      await options.task();
+    } finally {
+      this.runningActions.delete(options.key);
+      this.refreshSettingsTab();
+    }
+  }
+
+  private renderSummaryStrip(el: HTMLElement, items: SettingsSummaryItem[], cls = "forge-settings-summary"): void {
+    if (items.length === 0) return;
+    const strip = el.createDiv({ cls });
+    for (const item of items) {
+      const card = strip.createDiv({
+        cls: "forge-settings-summary-item",
+        attr: item.tone ? { "data-tone": item.tone } : undefined,
+      });
+      card.createDiv({ text: item.label, cls: "forge-settings-summary-label" });
+      card.createDiv({ text: item.value, cls: "forge-settings-summary-value" });
+    }
   }
 
   private stringifyUiValue(value: unknown): string {
@@ -93,6 +151,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         text: label,
         cls: ["forge-tab-btn", id === this.activeTab ? "is-active" : ""],
       });
+      btn.setAttr("data-forge-focus-key", `tab:${id}`);
       btn.addEventListener("click", () => {
         this.activeTab = id;
         this.renderTab();
@@ -100,6 +159,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     });
 
     const content = containerEl.createDiv({ cls: "forge-tab-content" });
+    this.renderSummaryStrip(content, this.tabSummaryItems(this.activeTab), "forge-settings-tab-summary");
 
     switch (this.activeTab) {
       case "general":     this.renderGeneral(content);     break;
@@ -108,6 +168,114 @@ export class ForgeSettingsTab extends PluginSettingTab {
       case "maintenance": this.renderMaintenance(content); break;
       case "export":      this.renderExport(content);      break;
       case "shapes":      this.renderShapes(content);      break;
+    }
+  }
+
+  private refreshSettingsTab(): void {
+    const scrollContainer = this.settingsScrollContainer();
+    const previousScrollTop = scrollContainer.scrollTop;
+    const shouldRestoreScroll = this.containerEl.childElementCount > 0;
+    const focusedKey = this.focusedElementKey();
+
+    this.renderTab();
+    this.restoreSettingsRenderState(scrollContainer, previousScrollTop, shouldRestoreScroll, focusedKey);
+  }
+
+  private settingsScrollContainer(): HTMLElement {
+    const doc = this.containerEl.ownerDocument;
+    let el: HTMLElement | null = this.containerEl;
+
+    while (el && el !== doc.body) {
+      const style = window.getComputedStyle(el);
+      const scrollable = style.overflowY === "auto" || style.overflowY === "scroll" || style.overflowY === "overlay";
+      if (scrollable && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+
+    return this.containerEl;
+  }
+
+  private focusedElementKey(): string | null {
+    const activeElement = this.containerEl.ownerDocument.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return null;
+    if (!this.containerEl.contains(activeElement)) return null;
+    return activeElement.dataset.forgeFocusKey ?? activeElement.closest<HTMLElement>("[data-forge-focus-key]")?.dataset.forgeFocusKey ?? null;
+  }
+
+  private restoreSettingsRenderState(
+    scrollContainer: HTMLElement,
+    scrollTop: number,
+    shouldRestoreScroll: boolean,
+    focusedKey: string | null
+  ): void {
+    const restore = () => {
+      if (!this.containerEl.isConnected) return;
+      if (shouldRestoreScroll) {
+        scrollContainer.scrollTop = scrollTop;
+      }
+      if (focusedKey) {
+        this.findFocusableByKey(focusedKey)?.focus();
+      }
+    };
+
+    restore();
+    window.requestAnimationFrame(restore);
+  }
+
+  private findFocusableByKey(focusedKey: string): HTMLElement | null {
+    const elements = this.containerEl.querySelectorAll<HTMLElement>("[data-forge-focus-key]");
+    for (let index = 0; index < elements.length; index += 1) {
+      const element = elements[index];
+      if (element.dataset.forgeFocusKey === focusedKey && !element.hasAttribute("disabled")) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  private tabSummaryItems(tab: TabId): SettingsSummaryItem[] {
+    const s = this.plugin.settings;
+    switch (tab) {
+      case "general":
+        return [
+          { label: "System", value: s.systemFolder || "System", tone: "muted" },
+          { label: "Forge", value: s.forgeFolder || "System/Forge", tone: "muted" },
+          { label: "Dataview expansion", value: s.dataviewExpansionEnabled ? "On" : "Off", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
+        ];
+      case "lint":
+        return [
+          { label: "Schema", value: `${s.schemaNoteFolder}/${s.schemaNoteFile}`, tone: "muted" },
+          { label: "Strict mode", value: s.lintStrictMode ? "On" : "Off", tone: s.lintStrictMode ? "warning" : "muted" },
+          { label: "Active-file lint", value: s.activeFileLintAutoMode === "off" ? "Off" : "On", tone: s.activeFileLintAutoMode === "off" ? "muted" : "good" },
+          { label: "Stale review", value: s.staleReviewEnabled ? "On" : "Off", tone: s.staleReviewEnabled ? "good" : "muted" },
+        ];
+      case "patch":
+        return [
+          { label: "Patch file", value: s.patchDefaultFile || "Not set", tone: s.patchDefaultFile ? "muted" : "warning" },
+          { label: "Backups", value: s.patchBackupEnabled ? "On" : "Off", tone: s.patchBackupEnabled ? "good" : "warning" },
+          { label: "Post-patch lint", value: s.patchAutoLintAfterApply ? "On" : "Off", tone: s.patchAutoLintAfterApply ? "good" : "muted" },
+        ];
+      case "maintenance":
+        return [
+          { label: "Backup retention", value: `${s.backupRetentionDays}d`, tone: "muted" },
+          { label: "Inbox action", value: s.inboxRetentionAction === "review" ? "Review" : "Delete", tone: s.inboxRetentionAction === "review" ? "good" : "warning" },
+          { label: "Dashboard auto-run", value: s.maintenanceAutoRunOnDashboardRefresh ? "On" : "Off", tone: s.maintenanceAutoRunOnDashboardRefresh ? "warning" : "muted" },
+        ];
+      case "export":
+        return [
+          { label: "Export", value: s.exportEnabled ? "On" : "Off", tone: s.exportEnabled ? "good" : "muted" },
+          { label: "Folder", value: s.exportsFolder || "System/Exports", tone: "muted" },
+          { label: "Ontology filter", value: s.exportFilterField ? `${s.exportFilterField}: ${s.exportFilterValues.length}` : "Not set", tone: s.exportFilterField ? "good" : "warning" },
+        ];
+      case "shapes":
+        return [
+          { label: "Shape engine", value: s.shapesEnabled ? "On" : "Off", tone: s.shapesEnabled ? "good" : "muted" },
+          { label: "Refinement", value: s.shapeRefinementEnabled ? "On" : "Off", tone: s.shapeRefinementEnabled ? "good" : "muted" },
+          { label: "Shape lint", value: s.shapeLintEnabled ? "On" : "Off", tone: s.shapeLintEnabled ? "good" : "muted" },
+          { label: "Shape repair", value: s.shapeRepairEnabled ? "On" : "Off", tone: s.shapeRepairEnabled ? "warning" : "muted" },
+        ];
     }
   }
 
@@ -125,14 +293,19 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "schema guide, patch examples, and troubleshooting. Skips notes that already exist."
       )
       .addButton((btn) =>
-        btn.setButtonText("Install docs").setCta().onClick(() => {
-          this.runAsync(() =>
-            installVaultForgeDocumentation(this.plugin.app, this.plugin.settings)
-          );
+        this.renderSettingsActionButton(btn, {
+          key: "install-docs",
+          label: "Install docs",
+          runningLabel: "Installing...",
+          cta: true,
+          task: () => installVaultForgeDocumentation(this.plugin.app, this.plugin.settings),
         })
       );
 
-    this.renderSectionHeading(el, "System Paths");
+    this.renderSectionHeading(el, "System Paths", [
+      { label: "System folder", value: this.plugin.settings.systemFolder || "System", tone: "muted" },
+      { label: "Forge folder", value: this.plugin.settings.forgeFolder || "System/Forge", tone: "muted" },
+    ]);
     el.createEl("p", {
       text: "All paths are relative to your vault root.",
       cls: "setting-item-description",
@@ -162,7 +335,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const s = this.plugin.settings;
     const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
 
-    this.renderSectionHeading(el, "Dataview Expansion");
+    this.renderSectionHeading(el, "Dataview Expansion", [
+      { label: "Dataview plugin", value: dataviewAvailable ? "Available" : "Missing", tone: dataviewAvailable ? "good" : "warning" },
+      { label: "Expansion", value: s.dataviewExpansionEnabled ? "On" : "Off", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
+      { label: "Auto-update", value: s.dataviewExpansionAutoUpdateMode === "off" ? "Off" : "Edit idle", tone: s.dataviewExpansionAutoUpdateMode === "off" ? "muted" : "good" },
+    ]);
     el.createEl("p", {
       text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for graph view and raw-Markdown readers.",
       cls: "setting-item-description",
@@ -183,7 +360,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.dataviewExpansionEnabled = value;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -202,6 +379,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.dataviewExpansionAutoUpdateMode = value as import("./settings").DataviewExpansionAutoUpdateMode;
               await this.plugin.applyRuntimeSettingsChange();
+              this.refreshSettingsTab();
             });
           })
       );
@@ -264,7 +442,9 @@ export class ForgeSettingsTab extends PluginSettingTab {
   // ── Frontmatter field order ───────────────────────────────────────────────
 
   private renderFrontmatterFieldOrder(el: HTMLElement): void {
-    this.renderSectionHeading(el, "Frontmatter Field Order");
+    this.renderSectionHeading(el, "Frontmatter Field Order", [
+      { label: "Configured fields", value: String(this.plugin.settings.frontmatterFieldOrder.length), tone: this.plugin.settings.frontmatterFieldOrder.length > 0 ? "good" : "warning" },
+    ]);
     el.createEl("p", {
       text: "Fields are written in this order when Forge modifies a note. " +
             "Fields not listed here are appended alphabetically. " +
@@ -377,8 +557,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "in the order they appear in the schema."
       )
       .addButton((btn) =>
-        btn.setButtonText("Prefill").onClick(() => {
-          this.runAsync(async () => {
+        this.renderSettingsActionButton(btn, {
+          key: "prefill-frontmatter-order",
+          label: "Prefill",
+          runningLabel: "Prefilling...",
+          task: async () => {
             const schema = await loadSchema(this.plugin.app, this.plugin.settings);
             if (!schema) {
               new Notice("Forge: Could not load schema — is schema.md present?");
@@ -396,8 +579,8 @@ export class ForgeSettingsTab extends PluginSettingTab {
             });
             this.plugin.settings.frontmatterFieldOrder = deduped;
             await this.plugin.saveSettings();
-            this.renderTab();
-          });
+            this.refreshSettingsTab();
+          },
         })
       );
   }
@@ -424,6 +607,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.lintStrictMode = v;
             await this.plugin.saveSettings();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -505,7 +689,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
           })
       );
 
-    this.renderSectionHeading(el, "Active File Lint");
+    this.renderSectionHeading(el, "Active File Lint", [
+      { label: "Mode", value: this.plugin.settings.activeFileLintAutoMode === "off" ? "Off" : "Edit idle", tone: this.plugin.settings.activeFileLintAutoMode === "off" ? "muted" : "good" },
+      { label: "Idle delay", value: `${Math.round(this.plugin.settings.activeFileLintIdleDelayMs / 1000)}s`, tone: "muted" },
+    ]);
 
     new Setting(el)
       .setName("Enable auto-lint")
@@ -515,7 +702,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.activeFileLintAutoMode = value ? "edit_idle" : "off";
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -541,7 +728,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Stale Note Review ─────────────────────────────────────────────
-    this.renderSectionHeading(el, "Stale Note Review");
+    this.renderSectionHeading(el, "Stale Note Review", [
+      { label: "Review", value: this.plugin.settings.staleReviewEnabled ? "On" : "Off", tone: this.plugin.settings.staleReviewEnabled ? "good" : "muted" },
+      { label: "Scope values", value: String(this.plugin.settings.staleReviewStatuses.length), tone: this.plugin.settings.staleReviewStatuses.length > 0 ? "good" : "warning" },
+    ]);
 
     new Setting(el)
       .setName("Enable stale note review")
@@ -553,7 +743,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.staleReviewEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -599,7 +789,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         this.plugin.settings.staleReviewFilterField = v;
         this.plugin.settings.staleReviewStatuses = [];
         await this.plugin.saveSettings();
-        this.renderTab();
+        this.refreshSettingsTab();
       }
     );
 
@@ -662,7 +852,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.patchBackupEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -682,7 +872,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
               this.runAsync(async () => {
                 this.plugin.settings.patchBackupFolder = folder.path;
                 await this.plugin.saveSettings();
-                this.renderTab();
+                this.refreshSettingsTab();
               });
             }).open();
           })
@@ -868,7 +1058,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.exportEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -884,21 +1074,22 @@ export class ForgeSettingsTab extends PluginSettingTab {
     );
 
     // ── Export actions ─────────────────────────────────────────────
-    this.renderSectionHeading(el, "Run Exports");
+    this.renderSectionHeading(el, "Run Exports", [
+      { label: "Output folder", value: this.plugin.settings.exportsFolder || "System/Exports", tone: "muted" },
+      { label: "Ontology values", value: String(this.plugin.settings.exportFilterValues.length), tone: this.plugin.settings.exportFilterValues.length > 0 ? "good" : "warning" },
+    ]);
 
     new Setting(el)
       .setName("Export vault overview")
       .setDesc("Builds vault-inventory.json, vault-meta.json, and vault-export.md in one pass. Inventory is schema-optional; meta requires schema and excludes ai_private notes.")
       .addButton((btn) =>
-        btn.setButtonText("Run").onClick(() => {
-          this.runAsync(async () => {
-            try {
-              await runExportOverview(this.plugin);
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "Unexpected error";
-              new Notice(`Forge: ${message}`, 6000);
-            }
-          });
+        this.renderSettingsActionButton(btn, {
+          key: "export-overview",
+          label: "Run",
+          runningLabel: "Exporting...",
+          task: async () => {
+            await runExportOverview(this.plugin);
+          },
         })
       );
 
@@ -909,20 +1100,22 @@ export class ForgeSettingsTab extends PluginSettingTab {
         "Runs inventory export first if no inventory file is on disk."
       )
       .addButton((btn) =>
-        btn.setButtonText("Run").onClick(() => {
-          this.runAsync(async () => {
-            try {
-              await runExportOntology(this.plugin);
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "Unexpected error";
-              new Notice(`Forge: ${message}`, 6000);
-            }
-          });
+        this.renderSettingsActionButton(btn, {
+          key: "export-ontology",
+          label: "Run",
+          runningLabel: "Exporting...",
+          task: async () => {
+            await runExportOntology(this.plugin);
+          },
         })
       );
 
     // ── Overview options ───────────────────────────────────────────
-    this.renderSectionHeading(el, "Overview Options");
+    this.renderSectionHeading(el, "Overview Options", [
+      { label: "Domain", value: this.plugin.settings.exportDomainField || "Folder", tone: "muted" },
+      { label: "Type", value: this.plugin.settings.exportTypeField || "type", tone: "muted" },
+      { label: "Status", value: this.plugin.settings.exportStatusField || "status", tone: "muted" },
+    ]);
 
     // Domain field
     const allFieldsForDomain = this.plugin.schemaCache.getFrontmatterFieldNames();
@@ -935,6 +1128,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       async (v) => {
         this.plugin.settings.exportDomainField = v;
         await this.plugin.saveSettings();
+        this.refreshSettingsTab();
       }
     );
 
@@ -947,6 +1141,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       async (v) => {
         this.plugin.settings.exportTypeField = v;
         await this.plugin.saveSettings();
+        this.refreshSettingsTab();
       }
     );
 
@@ -959,6 +1154,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       async (v) => {
         this.plugin.settings.exportStatusField = v;
         await this.plugin.saveSettings();
+        this.refreshSettingsTab();
       }
     );
 
@@ -987,7 +1183,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             this.plugin.settings.exportPrivateEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -1008,7 +1204,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Ontology filter ────────────────────────────────────────────
-    this.renderSectionHeading(el, "Ontology Filter");
+    this.renderSectionHeading(el, "Ontology Filter", [
+      { label: "Field", value: this.plugin.settings.exportFilterField || "Not set", tone: this.plugin.settings.exportFilterField ? "good" : "warning" },
+      { label: "Values", value: String(this.plugin.settings.exportFilterValues.length), tone: this.plugin.settings.exportFilterValues.length > 0 ? "good" : "warning" },
+      { label: "Excluded folders", value: String(this.plugin.settings.exportExcludeFolders.length), tone: this.plugin.settings.exportExcludeFolders.length > 0 ? "muted" : "good" },
+    ]);
     el.createEl("p", {
       text: "Select which notes are included in the ontology export by choosing a schema field and the values to match.",
       cls: "setting-item-description",
@@ -1018,12 +1218,14 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Reload from schema")
       .setDesc("Refresh field and value lists from the current schema.")
       .addButton((btn) =>
-        btn.setButtonText("Reload").onClick(() => {
-          this.runAsync(async () => {
+        this.renderSettingsActionButton(btn, {
+          key: "reload-schema",
+          label: "Reload",
+          runningLabel: "Reloading...",
+          task: async () => {
             await this.plugin.schemaCache.refresh();
             new Notice("Forge: schema reloaded.");
-            this.renderTab();
-          });
+          },
         })
       );
 
@@ -1040,7 +1242,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         this.plugin.settings.exportFilterField = v;
         this.plugin.settings.exportFilterValues = []; // reset values when field changes
         await this.plugin.saveSettings();
-        this.renderTab();
+        this.refreshSettingsTab();
       }
     );
 
@@ -1076,7 +1278,9 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Relationship heading ───────────────────────────────────────
-    this.renderSectionHeading(el, "Relationship Extraction");
+    this.renderSectionHeading(el, "Relationship Extraction", [
+      { label: "Heading", value: this.plugin.settings.exportRelationshipHeading || "Related", tone: "muted" },
+    ]);
 
     new Setting(el)
       .setName("Relationship heading")
@@ -1097,7 +1301,9 @@ export class ForgeSettingsTab extends PluginSettingTab {
       );
 
     // ── Exclude folders ────────────────────────────────────────────
-    this.renderSectionHeading(el, "Exclude Folders");
+    this.renderSectionHeading(el, "Exclude Folders", [
+      { label: "Excluded folders", value: String(this.plugin.settings.exportExcludeFolders.length), tone: this.plugin.settings.exportExcludeFolders.length > 0 ? "muted" : "good" },
+    ]);
     el.createEl("p", {
       text: "Notes inside these folders are skipped during ontology export. Applies at any depth — add a top-level folder to exclude everything under it.",
       cls: "setting-item-description",
@@ -1453,7 +1659,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapesEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -1461,7 +1667,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
     if (!s.shapesEnabled) return;
 
     // ── Folders ───────────────────────────────────────────────────
-    this.renderSectionHeading(el, "Folders");
+    this.renderSectionHeading(el, "Folders", [
+      { label: "Shapes folder", value: s.shapesFolder || "System/Shapes", tone: "muted" },
+      { label: "Subfolders", value: s.shapeIncludeSubfolders ? "Included" : "Top-level only", tone: s.shapeIncludeSubfolders ? "good" : "muted" },
+    ]);
 
     this.renderFolderPicker(
       el,
@@ -1482,12 +1691,17 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapeIncludeSubfolders = v;
             await this.plugin.saveSettings();
+            this.refreshSettingsTab();
           });
         })
       );
 
     // ── Field Configuration ───────────────────────────────────────
-    this.renderSectionHeading(el, "Template Field Configuration");
+    const shapeTemplateFieldCount = Object.keys(s.shapeTemplateFields ?? {}).length;
+    this.renderSectionHeading(el, "Template Field Configuration", [
+      { label: "Type field", value: s.shapeTypeTargetField || "type", tone: "muted" },
+      { label: "Configured fields", value: String(shapeTemplateFieldCount), tone: shapeTemplateFieldCount > 0 ? "good" : "warning" },
+    ]);
     el.createEl("p", {
       text: "Configure which schema fields appear in generated templates and what value each gets. " +
             "The type target field and configured date fields are excluded — they are set automatically at runtime.",
@@ -1513,7 +1727,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
     this.renderShapeFieldConfigurator(el);
 
     // ── Template Refinement ───────────────────────────────────────
-    this.renderSectionHeading(el, "Template Refinement");
+    this.renderSectionHeading(el, "Template Refinement", [
+      { label: "Refinement", value: s.shapeRefinementEnabled ? "On" : "Off", tone: s.shapeRefinementEnabled ? "good" : "muted" },
+      { label: "Templates folder", value: s.shapeTemplatesFolder || "System/Templates", tone: "muted" },
+      { label: "Relationships", value: s.shapeInjectRelationships ? "Injected" : "Off", tone: s.shapeInjectRelationships ? "good" : "muted" },
+    ]);
     el.createEl("p", {
       text: "When enabled, the 'Refine Shape Templates' command reads each shape note " +
             "and writes or updates the corresponding template note.",
@@ -1528,7 +1746,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapeRefinementEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -1554,7 +1772,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.shapeInjectRelationships = v;
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           })
         );
@@ -1612,17 +1830,25 @@ export class ForgeSettingsTab extends PluginSettingTab {
         .setName("Run refinement")
         .setDesc("Process all shape notes and write or update template notes now.")
         .addButton((btn) =>
-          btn.setButtonText("Refine shape templates").setCta().onClick(() => {
-            this.runAsync(async () => {
+          this.renderSettingsActionButton(btn, {
+            key: "refine-shape-templates",
+            label: "Refine shape templates",
+            runningLabel: "Refining...",
+            cta: true,
+            task: async () => {
               const { runRefineShapes } = await import("./commands/refine-shapes");
               await runRefineShapes(this.plugin);
-            });
+            },
           })
         );
     }
 
     // ── Shape Lint ────────────────────────────────────────────────
-    this.renderSectionHeading(el, "Shape Lint");
+    this.renderSectionHeading(el, "Shape Lint", [
+      { label: "Validation", value: s.shapeLintEnabled ? "On" : "Off", tone: s.shapeLintEnabled ? "good" : "muted" },
+      { label: "Scope", value: (s.shapeLintScope ?? "all") === "all" ? "All notes" : `${s.shapeLintFolders.length} folders`, tone: (s.shapeLintScope ?? "all") === "all" || s.shapeLintFolders.length > 0 ? "good" : "warning" },
+      { label: "Strict matching", value: s.shapeLintStrictMode ? "On" : "Off", tone: s.shapeLintStrictMode ? "warning" : "muted" },
+    ]);
     el.createEl("p", {
       text: "When enabled, lint runs validate note heading structure against the " +
             "corresponding shape template. Severity follows the Lint tab strict mode setting.",
@@ -1640,7 +1866,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapeLintEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -1657,6 +1883,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.shapeLintStrictMode = v;
               await this.plugin.saveSettings();
+              this.refreshSettingsTab();
             });
           })
         );
@@ -1686,7 +1913,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.shapeLintScope = v as "all" | "folder";
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           });
         });
@@ -1700,7 +1927,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
     }
 
     // ── Shape Repair ──────────────────────────────────────────────
-    this.renderSectionHeading(el, "Shape Repair");
+    this.renderSectionHeading(el, "Shape Repair", [
+      { label: "Repair", value: s.shapeRepairEnabled ? "On" : "Off", tone: s.shapeRepairEnabled ? "warning" : "muted" },
+      { label: "Scope", value: (s.shapeRepairScope ?? "all") === "all" ? "All notes" : `${s.shapeRepairFolders.length} folders`, tone: (s.shapeRepairScope ?? "all") === "all" || s.shapeRepairFolders.length > 0 ? "good" : "warning" },
+      { label: "Run notes", value: s.shapeRepairRunsFolder || "System/Exports/ShapeRepairRuns", tone: "muted" },
+    ]);
     el.createEl("p", {
       text: "When enabled, the 'Run Shape Repair' command corrects heading drift in notes " +
             "by adding missing headings and reordering sections to match the template. " +
@@ -1716,7 +1947,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapeRepairEnabled = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         })
       );
@@ -1733,7 +1964,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.shapeRepairScope = v as "all" | "folder";
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           });
         });
@@ -1790,19 +2021,26 @@ export class ForgeSettingsTab extends PluginSettingTab {
         .setName("Run shape repair")
         .setDesc("Add missing headings and reorder sections to match templates now.")
         .addButton((btn) =>
-          btn.setButtonText("Dry run").onClick(() => {
-            this.runAsync(async () => {
+          this.renderSettingsActionButton(btn, {
+            key: "shape-repair-dry-run",
+            label: "Dry run",
+            runningLabel: "Running...",
+            task: async () => {
               const { runShapeRepair } = await import("./commands/shape-repair");
               await runShapeRepair(this.plugin, true);
-            });
+            },
           })
         )
         .addButton((btn) =>
-          btn.setButtonText("Run shape repair").setCta().onClick(() => {
-            this.runAsync(async () => {
+          this.renderSettingsActionButton(btn, {
+            key: "shape-repair",
+            label: "Run shape repair",
+            runningLabel: "Repairing...",
+            cta: true,
+            task: async () => {
               const { runShapeRepair } = await import("./commands/shape-repair");
               await runShapeRepair(this.plugin, false);
-            });
+            },
           })
         );
     }
@@ -1839,7 +2077,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s.shapeTypeTargetField = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         });
       });
@@ -1882,7 +2120,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
           this.runAsync(async () => {
             s[settingKey] = v;
             await this.plugin.saveSettings();
-            this.renderTab();
+            this.refreshSettingsTab();
           });
         });
       });
@@ -1999,8 +2237,9 @@ export class ForgeSettingsTab extends PluginSettingTab {
     });
   }
 
-  private renderSectionHeading(el: HTMLElement, title: string): void {
+  private renderSectionHeading(el: HTMLElement, title: string, summary: SettingsSummaryItem[] = []): void {
     new Setting(el).setName(title).setHeading();
+    this.renderSummaryStrip(el, summary, "forge-settings-section-summary");
   }
 
   private createShapeFieldValueControl(
@@ -2117,7 +2356,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               this.setStringSetting(settingKey, folder.path || fallback);
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           }).open();
         })
@@ -2141,7 +2380,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
               this.plugin.settings.schemaNoteFile =
                 lastSlash >= 0 ? file.path.substring(lastSlash + 1) : file.path;
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           }).open();
         })
@@ -2164,7 +2403,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               s.schemaVersionLocation = v as "frontmatter" | "inline";
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           })
       );
@@ -2200,7 +2439,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
             this.runAsync(async () => {
               this.plugin.settings.patchDefaultFile = file.path;
               await this.plugin.saveSettings();
-              this.renderTab();
+              this.refreshSettingsTab();
             });
           }).open();
         })
