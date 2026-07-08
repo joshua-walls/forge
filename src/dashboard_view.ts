@@ -1,7 +1,17 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf, normalizePath } from "obsidian";
 import type ForgePlugin from "./main";
 import type { DashboardAutoRefreshIntervalMinutes } from "./settings";
 import type { DashboardIssue, DashboardSnapshot } from "./dashboard_types";
+import { runExportOverview } from "./commands/export-overview";
+import { runExportOntology } from "./commands/export-ontology";
+import { runVaultMaintenance } from "./commands/maintenance";
+import { runNormalizeFrontmatter, runNormalizeTags } from "./commands/normalize";
+import { runRefineShapes } from "./commands/refine-shapes";
+import { runVaultRepair } from "./commands/repair";
+import { runRestorePatch } from "./commands/restore-patch";
+import { runVaultLint } from "./commands/run-lint";
+import { runShapeLint } from "./commands/run-shape-lint";
+import { runValidateSchema } from "./commands/validate-schema";
 
 export const FORGE_HEALTH_DASHBOARD_VIEW = "forge-health-dashboard";
 
@@ -51,6 +61,23 @@ type AppWithPlugins = AppWithCommandRegistry & {
   plugins?: AppPluginManager;
 };
 
+interface DashboardActionOptions {
+  key: string;
+  label: string;
+  runningLabel?: string;
+  tone?: "primary" | "secondary" | "destructive";
+  title?: string;
+  disabled?: boolean;
+  onClick: () => Promise<unknown>;
+}
+
+interface ShapeFileIssueGroup {
+  path: string;
+  issues: DashboardIssue[];
+  maxSeverity: DashboardIssue["severity"];
+  issueTypes: string[];
+}
+
 export class ForgeHealthDashboardView extends ItemView {
   private plugin: ForgePlugin;
   private snapshot: DashboardSnapshot | null = null;
@@ -61,6 +88,7 @@ export class ForgeHealthDashboardView extends ItemView {
   private expandedIssueGroups = new Set<string>();
   private fullIssueGroups = new Set<string>();
   private collapsedSections = new Set<string>();
+  private runningActions = new Set<string>();
 
   // Live-reload state
   private reloadDebounceTimer: number | null = null;
@@ -268,6 +296,10 @@ export class ForgeHealthDashboardView extends ItemView {
 
   render(): void {
     const { contentEl } = this;
+    const previousScrollTop = contentEl.scrollTop;
+    const shouldRestoreScroll = contentEl.childElementCount > 0;
+    const focusedKey = this.focusedElementKey();
+
     contentEl.empty();
     contentEl.addClass("forge-health-dashboard");
 
@@ -291,12 +323,17 @@ export class ForgeHealthDashboardView extends ItemView {
 
     const refreshButton = actions.createEl("button", {
       text: this.refreshing ? "Refreshing..." : "Refresh",
-      cls: "mod-cta",
+      cls: "mod-cta forge-health-header-action forge-health-header-primary",
     });
+    refreshButton.setAttr("data-forge-focus-key", "header:refresh");
     refreshButton.disabled = this.refreshing;
     refreshButton.addEventListener("click", () => { void this.refresh(); });
 
-    const settingsButton = actions.createEl("button", { text: "Settings" });
+    const settingsButton = actions.createEl("button", {
+      text: "Settings",
+      cls: "forge-health-header-action forge-health-header-secondary",
+    });
+    settingsButton.setAttr("data-forge-focus-key", "header:settings");
     settingsButton.addEventListener("click", () => this.plugin.openForgeSettings());
 
     this.renderVersionBanner(contentEl);
@@ -307,16 +344,14 @@ export class ForgeHealthDashboardView extends ItemView {
       empty.createEl("h2", { text: "No cached health snapshot" });
       empty.createEl("p", { text: "Run a manual refresh to scan the vault and populate this dashboard." });
       this.renderLockblockControls(contentEl);
+      this.restoreRenderState(previousScrollTop, shouldRestoreScroll, focusedKey);
       return;
     }
     this.renderSummary(contentEl, this.snapshot);
-    this.renderCurrentNote(contentEl);
+    this.renderCurrentNote(contentEl, this.snapshot);
     this.renderLockblockControls(contentEl);
     this.renderSchemaHealth(contentEl, this.snapshot);
     this.renderIssues(contentEl, this.lintIssues(this.snapshot));
-    if (this.plugin.settings.shapeLintEnabled) {
-      this.renderShapeLintIssues(contentEl, this.snapshot);
-    }
     this.renderNeedsReview(contentEl, this.snapshot);
     if (this.shouldShowOntologySection()) {
       this.renderOntology(contentEl, this.snapshot);
@@ -326,6 +361,40 @@ export class ForgeHealthDashboardView extends ItemView {
     }
     this.renderHistory(contentEl, this.snapshot);
     this.renderRecommendations(contentEl, this.snapshot);
+    this.restoreRenderState(previousScrollTop, shouldRestoreScroll, focusedKey);
+  }
+
+  private focusedElementKey(): string | null {
+    const activeElement = this.contentEl.ownerDocument.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return null;
+    if (!this.contentEl.contains(activeElement)) return null;
+    return activeElement.dataset.forgeFocusKey ?? null;
+  }
+
+  private restoreRenderState(scrollTop: number, shouldRestoreScroll: boolean, focusedKey: string | null): void {
+    const restore = () => {
+      if (!this.contentEl.isConnected) return;
+      if (shouldRestoreScroll) {
+        this.contentEl.scrollTop = scrollTop;
+      }
+      if (focusedKey) {
+        this.findFocusableByKey(focusedKey)?.focus();
+      }
+    };
+
+    restore();
+    window.requestAnimationFrame(restore);
+  }
+
+  private findFocusableByKey(focusedKey: string): HTMLElement | null {
+    const elements = this.contentEl.querySelectorAll<HTMLElement>("[data-forge-focus-key]");
+    for (let index = 0; index < elements.length; index += 1) {
+      const element = elements[index];
+      if (element.dataset.forgeFocusKey === focusedKey && !element.hasAttribute("disabled")) {
+        return element;
+      }
+    }
+    return null;
   }
 
   private renderAutoRefreshControls(container: HTMLElement): void {
@@ -339,6 +408,7 @@ export class ForgeHealthDashboardView extends ItemView {
     const checkbox = label.createEl("input", {
       type: "checkbox",
     });
+    checkbox.setAttr("data-forge-focus-key", "auto-refresh:enabled");
     checkbox.checked = enabled;
     label.createSpan({ text: "Auto-refresh" });
     checkbox.addEventListener("change", () => {
@@ -351,6 +421,7 @@ export class ForgeHealthDashboardView extends ItemView {
     });
     select.disabled = !enabled;
     select.setAttr("aria-label", "Auto-refresh interval");
+    select.setAttr("data-forge-focus-key", "auto-refresh:interval");
 
     for (const interval of AUTO_REFRESH_INTERVALS) {
       const option = select.createEl("option", {
@@ -466,14 +537,34 @@ export class ForgeHealthDashboardView extends ItemView {
     });
 
     const actions = section.createDiv("forge-health-section-actions");
-    const lintButton = actions.createEl("button", { text: "Run vault lint", cls: "forge-health-action-button forge-health-action-primary" });
-    lintButton.addEventListener("click", () => this.executeCommand("run-vault-lint"));
-    const maintenanceButton = actions.createEl("button", { text: "Vault maintenance", cls: "forge-health-action-button forge-health-action-primary" });
-    maintenanceButton.addEventListener("click", () => this.executeCommand("vault-maintenance"));
-    const frontmatterButton = actions.createEl("button", { text: "Normalize frontmatter", cls: "forge-health-action-button forge-health-action-secondary" });
-    frontmatterButton.addEventListener("click", () => this.executeCommand("normalize-frontmatter"));
-    const tagsButton = actions.createEl("button", { text: "Normalize tags", cls: "forge-health-action-button forge-health-action-secondary" });
-    tagsButton.addEventListener("click", () => this.executeCommand("normalize-tags"));
+    this.renderActionButton(actions, {
+      key: "run-vault-lint",
+      label: "Run vault lint",
+      runningLabel: "Running lint...",
+      tone: "primary",
+      onClick: () => runVaultLint(this.plugin),
+    });
+    this.renderActionButton(actions, {
+      key: "vault-maintenance",
+      label: "Vault maintenance",
+      runningLabel: "Checking...",
+      tone: "destructive",
+      onClick: () => runVaultMaintenance(this.plugin),
+    });
+    this.renderActionButton(actions, {
+      key: "normalize-frontmatter",
+      label: "Normalize frontmatter",
+      runningLabel: "Normalizing...",
+      tone: "destructive",
+      onClick: () => runNormalizeFrontmatter(this.plugin),
+    });
+    this.renderActionButton(actions, {
+      key: "normalize-tags",
+      label: "Normalize tags",
+      runningLabel: "Normalizing...",
+      tone: "destructive",
+      onClick: () => runNormalizeTags(this.plugin),
+    });
 
     const grid = section.createDiv("forge-health-metric-grid");
     const metrics = [
@@ -506,7 +597,7 @@ export class ForgeHealthDashboardView extends ItemView {
     }
   }
 
-  private renderCurrentNote(container: HTMLElement): void {
+  private renderCurrentNote(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const filePath = this.currentNoteFilePath();
     const current = this.currentNoteLintStatus();
     const enabled = this.plugin.activeFileLintService?.isEnabledForCurrentSession() ?? false;
@@ -545,6 +636,7 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     section.createDiv({ text: filePath, cls: "forge-health-section-meta" });
+    this.renderCurrentNoteShapeStatus(section, snapshot, filePath);
 
     if (!enabled) {
       section.createDiv({ text: "Active-file auto-lint is turned off in settings.", cls: "forge-health-muted" });
@@ -586,7 +678,7 @@ export class ForgeHealthDashboardView extends ItemView {
     summary.createSpan({ text: `${current.reviewItems} needs review` });
 
     if (current.issues.length === 0 && current.reviewIssues.length === 0) {
-      section.createDiv({ text: "No issues found for the current note.", cls: "forge-health-muted" });
+      section.createDiv({ text: "No active-file lint issues found for the current note.", cls: "forge-health-muted" });
       return;
     }
 
@@ -598,6 +690,37 @@ export class ForgeHealthDashboardView extends ItemView {
       section.createEl("h3", { text: "Needs Review" });
       this.renderGroupedIssues(section, current.reviewIssues, "current-note-review");
     }
+  }
+
+  private renderCurrentNoteShapeStatus(section: HTMLElement, snapshot: DashboardSnapshot, filePath: string): void {
+    if (!this.plugin.settings.shapeLintEnabled && !snapshot.shape_lint) return;
+
+    const summary = section.createDiv("forge-health-inline-summary");
+    summary.createSpan({ text: "Shape" });
+    summary.createSpan({ text: " • " });
+
+    const shape = snapshot.shape_lint;
+    if (!shape) {
+      summary.createSpan({ text: "Not scanned in latest dashboard snapshot" });
+      return;
+    }
+
+    const normalizedFilePath = normalizePath(filePath);
+    const issues = shape.issues.filter((issue) => normalizePath(issue.file_path) === normalizedFilePath);
+    if (issues.length === 0) {
+      summary.createSpan({ text: "No recorded shape issues" });
+      return;
+    }
+
+    const critical = issues.filter((issue) => issue.severity === "critical").length;
+    const warnings = issues.filter((issue) => issue.severity === "warning").length;
+    summary.createSpan({
+      text: `${issues.length} issue${issues.length === 1 ? "" : "s"}`,
+    });
+    if (critical > 0 || warnings > 0) {
+      summary.createSpan({ text: ` (${critical} critical, ${warnings} warning${warnings === 1 ? "" : "s"})` });
+    }
+    summary.createSpan({ text: ` • ${topIssueTypes(issues, 2).map(formatIssueType).join(", ")}` });
   }
 
   private renderSchemaHealth(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -630,11 +753,17 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     const actions = section.createDiv("forge-health-section-actions");
-    const validateButton = actions.createEl("button", { text: "Validate schema", cls: "forge-health-action-button forge-health-action-primary" });
-    validateButton.addEventListener("click", () => this.executeCommand("validate-schema"));
+    this.renderActionButton(actions, {
+      key: "validate-schema",
+      label: "Validate schema",
+      runningLabel: "Validating...",
+      tone: "primary",
+      onClick: () => runValidateSchema(this.plugin),
+    });
 
     if (schema?.schema_path) {
       const openButton = actions.createEl("button", { text: "Open schema.md", cls: "forge-health-action-button forge-health-action-secondary" });
+      openButton.setAttr("data-forge-focus-key", "schema:open");
       openButton.addEventListener("click", () => {
         void this.app.workspace.openLinkText(schema.schema_path, "", false);
       });
@@ -654,54 +783,19 @@ export class ForgeHealthDashboardView extends ItemView {
       this.toggleSection("active-issues");
     });
     const actions = section.createDiv("forge-health-section-actions");
-    const repairButton = actions.createEl("button", { text: "Vault repair", cls: "forge-health-action-button forge-health-action-primary" });
-    repairButton.addEventListener("click", () => this.executeCommand("vault-repair"));
+    this.renderActionButton(actions, {
+      key: "vault-repair",
+      label: "Vault repair",
+      runningLabel: "Opening repair...",
+      tone: "destructive",
+      onClick: () => runVaultRepair(this.plugin),
+    });
     if (issues.length === 0) {
       section.createDiv({ text: "No active lint issues in the latest snapshot.", cls: "forge-health-muted" });
       return;
     }
 
     this.renderGroupedIssues(section, issues, "active");
-  }
-
-  private renderShapeLintIssues(container: HTMLElement, snapshot: DashboardSnapshot): void {
-    const shape = snapshot.shape_lint;
-    const issues = shape?.issues ?? [];
-    const critical = issues.filter((issue) => issue.severity === "critical").length;
-    const warnings = issues.filter((issue) => issue.severity === "warning").length;
-    const status: SectionStatus = !shape
-      ? { label: "Not scanned", tone: "muted" }
-      : critical > 0
-        ? { label: `${critical} critical`, tone: "critical" }
-        : warnings > 0
-          ? { label: `${warnings} warning${warnings === 1 ? "" : "s"}`, tone: "warning" }
-          : issues.length > 0
-            ? { label: `${issues.length} issue${issues.length === 1 ? "" : "s"}`, tone: "muted" }
-            : { label: "Clear", tone: "good" };
-
-    const section = createSection(container, "shape-lint-issues", "Shape Lint Issues", status, this.collapsedSections.has("shape-lint-issues"), () => {
-      this.toggleSection("shape-lint-issues");
-    });
-    const actions = section.createDiv("forge-health-section-actions");
-    const shapeLintButton = actions.createEl("button", { text: "Run shape lint", cls: "forge-health-action-button forge-health-action-primary" });
-    shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
-
-    if (!shape) {
-      section.createDiv({ text: "Shape lint issues appear after running Shape Lint or refreshing the dashboard.", cls: "forge-health-muted" });
-      return;
-    }
-
-    section.createDiv({
-      text: `Last shape lint ${formatRelativeWithExactDate(shape.generated_at)} • ${shape.summary.files_scanned} files scanned`,
-      cls: "forge-health-section-meta",
-    });
-
-    if (issues.length === 0) {
-      section.createDiv({ text: "No Shape lint issues found.", cls: "forge-health-muted" });
-      return;
-    }
-
-    this.renderGroupedIssues(section, issues, "shape-lint");
   }
 
   private renderNeedsReview(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -739,41 +833,49 @@ export class ForgeHealthDashboardView extends ItemView {
       }
     );
     const actions = section.createDiv("forge-health-section-actions");
-    const refreshButton = actions.createEl("button", { text: "Refresh metrics", cls: "forge-health-action-button forge-health-action-primary" });
-    refreshButton.addEventListener("click", () => this.executeCommand("refresh-ontology-metrics"));
+    this.renderActionButton(actions, {
+      key: "refresh-ontology-metrics",
+      label: "Refresh metrics",
+      runningLabel: "Refreshing...",
+      tone: "primary",
+      onClick: () => this.refreshOntologyMetrics(),
+    });
     if (exportEnabled) {
-      const exportButton = actions.createEl("button", { text: "Export vault overview", cls: "forge-health-action-button forge-health-action-secondary" });
-      exportButton.addEventListener("click", () => this.executeCommand("export-vault-snapshot"));
-      const ontologyExportButton = actions.createEl("button", { text: "Export ontology index", cls: "forge-health-action-button forge-health-action-secondary" });
-      ontologyExportButton.addEventListener("click", () => this.executeCommand("export-ontology-index"));
+      this.renderActionButton(actions, {
+        key: "export-vault-overview",
+        label: "Export vault overview",
+        runningLabel: "Exporting...",
+        onClick: () => runExportOverview(this.plugin),
+      });
+      this.renderActionButton(actions, {
+        key: "export-ontology-index",
+        label: "Export ontology index",
+        runningLabel: "Exporting...",
+        onClick: () => runExportOntology(this.plugin),
+      });
     }
     if (this.plugin.settings.dataviewExpansionEnabled && dataviewAvailable) {
       const expansionActions = section.createDiv("forge-health-section-actions");
-      const refreshNoteButton = expansionActions.createEl("button", {
-        text: "Refresh note expansion",
-        cls: "forge-health-action-button forge-health-action-secondary",
+      this.renderActionButton(expansionActions, {
+        key: "refresh-note-expansion",
+        label: "Refresh note expansion",
+        runningLabel: "Refreshing...",
+        title: "Refresh dataview expansion for the active note",
+        onClick: () => this.plugin.dataviewExpansionService.refreshActiveFile(true),
       });
-      refreshNoteButton.title = "Refresh dataview expansion for the active note";
-      refreshNoteButton.addEventListener("click", () => {
-        void this.plugin.dataviewExpansionService.refreshActiveFile(true);
+      this.renderActionButton(expansionActions, {
+        key: "refresh-folder-expansion",
+        label: "Refresh folder expansion",
+        runningLabel: "Refreshing...",
+        title: "Refresh dataview expansion in the active note's folder",
+        onClick: () => this.plugin.dataviewExpansionService.refreshCurrentFolder(true),
       });
-
-      const refreshFolderButton = expansionActions.createEl("button", {
-        text: "Refresh folder expansion",
-        cls: "forge-health-action-button forge-health-action-secondary",
-      });
-      refreshFolderButton.title = "Refresh dataview expansion in the active note's folder";
-      refreshFolderButton.addEventListener("click", () => {
-        void this.plugin.dataviewExpansionService.refreshCurrentFolder(true);
-      });
-
-      const refreshVaultButton = expansionActions.createEl("button", {
-        text: "Refresh vault expansion",
-        cls: "forge-health-action-button forge-health-action-secondary",
-      });
-      refreshVaultButton.title = "Refresh dataview expansion across the whole vault";
-      refreshVaultButton.addEventListener("click", () => {
-        void this.plugin.dataviewExpansionService.refreshWholeVault(true);
+      this.renderActionButton(expansionActions, {
+        key: "refresh-vault-expansion",
+        label: "Refresh vault expansion",
+        runningLabel: "Refreshing...",
+        title: "Refresh dataview expansion across the whole vault",
+        onClick: () => this.plugin.dataviewExpansionService.refreshWholeVault(true),
       });
     }
     if (!ontology) {
@@ -846,17 +948,68 @@ export class ForgeHealthDashboardView extends ItemView {
         item.createDiv({ text: String(label), cls: "forge-health-metric-label" });
       }
 
-      section.createDiv({ text: "Detailed issues appear in the Shape Lint Issues box.", cls: "forge-health-section-message" });
+      this.renderShapeIssuePreview(section, shape.issues);
     }
 
     const actions = section.createDiv("forge-health-section-actions");
     if (shapeLintEnabled) {
-      const shapeLintButton = actions.createEl("button", { text: "Run shape lint", cls: "forge-health-action-button forge-health-action-primary" });
-      shapeLintButton.addEventListener("click", () => this.executeCommand("run-shape-lint"));
+      this.renderActionButton(actions, {
+        key: "run-shape-lint",
+        label: "Run shape lint",
+        runningLabel: "Running shape lint...",
+        tone: "primary",
+        onClick: () => runShapeLint(this.plugin),
+      });
     }
     if (shapeRefinementEnabled) {
-      const refineButton = actions.createEl("button", { text: "Refine templates", cls: "forge-health-action-button forge-health-action-secondary" });
-      refineButton.addEventListener("click", () => this.executeCommand("refine-shapes"));
+      this.renderActionButton(actions, {
+        key: "refine-shapes",
+        label: "Refine templates",
+        runningLabel: "Refining...",
+        onClick: () => runRefineShapes(this.plugin),
+      });
+    }
+  }
+
+  private renderShapeIssuePreview(section: HTMLElement, issues: DashboardIssue[]): void {
+    if (issues.length === 0) {
+      section.createDiv({ text: "No shape issues recorded in the latest shape lint run.", cls: "forge-health-section-message" });
+      return;
+    }
+
+    const allGroups = groupShapeIssuesByFile(issues);
+    const groups = allGroups.slice(0, 5);
+    section.createEl("h3", { text: "Top Shape Issues" });
+    const list = section.createDiv("forge-health-preview-list");
+
+    for (const group of groups) {
+      const row = list.createDiv({
+        cls: "forge-health-preview-row",
+        attr: { "data-severity": group.maxSeverity },
+      });
+      const main = row.createDiv("forge-health-preview-main");
+      main.createDiv({ text: group.path, cls: "forge-health-preview-title" });
+      main.createDiv({
+        text: `${group.issues.length} issue${group.issues.length === 1 ? "" : "s"} • ${group.issueTypes.slice(0, 3).map(formatIssueType).join(", ")}`,
+        cls: "forge-health-preview-detail",
+      });
+
+      const openButton = row.createEl("button", {
+        text: "Open",
+        cls: "forge-health-action-button forge-health-action-secondary",
+      });
+      openButton.setAttr("data-forge-focus-key", `shape-preview:${group.path}`);
+      openButton.addEventListener("click", () => {
+        void this.app.workspace.openLinkText(group.path, "", false);
+      });
+    }
+
+    const remainingFiles = allGroups.length - groups.length;
+    if (remainingFiles > 0) {
+      section.createDiv({
+        text: `${remainingFiles} more file${remainingFiles === 1 ? "" : "s"} with shape issues.`,
+        cls: "forge-health-section-message",
+      });
     }
   }
 
@@ -912,7 +1065,7 @@ export class ForgeHealthDashboardView extends ItemView {
       this.renderLockblockCommandButton(actions, "Lock vault", lockCommand);
     }
     if (vaultState !== "not-setup") {
-      this.renderLockblockCommandButton(actions, "Change password", changePasswordCommand);
+      this.renderLockblockCommandButton(actions, "Change password", changePasswordCommand, "secondary");
     }
 
     if (!setupCommand && !lockCommand && !unlockCommand && !changePasswordCommand) {
@@ -923,12 +1076,22 @@ export class ForgeHealthDashboardView extends ItemView {
     }
   }
 
-  private renderLockblockCommandButton(container: HTMLElement, label: string, command: AppCommand | null): void {
+  private renderLockblockCommandButton(
+    container: HTMLElement,
+    label: string,
+    command: AppCommand | null,
+    tone: "primary" | "secondary" = "primary"
+  ): void {
     const button = container.createEl("button", {
       text: label,
-      cls: "forge-health-action-button forge-health-action-primary",
+      cls: [
+        "forge-health-action-button",
+        `forge-health-action-${tone}`,
+        tone === "primary" ? "mod-cta" : "",
+      ].filter(Boolean).join(" "),
     });
     button.disabled = !command?.id;
+    button.setAttr("data-forge-focus-key", `lockblock:${label}`);
     button.title = command?.name ?? "Lockblock command not available";
     button.addEventListener("click", () => {
       if (command?.id) {
@@ -1031,12 +1194,25 @@ export class ForgeHealthDashboardView extends ItemView {
     }
 
     const actions = section.createDiv("forge-health-section-actions");
-    const restoreButton = actions.createEl("button", { text: "Restore patch run", cls: "forge-health-action-button forge-health-action-primary" });
-    restoreButton.addEventListener("click", () => this.executeCommand("restore-patch-run"));
-    const historyButton = actions.createEl("button", { text: "View patch history", cls: "forge-health-action-button forge-health-action-secondary" });
-    historyButton.addEventListener("click", () => this.executeCommand("view-patch-history"));
-    const lastRunButton = actions.createEl("button", { text: "View last run", cls: "forge-health-action-button forge-health-action-secondary" });
-    lastRunButton.addEventListener("click", () => this.executeCommand("view-last-run"));
+    this.renderActionButton(actions, {
+      key: "restore-patch-run",
+      label: "Restore patch run",
+      runningLabel: "Opening restore...",
+      tone: "destructive",
+      onClick: () => runRestorePatch(this.plugin),
+    });
+    this.renderActionButton(actions, {
+      key: "view-patch-history",
+      label: "View patch history",
+      runningLabel: "Refreshing...",
+      onClick: () => this.viewPatchHistory(),
+    });
+    this.renderActionButton(actions, {
+      key: "view-last-run",
+      label: "View last run",
+      runningLabel: "Checking...",
+      onClick: () => this.viewLastRun(),
+    });
   }
 
   private renderRecommendations(container: HTMLElement, snapshot: DashboardSnapshot): void {
@@ -1085,11 +1261,13 @@ export class ForgeHealthDashboardView extends ItemView {
     const groups = groupIssuesByType(issues);
     const controls = section.createDiv("forge-health-issue-controls");
     const expandAll = controls.createEl("button", { text: "Expand all" });
+    expandAll.setAttr("data-forge-focus-key", `issues:${scope}:expand-all`);
     expandAll.addEventListener("click", () => {
       for (const group of groups) this.expandedIssueGroups.add(issueGroupKey(scope, group.issueType));
       this.render();
     });
     const collapseAll = controls.createEl("button", { text: "Collapse all" });
+    collapseAll.setAttr("data-forge-focus-key", `issues:${scope}:collapse-all`);
     collapseAll.addEventListener("click", () => {
       for (const group of groups) {
         const key = issueGroupKey(scope, group.issueType);
@@ -1116,6 +1294,7 @@ export class ForgeHealthDashboardView extends ItemView {
         text: expanded ? "-" : "+",
         cls: "forge-health-issue-group-toggle",
       });
+      toggleButton.setAttr("data-forge-focus-key", `issues:${key}:toggle`);
       header.createSpan({ text: group.issueType, cls: "forge-health-issue-group-title" });
       header.createSpan({
         text: `${group.issues.length} issue${group.issues.length === 1 ? "" : "s"}`,
@@ -1142,6 +1321,7 @@ export class ForgeHealthDashboardView extends ItemView {
           text: showAll ? "Show first 5" : `Show all ${group.issues.length}`,
           cls: "forge-health-show-more",
         });
+        toggle.setAttr("data-forge-focus-key", `issues:${key}:show-more`);
         toggle.addEventListener("click", () => {
           if (showAll) {
             this.fullIssueGroups.delete(key);
@@ -1167,7 +1347,11 @@ export class ForgeHealthDashboardView extends ItemView {
       main.createDiv({ text: issue.suggested_action, cls: "forge-health-issue-action" });
     }
 
-    const openButton = row.createEl("button", { text: "Open" });
+    const openButton = row.createEl("button", {
+      text: "Open",
+      cls: "forge-health-action-button forge-health-action-secondary",
+    });
+    openButton.setAttr("data-forge-focus-key", `issue:${issue.file_path}:${issue.issue_type}:open`);
     openButton.addEventListener("click", () => {
       void this.app.workspace.openLinkText(issue.file_path, "", false);
     });
@@ -1175,9 +1359,71 @@ export class ForgeHealthDashboardView extends ItemView {
 
   // ── Utilities ───────────────────────────────────────────────────────────────
 
-  private executeCommand(commandId: string): void {
-    const fullId = `forge:${commandId}`;
-    this.executeCommandByFullId(fullId);
+  private renderActionButton(container: HTMLElement, options: DashboardActionOptions): HTMLButtonElement {
+    const tone = options.tone ?? "secondary";
+    const running = this.runningActions.has(options.key);
+    const busy = this.runningActions.size > 0;
+    const button = container.createEl("button", {
+      text: running ? options.runningLabel ?? "Running..." : options.label,
+      cls: [
+        "forge-health-action-button",
+        `forge-health-action-${tone}`,
+        tone === "primary" ? "mod-cta" : "",
+      ].filter(Boolean).join(" "),
+    });
+
+    button.disabled = options.disabled === true || busy;
+    button.setAttr("data-forge-focus-key", `action:${options.key}`);
+    if (options.title) button.title = options.title;
+    if (running) button.setAttr("aria-busy", "true");
+    button.addEventListener("click", () => {
+      void this.runDashboardAction(options.key, options.onClick);
+    });
+
+    return button;
+  }
+
+  private async runDashboardAction(key: string, action: () => Promise<unknown>): Promise<void> {
+    if (this.runningActions.size > 0) return;
+
+    this.runningActions.add(key);
+    this.render();
+    try {
+      await action();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unexpected error";
+      new Notice(`Forge: ${message}`, 6000);
+      console.error(`[Forge] dashboard action ${key} error:`, error);
+    } finally {
+      this.runningActions.delete(key);
+      this.render();
+    }
+  }
+
+  private async refreshOntologyMetrics(): Promise<void> {
+    await this.plugin.ontologyService.collectMetrics("refresh-vault-health-dashboard");
+    await this.plugin.recomposeHealthDashboard();
+    new Notice("Forge: Ontology metrics refreshed.", 4000);
+  }
+
+  private async viewPatchHistory(): Promise<void> {
+    await this.plugin.patchHistoryService.readHistory("patch-history");
+    await this.plugin.recomposeHealthDashboard();
+    await this.plugin.openHealthDashboard();
+    new Notice("Forge: Patch history refreshed in the dashboard.", 5000);
+  }
+
+  private async viewLastRun(): Promise<void> {
+    const run = await this.plugin.dashboardService.latestOperationalRun();
+    if (!run) {
+      new Notice("Forge: No operational runs have been recorded yet.", 5000);
+      return;
+    }
+
+    new Notice(
+      `Forge: Last run was ${formatCommandName(run.command)}. Status: ${run.status}. Applied ${run.applied_items} item(s), with ${run.errors.length} error(s).`,
+      7000
+    );
   }
 
   private executeCommandByFullId(fullId: string): void {
@@ -1234,6 +1480,51 @@ function groupIssuesByType(issues: DashboardIssue[]): IssueGroup[] {
     });
 }
 
+function groupShapeIssuesByFile(issues: DashboardIssue[]): ShapeFileIssueGroup[] {
+  const groups = new Map<string, DashboardIssue[]>();
+  for (const issue of issues) {
+    const group = groups.get(issue.file_path) ?? [];
+    group.push(issue);
+    groups.set(issue.file_path, group);
+  }
+
+  return [...groups.entries()]
+    .map(([path, groupIssues]) => ({
+      path,
+      issues: groupIssues.sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity)),
+      maxSeverity: groupIssues.reduce<DashboardIssue["severity"]>(
+        (max, issue) => severityWeight(issue.severity) > severityWeight(max) ? issue.severity : max,
+        "info"
+      ),
+      issueTypes: topIssueTypes(groupIssues, 4),
+    }))
+    .sort((a, b) => {
+      const severityDiff = severityWeight(b.maxSeverity) - severityWeight(a.maxSeverity);
+      if (severityDiff !== 0) return severityDiff;
+      if (b.issues.length !== a.issues.length) return b.issues.length - a.issues.length;
+      return a.path.localeCompare(b.path);
+    });
+}
+
+function topIssueTypes(issues: DashboardIssue[], limit: number): string[] {
+  const counts = new Map<string, number>();
+  for (const issue of issues) {
+    counts.set(issue.issue_type, (counts.get(issue.issue_type) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([issueType]) => issueType);
+}
+
+function formatIssueType(issueType: string): string {
+  return issueType
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function issueGroupKey(scope: string, issueType: string): string {
   return `${scope}:${issueType}`;
 }
@@ -1275,6 +1566,7 @@ function createSection(
     cls: "forge-health-section-toggle",
   });
   toggle.setAttr("aria-label", collapsed ? `Expand ${title}` : `Collapse ${title}`);
+  toggle.setAttr("data-forge-focus-key", `section:${sectionKey}:toggle`);
   toggle.addEventListener("click", () => onToggle?.());
   titleWrap.createEl("h2", {
     text: title,
@@ -1320,6 +1612,13 @@ function isAutoRefreshInterval(value: number): value is DashboardAutoRefreshInte
 
 function normalizeAutoRefreshInterval(value: number): DashboardAutoRefreshIntervalMinutes {
   return isAutoRefreshInterval(value) ? value : 5;
+}
+
+function formatCommandName(command: string): string {
+  return command
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function enabledPluginIdList(enabledPlugins: AppPluginManager["enabledPlugins"]): string[] {

@@ -81,6 +81,54 @@
   /* intentionally unstyled — content uses standard Setting layout */
 }
 
+.forge-settings-tab-summary,
+.forge-settings-section-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.forge-settings-section-summary {
+  margin: -4px 0 12px;
+}
+
+.forge-settings-summary-item {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  box-sizing: border-box;
+}
+
+.forge-settings-summary-item[data-tone="good"] {
+  border-left-color: var(--text-success);
+}
+
+.forge-settings-summary-item[data-tone="warning"] {
+  border-left-color: var(--text-warning);
+}
+
+.forge-settings-summary-item[data-tone="critical"] {
+  border-left-color: var(--text-error);
+}
+
+.forge-settings-summary-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.forge-settings-summary-value {
+  margin-top: 4px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .forge-slider-value {
   min-width: 3ch;
   text-align: right;
@@ -416,6 +464,166 @@
   line-height: 1.6;
 }
 
+.forge-results-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.forge-results-summary-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.forge-results-summary-card[data-tone="critical"] {
+  border-color: var(--text-error);
+}
+
+.forge-results-summary-card[data-tone="warning"] {
+  border-color: var(--text-warning);
+}
+
+.forge-results-summary-card[data-tone="info"],
+.forge-results-summary-card[data-tone="review"] {
+  border-color: var(--text-accent);
+}
+
+.forge-results-summary-value {
+  font-size: 1.25em;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.forge-results-summary-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.forge-results-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 12px;
+}
+
+.forge-results-filter {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.2;
+  padding: 4px 10px;
+}
+
+.forge-results-filter.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.forge-results-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: 8px 0 12px;
+}
+
+.forge-results-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.forge-results-group {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.forge-results-group-header {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 4px;
+}
+
+.forge-results-rule {
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.forge-results-count {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.2;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.forge-results-message {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  overflow-wrap: anywhere;
+}
+
+.forge-results-reason {
+  margin-top: 8px;
+}
+
+.forge-results-reason-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
+.forge-results-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.forge-results-file-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  height: auto;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.forge-results-file-button:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+}
+
+.forge-results-more {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
 
 /* ── Patch / Apply modal ─────────────────────────────────────────────────── */
 
@@ -695,6 +903,11 @@
 }
 /* Vault Health Dashboard */
 .forge-health-dashboard {
+  --forge-health-action-destructive-bg: var(--text-error);
+  --forge-health-action-destructive-border: var(--text-error);
+  --forge-health-action-destructive-color: var(--text-on-accent);
+  --forge-health-action-destructive-hover-bg: var(--text-error);
+  --forge-health-action-destructive-hover-color: var(--text-on-accent);
   padding: 14px 16px 48px;
   overflow-y: auto;
   container-type: inline-size;
@@ -818,6 +1031,25 @@
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.forge-health-dashboard button.forge-health-header-action {
+  --button-radius: 6px;
+  border-radius: 6px;
+  box-shadow: none;
+  font-size: var(--font-ui-smaller);
+  min-height: 0;
+  padding: 5px 10px;
+}
+
+.forge-health-dashboard button.forge-health-header-secondary {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.forge-health-dashboard button.forge-health-header-secondary:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
 }
 
 .forge-health-pill {
@@ -945,12 +1177,40 @@
   width: auto;
 }
 
-.forge-health-action-primary {
+.forge-health-dashboard button.forge-health-action-primary {
   font-weight: 600;
 }
 
-.forge-health-action-secondary {
+.forge-health-dashboard button.forge-health-action-secondary {
+  background: transparent;
+  border-color: var(--background-modifier-border);
   color: var(--text-muted);
+}
+
+.forge-health-dashboard button.forge-health-action-secondary:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.forge-health-dashboard button.forge-health-action-destructive {
+  background: var(--forge-health-action-destructive-bg);
+  border-color: var(--forge-health-action-destructive-border);
+  color: var(--forge-health-action-destructive-color);
+  font-weight: 600;
+}
+
+.forge-health-dashboard button.forge-health-action-destructive:hover {
+  background: var(--forge-health-action-destructive-hover-bg);
+  color: var(--forge-health-action-destructive-hover-color);
+  filter: brightness(1.08);
+}
+
+.forge-health-dashboard button.forge-health-action-destructive:disabled {
+  filter: none;
+}
+
+.forge-health-dashboard button.forge-health-action-button[aria-busy="true"] {
+  opacity: 0.85;
 }
 
 .forge-health-inline-summary {
@@ -1121,6 +1381,53 @@
   overflow-wrap: anywhere;
 }
 
+.forge-health-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.forge-health-preview-row {
+  align-items: flex-start;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-left-width: 4px;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.forge-health-preview-row[data-severity="critical"] {
+  border-left-color: var(--text-error);
+}
+
+.forge-health-preview-row[data-severity="warning"] {
+  border-left-color: var(--text-warning);
+}
+
+.forge-health-preview-row[data-severity="info"] {
+  border-left-color: var(--text-accent);
+}
+
+.forge-health-preview-main {
+  min-width: 0;
+}
+
+.forge-health-preview-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.forge-health-preview-detail {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
 .forge-health-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -1167,7 +1474,8 @@
 
 @media (max-width: 600px) {
   .forge-health-header,
-  .forge-health-issue {
+  .forge-health-issue,
+  .forge-health-preview-row {
     flex-direction: column;
   }
 

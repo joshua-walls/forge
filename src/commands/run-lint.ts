@@ -18,6 +18,16 @@ import {
   writeLintRunNote,
 } from "../lint-writers";
 import { runVaultRepair } from "./repair";
+import {
+  defaultResultFilter,
+  firstResultItem,
+  renderGroupedResults,
+  renderResultSummaryGrid,
+  renderSeverityFilters,
+  resultItemsForFilter,
+  type ResultModalSection,
+  type ResultSeverityFilter,
+} from "./result-modal";
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -53,91 +63,13 @@ export async function runVaultLint(plugin: ForgePlugin): Promise<LintRunResult |
   return result;
 }
 
-interface GroupedLintReason {
-  label: string;
-  files: string[];
-}
-
-interface GroupedLintItem {
-  rule: string;
-  summary: string;
-  reasons: GroupedLintReason[];
-}
-
-function summarizeLintMessage(rule: string, message: string): string {
-  if (rule === "inline_undocumented") {
-    return "Inline keys are undocumented — consider adding to inline.allowed in schema.md";
-  }
-
-  if (rule === "tag_namespace") {
-    return "Tags are not namespaced. Expected format: namespace/tag";
-  }
-
-  return message;
-}
-
-function extractLintReason(rule: string, message: string): string {
-  if (rule === "inline_undocumented") {
-    const match = message.match(/Inline key '([^']+)'/);
-    return match ? `'${match[1]}'` : message;
-  }
-
-  if (rule === "tag_namespace") {
-    const match = message.match(/Tag '([^']+)'/);
-    return match ? `'${match[1]}'` : message;
-  }
-
-  return message;
-}
-
-function groupLintItems(items: Array<{ rule: string; message: string; file: string }>): GroupedLintItem[] {
-  const groups = new Map<string, GroupedLintItem>();
-  const reasons = new Map<string, GroupedLintReason>();
-  const seenReasonFiles = new Set<string>();
-
-  for (const item of items) {
-    const summary = summarizeLintMessage(item.rule, item.message);
-    const reasonLabel = extractLintReason(item.rule, item.message);
-
-    const groupKey = `${item.rule}::${summary}`;
-    const reasonKey = `${groupKey}::${reasonLabel}`;
-    const reasonFileKey = `${reasonKey}::${item.file}`;
-
-    let group = groups.get(groupKey);
-    if (!group) {
-      group = {
-        rule: item.rule,
-        summary,
-        reasons: [],
-      };
-      groups.set(groupKey, group);
-    }
-
-    let reason = reasons.get(reasonKey);
-    if (!reason) {
-      reason = {
-        label: reasonLabel,
-        files: [],
-      };
-      reasons.set(reasonKey, reason);
-      group.reasons.push(reason);
-    }
-
-    if (!seenReasonFiles.has(reasonFileKey)) {
-      seenReasonFiles.add(reasonFileKey);
-      reason.files.push(item.file);
-    }
-  }
-
-  return [...groups.values()];
-}
-
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 class LintResultsModal extends Modal {
   private plugin: ForgePlugin;
   private result: LintRunResult;
   private runNotePath: string;
+  private activeFilter: ResultSeverityFilter = "all";
 
   constructor(
     app: App,
@@ -149,12 +81,18 @@ class LintResultsModal extends Modal {
     this.plugin = plugin;
     this.result = result;
     this.runNotePath = runNotePath;
+    this.activeFilter = defaultResultFilter(this.sections());
   }
 
   onOpen(): void {
+    this.render();
+  }
+
+  private render(): void {
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.addClass("forge-modal");
+    this.modalEl.addClass("forge-results-modal");
 
     const r = this.result;
     const failed =
@@ -163,175 +101,42 @@ class LintResultsModal extends Modal {
 
     contentEl.createEl("h2", {
       text: failed
-        ? "❌ Vault Lint — Failed"
-        : "✅ Vault Lint — Passed",
+        ? "Vault Lint Failed"
+        : "Vault Lint Passed",
     });
 
     const body = contentEl.createDiv("forge-modal-body");
-
-    const summaryEl = body.createDiv("forge-lint-summary");
-
-    summaryEl.createEl("div", {
-      text: `${r.errors.length} errors`,
+    const sections = this.sections();
+    renderResultSummaryGrid(body, [
+      { label: "Errors", value: r.errors.length, tone: r.errors.length > 0 ? "critical" : "muted" },
+      { label: "Warnings", value: r.warnings.length, tone: r.warnings.length > 0 ? "warning" : "muted" },
+      { label: "Info", value: r.infos.length, tone: r.infos.length > 0 ? "info" : "muted" },
+      { label: "Needs review", value: r.reviewItems.length, tone: r.reviewItems.length > 0 ? "review" : "muted" },
+      { label: "Notes scanned", value: r.envelope.notes_scanned, tone: "muted" },
+    ]);
+    renderSeverityFilters(body, sections, this.activeFilter, (filter) => {
+      this.activeFilter = filter;
+      this.render();
     });
-
-    summaryEl.createEl("div", {
-      text: `${r.warnings.length} warnings`,
+    renderGroupedResults(body, resultItemsForFilter(sections, this.activeFilter), {
+      emptyText: failed ? "No results in this view." : "No lint issues found.",
+      openFile: (filePath) => this.openFile(filePath),
     });
-
-    summaryEl.createEl("div", {
-      text: `${r.infos.length} info`,
-    });
-
-    summaryEl.createEl("div", {
-      text: `${r.reviewItems.length} needs review`,
-    });
-
-    summaryEl.createEl("br");
-
-    summaryEl.createEl("div", {
-      text: `${r.envelope.notes_scanned} notes scanned`,
-    });
-
-    if (r.errors.length > 0) {
-      body.createEl("h3", { text: "Errors" });
-
-      for (const group of groupLintItems(r.errors)) {
-        body.createEl("div", {
-          text: `[${group.rule}]`,
-          cls: "forge-lint-rule",
-        });
-
-        body.createEl("div", {
-          text: group.summary,
-          cls: "forge-lint-message",
-        });
-
-        for (const reason of group.reasons) {
-          body.createEl("h4", {
-            text: reason.label,
-            cls: "forge-lint-reason",
-          });
-
-          const list = body.createEl("ul", {
-            cls: "forge-lint-list",
-          });
-
-          for (const file of reason.files) {
-            list.createEl("li", {
-              text: file,
-            });
-          }
-        }
-      }
-    }
-
-    if (r.warnings.length > 0) {
-      body.createEl("h3", { text: "Warnings" });
-
-      for (const group of groupLintItems(r.warnings)) {
-        body.createEl("div", {
-          text: `[${group.rule}]`,
-          cls: "forge-lint-rule",
-        });
-
-        body.createEl("div", {
-          text: group.summary,
-          cls: "forge-lint-message",
-        });
-
-        for (const reason of group.reasons) {
-          body.createEl("h4", {
-            text: reason.label,
-            cls: "forge-lint-reason",
-          });
-
-          const list = body.createEl("ul", {
-            cls: "forge-lint-list",
-          });
-
-          for (const file of reason.files) {
-            list.createEl("li", {
-              text: file,
-            });
-          }
-        }
-      }
-    }
-
-    if (r.infos.length > 0) {
-      body.createEl("h3", { text: "Info" });
-
-      for (const group of groupLintItems(r.infos)) {
-        body.createEl("div", {
-          text: `[${group.rule}]`,
-          cls: "forge-lint-rule",
-        });
-
-        body.createEl("div", {
-          text: group.summary,
-          cls: "forge-lint-message",
-        });
-
-        for (const reason of group.reasons) {
-          body.createEl("h4", {
-            text: reason.label,
-            cls: "forge-lint-reason",
-          });
-
-          const list = body.createEl("ul", {
-            cls: "forge-lint-list",
-          });
-
-          for (const file of reason.files) {
-            list.createEl("li", {
-              text: file,
-            });
-          }
-        }
-      }
-    }
-
-    if (r.reviewItems.length > 0) {
-      body.createEl("h3", { text: "Needs Review" });
-
-      for (const group of groupLintItems(r.reviewItems)) {
-        body.createEl("div", {
-          text: `[${group.rule}]`,
-          cls: "forge-lint-rule",
-        });
-
-        body.createEl("div", {
-          text: group.summary,
-          cls: "forge-lint-message",
-        });
-
-        for (const reason of group.reasons) {
-          body.createEl("h4", {
-            text: reason.label,
-            cls: "forge-lint-reason",
-          });
-
-          const list = body.createEl("ul", {
-            cls: "forge-lint-list",
-          });
-
-          for (const file of reason.files) {
-            list.createEl("li", {
-              text: file,
-            });
-          }
-        }
-      }
-    }
 
     // Pinned footer
     const footer = contentEl.createDiv("forge-modal-footer");
     const buttonRow = footer.createDiv("forge-button-row");
+    const first = firstResultItem(sections, this.activeFilter);
+    if (first) {
+      const openFirstBtn = buttonRow.createEl("button", {
+        text: "Open first issue",
+        cls: "mod-cta",
+      });
+      openFirstBtn.addEventListener("click", () => this.openFile(first.file));
+    }
 
     const viewBtn = buttonRow.createEl("button", {
       text: "View lint run note",
-      cls: "mod-cta",
     });
     viewBtn.addEventListener("click", () => {
       this.close();
@@ -354,6 +159,21 @@ class LintResultsModal extends Modal {
 
     const closeBtn = buttonRow.createEl("button", { text: "Close" });
     closeBtn.addEventListener("click", () => this.close());
+  }
+
+  private sections(): ResultModalSection[] {
+    const r = this.result;
+    return [
+      { severity: "error", label: "Errors", items: r.errors },
+      { severity: "warning", label: "Warnings", items: r.warnings },
+      { severity: "review", label: "Review", items: r.reviewItems },
+      { severity: "info", label: "Info", items: r.infos },
+    ];
+  }
+
+  private openFile(filePath: string): void {
+    this.close();
+    void this.app.workspace.openLinkText(filePath, "", false);
   }
 
   onClose(): void {
