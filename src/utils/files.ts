@@ -108,7 +108,8 @@ export function resolveTargets(app: App, target?: string, targetPattern?: string
 // ── Exemption check ──────────────────────────────────────────────────────────
 
 /**
- * Returns true if a vault-relative path starts with any of the exempt path prefixes.
+ * Returns true if a vault-relative path matches any exempt entry.
+ * Entries with * are glob patterns; all others are folder or file path prefixes.
  * Case-insensitive. Forward-slash normalised.
  *
  * Port of Test-IsExempt from Shared/IO/Test-IsExempt.ps1.
@@ -117,9 +118,15 @@ export function isExempt(path: string, exemptPaths: string[]): boolean {
   if (!exemptPaths.length) return false;
   const normalised = normalizePath(path).toLowerCase();
   return exemptPaths.some((p) => {
+    if (isGlobPattern(p)) return matchesGlob(path, p);
+
     const prefix = normalizePath(p).toLowerCase();
     return normalised.startsWith(prefix + "/") || normalised === prefix;
   });
+}
+
+function isGlobPattern(path: string): boolean {
+  return path.includes("*");
 }
 
 // ── Glob matching ─────────────────────────────────────────────────────────────

@@ -27,10 +27,12 @@ export class SchemaCache {
   private cache: VaultSchema | null = null;
   private app: App;
   private settings: ForgeSettings;
+  private schemaKey: string;
 
   constructor(app: App, settings: ForgeSettings) {
     this.app = app;
     this.settings = settings;
+    this.schemaKey = this.settingsSchemaKey(settings);
   }
 
   /** Returns the cached schema, loading it first if not yet loaded. */
@@ -57,13 +59,25 @@ export class SchemaCache {
 
   /**
    * Updates settings reference. Only invalidates the cache if the schema
-   * path changed — non-path settings don't affect the cached schema.
+   * path or schema version parsing settings changed. Returns true when the
+   * cached schema should be reloaded.
    */
-  updateSettings(settings: ForgeSettings): void {
-    const oldPath = `${this.settings.schemaNoteFolder}/${this.settings.schemaNoteFile}`;
-    const newPath = `${settings.schemaNoteFolder}/${settings.schemaNoteFile}`;
+  updateSettings(settings: ForgeSettings): boolean {
+    const newKey = this.settingsSchemaKey(settings);
+    const changed = this.schemaKey !== newKey;
     this.settings = settings;
-    if (oldPath !== newPath) this.invalidate();
+    this.schemaKey = newKey;
+    if (changed) this.invalidate();
+    return changed;
+  }
+
+  private settingsSchemaKey(settings: ForgeSettings): string {
+    return [
+      settings.schemaNoteFolder,
+      settings.schemaNoteFile,
+      settings.schemaVersionLocation,
+      settings.schemaVersionField,
+    ].join("\n");
   }
 
   // ── Field accessors ───────────────────────────────────────────────────────
