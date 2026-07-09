@@ -1,3 +1,20 @@
+# 1.10.4
+
+## Changed
+
+- Forge settings summaries now use clearer labels and avoid duplicate summary boxes in sections that already match the active tab summary.
+- Path-heavy Forge settings now show the filename or folder name first, with a click/tap `Show full path` disclosure for the full vault-relative path.
+- The Lint tab now keeps the schema note summary and setting row compact while preserving the full schema path on demand.
+- Export, patch, shape, and folder picker path settings now reuse the same compact path display pattern where appropriate.
+- Summary cards now use compact status-dot styling and mobile-friendly wrapping.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No migration is required.
+
+---
+
 # 1.10.3
 
 ## Added

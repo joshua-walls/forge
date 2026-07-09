@@ -94,25 +94,52 @@
 }
 
 .forge-settings-summary-item {
+  position: relative;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 10px 8px 26px;
   border: 1px solid var(--background-modifier-border);
-  border-left-width: 3px;
-  border-radius: 6px;
-  background: var(--background-secondary);
+  border-radius: 4px;
+  background: var(--background-primary);
   box-sizing: border-box;
 }
 
+.forge-settings-summary-item::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 13px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
 .forge-settings-summary-item[data-tone="good"] {
-  border-left-color: var(--text-success);
+  border-color: color-mix(in srgb, var(--text-success) 36%, var(--background-modifier-border));
+}
+
+.forge-settings-summary-item[data-tone="good"]::before {
+  background: var(--text-success);
 }
 
 .forge-settings-summary-item[data-tone="warning"] {
-  border-left-color: var(--text-warning);
+  border-color: color-mix(in srgb, var(--text-warning) 42%, var(--background-modifier-border));
+}
+
+.forge-settings-summary-item[data-tone="warning"]::before {
+  background: var(--text-warning);
 }
 
 .forge-settings-summary-item[data-tone="critical"] {
-  border-left-color: var(--text-error);
+  border-color: color-mix(in srgb, var(--text-error) 42%, var(--background-modifier-border));
+}
+
+.forge-settings-summary-item[data-tone="critical"]::before {
+  background: var(--text-error);
+}
+
+.forge-settings-summary-item[data-width="wide"] {
+  grid-column: span 2;
 }
 
 .forge-settings-summary-label {
@@ -127,6 +154,45 @@
   font-size: var(--font-ui-small);
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.forge-settings-current-path {
+  color: var(--text-normal);
+  font-weight: 500;
+}
+
+.forge-settings-path-details {
+  margin-top: 4px;
+}
+
+.forge-settings-path-details summary {
+  color: var(--text-accent);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.forge-settings-path-details code {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.forge-settings-summary-item .forge-settings-path-details summary,
+.forge-settings-summary-item .forge-settings-path-details code {
+  font-size: var(--font-ui-smaller);
+}
+
+@media (max-width: 560px) {
+  .forge-settings-summary-item[data-width="wide"] {
+    grid-column: span 1;
+  }
 }
 
 .forge-slider-value {
