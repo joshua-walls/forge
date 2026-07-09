@@ -35,6 +35,8 @@ interface SettingsSummaryItem {
   label: string;
   value: string;
   tone?: SettingsSummaryTone;
+  wide?: boolean;
+  fullValue?: string;
 }
 
 interface SettingsActionButtonOptions {
@@ -100,13 +102,72 @@ export class ForgeSettingsTab extends PluginSettingTab {
     if (items.length === 0) return;
     const strip = el.createDiv({ cls });
     for (const item of items) {
+      const attr: Record<string, string> = {};
+      if (item.tone) attr["data-tone"] = item.tone;
+      if (item.wide) attr["data-width"] = "wide";
+
       const card = strip.createDiv({
         cls: "forge-settings-summary-item",
-        attr: item.tone ? { "data-tone": item.tone } : undefined,
+        attr: Object.keys(attr).length > 0 ? attr : undefined,
       });
       card.createDiv({ text: item.label, cls: "forge-settings-summary-label" });
       card.createDiv({ text: item.value, cls: "forge-settings-summary-value" });
+      if (item.fullValue && item.fullValue !== item.value) {
+        this.renderPathDetails(card, item.fullValue);
+      }
     }
+  }
+
+  private normalizeSettingPath(path: string): string {
+    return path.replace(/\/+/g, "/").replace(/^\//, "");
+  }
+
+  private pathLeaf(path: string): string {
+    const normalized = this.normalizeSettingPath(path);
+    const segments = normalized.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? normalized;
+  }
+
+  private currentPathDescription(desc: string, current: string): DocumentFragment {
+    const fragment = this.containerEl.ownerDocument.createDocumentFragment();
+    const normalized = this.normalizeSettingPath(current);
+    const display = this.pathLeaf(normalized);
+    const currentEl = this.containerEl.ownerDocument.createElement("span");
+    currentEl.className = "forge-settings-current-path";
+    currentEl.textContent = display;
+
+    fragment.append(desc, " Current: ", currentEl);
+
+    if (display !== normalized) this.renderPathDetails(fragment, normalized);
+
+    return fragment;
+  }
+
+  private pathSummaryItem(label: string, path: string, tone: SettingsSummaryTone = "muted", wide = false): SettingsSummaryItem {
+    const normalized = this.normalizeSettingPath(path);
+    const value = this.pathLeaf(normalized);
+    return {
+      label,
+      value,
+      tone,
+      wide,
+      fullValue: value !== normalized ? normalized : undefined,
+    };
+  }
+
+  private renderPathDetails(parent: HTMLElement | DocumentFragment, path: string): void {
+    const doc = this.containerEl.ownerDocument;
+    const details = doc.createElement("details");
+    details.className = "forge-settings-path-details";
+
+    const summary = doc.createElement("summary");
+    summary.textContent = "Show full path";
+
+    const code = doc.createElement("code");
+    code.textContent = path;
+
+    details.append(summary, code);
+    parent.append(details);
   }
 
   private stringifyUiValue(value: unknown): string {
@@ -240,20 +301,23 @@ export class ForgeSettingsTab extends PluginSettingTab {
     switch (tab) {
       case "general":
         return [
-          { label: "System", value: s.systemFolder || "System", tone: "muted" },
-          { label: "Forge", value: s.forgeFolder || "System/Forge", tone: "muted" },
-          { label: "Dataview expansion", value: s.dataviewExpansionEnabled ? "On" : "Off", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
+          this.pathSummaryItem("Vault system folder", s.systemFolder || "System"),
+          this.pathSummaryItem("Forge data folder", s.forgeFolder || "System/Forge"),
+          { label: "Dataview compatibility blocks", value: s.dataviewExpansionEnabled ? "Enabled" : "Disabled", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
         ];
       case "lint":
+      {
+        const schemaPath = `${s.schemaNoteFolder}/${s.schemaNoteFile}`;
         return [
-          { label: "Schema", value: `${s.schemaNoteFolder}/${s.schemaNoteFile}`, tone: "muted" },
+          this.pathSummaryItem("Schema note", schemaPath, "muted", true),
           { label: "Strict mode", value: s.lintStrictMode ? "On" : "Off", tone: s.lintStrictMode ? "warning" : "muted" },
           { label: "Active-file lint", value: s.activeFileLintAutoMode === "off" ? "Off" : "On", tone: s.activeFileLintAutoMode === "off" ? "muted" : "good" },
           { label: "Stale review", value: s.staleReviewEnabled ? "On" : "Off", tone: s.staleReviewEnabled ? "good" : "muted" },
         ];
+      }
       case "patch":
         return [
-          { label: "Patch file", value: s.patchDefaultFile || "Not set", tone: s.patchDefaultFile ? "muted" : "warning" },
+          s.patchDefaultFile ? this.pathSummaryItem("Patch file", s.patchDefaultFile) : { label: "Patch file", value: "Not set", tone: "warning" },
           { label: "Backups", value: s.patchBackupEnabled ? "On" : "Off", tone: s.patchBackupEnabled ? "good" : "warning" },
           { label: "Post-patch lint", value: s.patchAutoLintAfterApply ? "On" : "Off", tone: s.patchAutoLintAfterApply ? "good" : "muted" },
         ];
@@ -266,7 +330,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       case "export":
         return [
           { label: "Export", value: s.exportEnabled ? "On" : "Off", tone: s.exportEnabled ? "good" : "muted" },
-          { label: "Folder", value: s.exportsFolder || "System/Exports", tone: "muted" },
+          this.pathSummaryItem("Folder", s.exportsFolder || "System/Exports"),
           { label: "Ontology filter", value: s.exportFilterField ? `${s.exportFilterField}: ${s.exportFilterValues.length}` : "Not set", tone: s.exportFilterField ? "good" : "warning" },
         ];
       case "shapes":
@@ -302,10 +366,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         })
       );
 
-    this.renderSectionHeading(el, "System Paths", [
-      { label: "System folder", value: this.plugin.settings.systemFolder || "System", tone: "muted" },
-      { label: "Forge folder", value: this.plugin.settings.forgeFolder || "System/Forge", tone: "muted" },
-    ]);
+    this.renderSectionHeading(el, "System Paths");
     el.createEl("p", {
       text: "All paths are relative to your vault root.",
       cls: "setting-item-description",
@@ -335,11 +396,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     const s = this.plugin.settings;
     const dataviewAvailable = this.plugin.dataviewExpansionService?.isDataviewAvailable?.() ?? false;
 
-    this.renderSectionHeading(el, "Dataview Expansion", [
-      { label: "Dataview plugin", value: dataviewAvailable ? "Available" : "Missing", tone: dataviewAvailable ? "good" : "warning" },
-      { label: "Expansion", value: s.dataviewExpansionEnabled ? "On" : "Off", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
-      { label: "Auto-update", value: s.dataviewExpansionAutoUpdateMode === "off" ? "Off" : "Edit idle", tone: s.dataviewExpansionAutoUpdateMode === "off" ? "muted" : "good" },
-    ]);
+    this.renderSectionHeading(el, "Dataview Expansion");
     el.createEl("p", {
       text: "Collects link results from every dataview block in a note and writes one collapsed compatibility block at the bottom for graph view and raw-Markdown readers.",
       cls: "setting-item-description",
@@ -863,8 +920,10 @@ export class ForgeSettingsTab extends PluginSettingTab {
       new Setting(el)
         .setName("Backup folder")
         .setDesc(
-          `Folder where patch backups are stored. Current: ${backupCurrent}. ` +
-          "Note: the restore script must be able to find this location — verify before changing."
+          this.currentPathDescription(
+            "Folder where patch backups are stored. Note: the restore script must be able to find this location — verify before changing.",
+            backupCurrent
+          )
         )
         .addButton((btn) =>
           btn.setButtonText("Choose").onClick(() => {
@@ -1075,7 +1134,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     // ── Export actions ─────────────────────────────────────────────
     this.renderSectionHeading(el, "Run Exports", [
-      { label: "Output folder", value: this.plugin.settings.exportsFolder || "System/Exports", tone: "muted" },
+      this.pathSummaryItem("Output folder", this.plugin.settings.exportsFolder || "System/Exports"),
       { label: "Ontology values", value: String(this.plugin.settings.exportFilterValues.length), tone: this.plugin.settings.exportFilterValues.length > 0 ? "good" : "warning" },
     ]);
 
@@ -1668,7 +1727,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     // ── Folders ───────────────────────────────────────────────────
     this.renderSectionHeading(el, "Folders", [
-      { label: "Shapes folder", value: s.shapesFolder || "System/Shapes", tone: "muted" },
+      this.pathSummaryItem("Shapes folder", s.shapesFolder || "System/Shapes"),
       { label: "Subfolders", value: s.shapeIncludeSubfolders ? "Included" : "Top-level only", tone: s.shapeIncludeSubfolders ? "good" : "muted" },
     ]);
 
@@ -1729,7 +1788,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     // ── Template Refinement ───────────────────────────────────────
     this.renderSectionHeading(el, "Template Refinement", [
       { label: "Refinement", value: s.shapeRefinementEnabled ? "On" : "Off", tone: s.shapeRefinementEnabled ? "good" : "muted" },
-      { label: "Templates folder", value: s.shapeTemplatesFolder || "System/Templates", tone: "muted" },
+      this.pathSummaryItem("Templates folder", s.shapeTemplatesFolder || "System/Templates"),
       { label: "Relationships", value: s.shapeInjectRelationships ? "Injected" : "Off", tone: s.shapeInjectRelationships ? "good" : "muted" },
     ]);
     el.createEl("p", {
@@ -1930,7 +1989,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
     this.renderSectionHeading(el, "Shape Repair", [
       { label: "Repair", value: s.shapeRepairEnabled ? "On" : "Off", tone: s.shapeRepairEnabled ? "warning" : "muted" },
       { label: "Scope", value: (s.shapeRepairScope ?? "all") === "all" ? "All notes" : `${s.shapeRepairFolders.length} folders`, tone: (s.shapeRepairScope ?? "all") === "all" || s.shapeRepairFolders.length > 0 ? "good" : "warning" },
-      { label: "Run notes", value: s.shapeRepairRunsFolder || "System/Exports/ShapeRepairRuns", tone: "muted" },
+      this.pathSummaryItem("Run notes", s.shapeRepairRunsFolder || "System/Exports/ShapeRepairRuns"),
     ]);
     el.createEl("p", {
       text: "When enabled, the 'Run Shape Repair' command corrects heading drift in notes " +
@@ -2349,7 +2408,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName(name)
-      .setDesc(`${desc} Current: ${current}`)
+      .setDesc(this.currentPathDescription(desc, current))
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
           new FolderSuggestModal(this.app, (folder) => {
@@ -2369,7 +2428,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Schema note")
-      .setDesc(`Path to schema.md relative to vault root. Current: ${current}`)
+      .setDesc(this.currentPathDescription("Path to schema.md relative to vault root.", current))
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
           new MarkdownFileSuggestModal(this.app, (file) => {
@@ -2432,7 +2491,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Default patch file")
-      .setDesc(`Path to the patch note loaded by Apply Vault Patch. Current: ${current}`)
+      .setDesc(this.currentPathDescription("Path to the patch note loaded by Apply Vault Patch.", current))
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
           new PatchFileSuggestModal(this.app, (file) => {
