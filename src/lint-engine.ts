@@ -304,14 +304,22 @@ function testEnumFields(
     if (!isFieldPresent(fm, field.name)) continue;
     if (!field.values) continue;
 
-    const val = String(fm[field.name]);
-    if (!field.values.includes(val)) {
+    const values = normalizeEnumValues(fm[field.name]);
+    const invalidValues = values.filter((value) => !field.values?.includes(value));
+
+    if (invalidValues.length > 0) {
       results.push(newResult(path, field.severity, "enum_value",
-        `Field '${field.name}' value '${val}' not allowed. Valid: ${field.values.join(", ")}`));
+        `Field '${field.name}' value '${invalidValues.join(", ")}' not allowed. Valid: ${field.values.join(", ")}`));
     }
   }
 
   return results;
+}
+
+function normalizeEnumValues(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map(String)
+    : [String(value)];
 }
 
 function testDateFields(

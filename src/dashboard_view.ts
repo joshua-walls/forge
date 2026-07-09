@@ -12,6 +12,7 @@ import { runRestorePatch } from "./commands/restore-patch";
 import { runVaultLint } from "./commands/run-lint";
 import { runShapeLint } from "./commands/run-shape-lint";
 import { runValidateSchema } from "./commands/validate-schema";
+import { getVaultPaths } from "./vault-paths";
 
 export const FORGE_HEALTH_DASHBOARD_VIEW = "forge-health-dashboard";
 
@@ -725,8 +726,12 @@ export class ForgeHealthDashboardView extends ItemView {
 
   private renderSchemaHealth(container: HTMLElement, snapshot: DashboardSnapshot): void {
     const schema = snapshot.schema;
+    const currentSchemaPath = getVaultPaths(this.plugin.settings).schemaMd;
+    const schemaPathChanged = Boolean(schema?.schema_path && schema.schema_path !== currentSchemaPath);
     const status: SectionStatus = !schema
       ? { label: "Not validated", tone: "muted" }
+      : schemaPathChanged
+        ? { label: "Needs validation", tone: "warning" }
       : schema.errors > 0
         ? { label: "Invalid", tone: "critical" }
         : schema.warnings > 0
@@ -738,9 +743,12 @@ export class ForgeHealthDashboardView extends ItemView {
     });
     if (!schema) {
       section.createDiv({ text: "Schema has not been validated in the latest dashboard cache.", cls: "forge-health-muted" });
+      section.createDiv({ text: currentSchemaPath, cls: "forge-health-section-meta" });
     } else {
       section.createDiv({
-        text: `Last validated ${formatRelativeWithExactDate(schema.generated_at)}`,
+        text: schemaPathChanged
+          ? `Last validated ${formatRelativeWithExactDate(schema.generated_at)} for ${schema.schema_path}`
+          : `Last validated ${formatRelativeWithExactDate(schema.generated_at)}`,
         cls: "forge-health-section-meta",
       });
 
@@ -749,7 +757,7 @@ export class ForgeHealthDashboardView extends ItemView {
       summary.createSpan({ text: " • " });
       summary.createSpan({ text: `${schema.warnings} warning${schema.warnings === 1 ? "" : "s"}` });
       summary.createSpan({ text: " • " });
-      summary.createSpan({ text: schema.schema_path });
+      summary.createSpan({ text: currentSchemaPath });
     }
 
     const actions = section.createDiv("forge-health-section-actions");
@@ -761,11 +769,11 @@ export class ForgeHealthDashboardView extends ItemView {
       onClick: () => runValidateSchema(this.plugin),
     });
 
-    if (schema?.schema_path) {
+    if (currentSchemaPath) {
       const openButton = actions.createEl("button", { text: "Open schema.md", cls: "forge-health-action-button forge-health-action-secondary" });
       openButton.setAttr("data-forge-focus-key", "schema:open");
       openButton.addEventListener("click", () => {
-        void this.app.workspace.openLinkText(schema.schema_path, "", false);
+        void this.app.workspace.openLinkText(currentSchemaPath, "", false);
       });
     }
   }

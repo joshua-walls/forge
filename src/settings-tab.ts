@@ -128,30 +128,36 @@ export class ForgeSettingsTab extends PluginSettingTab {
     return segments[segments.length - 1] ?? normalized;
   }
 
-  private currentPathDescription(desc: string, current: string): DocumentFragment {
+  private currentPathDescription(desc: string, current: string, compact = true): DocumentFragment {
     const fragment = this.containerEl.ownerDocument.createDocumentFragment();
     const normalized = this.normalizeSettingPath(current);
-    const display = this.pathLeaf(normalized);
+    const display = compact ? this.pathLeaf(normalized) : normalized;
     const currentEl = this.containerEl.ownerDocument.createElement("span");
     currentEl.className = "forge-settings-current-path";
     currentEl.textContent = display;
 
     fragment.append(desc, " Current: ", currentEl);
 
-    if (display !== normalized) this.renderPathDetails(fragment, normalized);
+    if (compact && display !== normalized) this.renderPathDetails(fragment, normalized);
 
     return fragment;
   }
 
-  private pathSummaryItem(label: string, path: string, tone: SettingsSummaryTone = "muted", wide = false): SettingsSummaryItem {
+  private pathSummaryItem(
+    label: string,
+    path: string,
+    tone: SettingsSummaryTone = "muted",
+    wide = false,
+    compact = true
+  ): SettingsSummaryItem {
     const normalized = this.normalizeSettingPath(path);
-    const value = this.pathLeaf(normalized);
+    const value = compact ? this.pathLeaf(normalized) : normalized;
     return {
       label,
       value,
       tone,
       wide,
-      fullValue: value !== normalized ? normalized : undefined,
+      fullValue: compact && value !== normalized ? normalized : undefined,
     };
   }
 
@@ -309,7 +315,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       {
         const schemaPath = `${s.schemaNoteFolder}/${s.schemaNoteFile}`;
         return [
-          this.pathSummaryItem("Schema note", schemaPath, "muted", true),
+          this.pathSummaryItem("Schema note", schemaPath, "muted", true, false),
           { label: "Strict mode", value: s.lintStrictMode ? "On" : "Off", tone: s.lintStrictMode ? "warning" : "muted" },
           { label: "Active-file lint", value: s.activeFileLintAutoMode === "off" ? "Off" : "On", tone: s.activeFileLintAutoMode === "off" ? "muted" : "good" },
           { label: "Stale review", value: s.staleReviewEnabled ? "On" : "Off", tone: s.staleReviewEnabled ? "good" : "muted" },
@@ -647,6 +653,21 @@ export class ForgeSettingsTab extends PluginSettingTab {
   private renderLint(el: HTMLElement): void {
     this.renderSchemaNotePicker(el);
     this.renderSchemaVersionSettings(el);
+
+    new Setting(el)
+      .setName("Reload schema")
+      .setDesc("Refresh schema-backed settings from the current schema note.")
+      .addButton((btn) =>
+        this.renderSettingsActionButton(btn, {
+          key: "lint-reload-schema",
+          label: "Reload",
+          runningLabel: "Reloading...",
+          task: async () => {
+            await this.plugin.reloadSchemaCacheForSettings();
+            new Notice("Forge: schema reloaded.");
+          },
+        })
+      );
 
     this.renderFolderPicker(
       el,
@@ -2428,7 +2449,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("Schema note")
-      .setDesc(this.currentPathDescription("Path to schema.md relative to vault root.", current))
+      .setDesc(this.currentPathDescription("Path to schema.md relative to vault root.", current, false))
       .addButton((btn) =>
         btn.setButtonText("Choose").onClick(() => {
           new MarkdownFileSuggestModal(this.app, (file) => {
@@ -2521,7 +2542,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     if (fields.length === 0) {
       setting.setDesc(
-        desc + " (No schema fields found — reload schema on the Export tab.)"
+        desc + " (No schema fields found — reload schema on the Lint tab.)"
       );
       return;
     }

@@ -609,7 +609,10 @@ export default class ForgePlugin extends Plugin {
 
   async reloadSettingsFromDisk(): Promise<void> {
     await this.loadSettings();
-    this.refreshRuntimeServices();
+    const shouldReloadSchema = this.refreshRuntimeServices();
+    if (shouldReloadSchema) {
+      await this.schemaCache.refresh();
+    }
     this.hasPendingExternalSettingsReload = false;
     await this.captureSettingsMtime();
 
@@ -623,21 +626,33 @@ export default class ForgePlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(settingsForPersistence(this.settings));
-    this.refreshRuntimeServices();
+    const shouldReloadSchema = this.refreshRuntimeServices();
+    if (shouldReloadSchema) {
+      await this.schemaCache.refresh();
+    }
     this.hasPendingExternalSettingsReload = false;
     await this.captureSettingsMtime();
     await this.refreshDashboardViewsForSettingsChange();
   }
 
   async applyRuntimeSettingsChange(): Promise<void> {
-    this.refreshRuntimeServices();
+    const shouldReloadSchema = this.refreshRuntimeServices();
+    if (shouldReloadSchema) {
+      await this.schemaCache.refresh();
+    }
     this.hasPendingExternalSettingsReload = false;
     await this.refreshDashboardViewsForSettingsChange();
   }
 
-  private refreshRuntimeServices(): void {
+  async reloadSchemaCacheForSettings(): Promise<void> {
+    await this.schemaCache.refresh();
+    await this.refreshDashboardViewsForSettingsChange();
+  }
+
+  private refreshRuntimeServices(): boolean {
+    let shouldReloadSchema = false;
     if (this.schemaCache) {
-      this.schemaCache.updateSettings(this.settings);
+      shouldReloadSchema = this.schemaCache.updateSettings(this.settings);
     }
     if (this.lintService) this.lintService = new LintService(this.app, this.settings);
     if (this.schemaService) this.schemaService = new SchemaService(this.app, this.settings, this.schemaCache);
@@ -660,6 +675,7 @@ export default class ForgePlugin extends Plugin {
         this.manifest.version
       );
     }
+    return shouldReloadSchema;
   }
 
   private startSettingsSyncWatch(): void {
