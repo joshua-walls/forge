@@ -1,4 +1,4 @@
-import type { LintResult, LintSeverity } from "../lint-engine";
+import type { LintResult, LintSeverity } from "../linting/engine";
 
 export type ResultSeverityFilter = "all" | LintSeverity;
 

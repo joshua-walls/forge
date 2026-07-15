@@ -16,8 +16,8 @@
 
 import { App, Modal, Notice, TFile, TFolder } from "obsidian";
 import type ForgePlugin from "../main";
-import { isInboxRetentionReviewAction } from "../settings";
-import { getVaultPaths } from "../vault-paths";
+import { isInboxRetentionReviewAction } from "../config/settings";
+import { getVaultPaths } from "../vault/paths";
 import { getMarkdownFiles } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -8,23 +8,29 @@ import { App, Modal, Notice, TFile, normalizePath, parseYaml } from "obsidian";
 import {
   applyPatchRestoreOperations,
   buildLegacyPatchRestoreCandidates,
-  buildPatchRestoreReportArtifact,
-  createForgeDocument,
   evaluatePatchRestoreCandidates as evaluateCorePatchRestoreCandidates,
   isPatchRestoreManifest,
-  parsePatchFile,
-  type ForgeDocument,
   type LegacyPatchRestoreBackupDocument,
-  type PatchDocumentUpdate,
-  type PatchFile,
-  type PatchOperationChange,
   type PatchRestoreApplyResult,
   type PatchRestoreCandidate,
   type PatchRestoreManifest,
+} from "../patching/restore";
+import {
+  buildPatchRestoreReportArtifact,
+} from "../patching/artifacts";
+import {
+  createForgeDocument,
+} from "../vault/document";
+import {
+  parsePatchFile,
+  type PatchDocumentUpdate,
+  type PatchFile,
+  type PatchOperationChange,
   type PatchRestoreValue,
-} from "@forge/core";
+} from "../patching/model";
+import type { ForgeDocument } from "../linting/model";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { ensureFolder } from "../utils/files";
 import { serializeYaml } from "../utils/yaml";
 
@@ -136,8 +142,8 @@ class RestorePatchModal extends Modal {
       });
 
       const date = manifest.applied_at ? new Date(manifest.applied_at).toLocaleString() : "Unknown date";
-      item.createEl("div", { text: manifest.description || manifest.run_id, cls: "forge-restore-title" });
-      item.createEl("div", {
+      item.createDiv({ text: manifest.description || manifest.run_id, cls: "forge-restore-title" });
+      item.createDiv({
         text: isV2
           ? `${date} - ${ops} operation(s) - operation restore`
           : `${date} - ${legacyFiles} file(s) - legacy, selectable if patch can be reconstructed`,
@@ -188,15 +194,15 @@ class RestorePatchModal extends Modal {
       });
       label.createSpan({ text: ` ${candidate.operation.label || candidate.operation.op}` });
 
-      row.createEl("div", {
+      row.createDiv({
         text: candidate.operation.file_after,
         cls: "forge-restore-path",
       });
-      row.createEl("div", {
+      row.createDiv({
         text: `${candidate.status}: ${candidate.reason}`,
         cls: "forge-restore-meta",
       });
-      row.createEl("div", {
+      row.createDiv({
         text: `${describeRestoreValue(candidate.operation.after)} -> ${describeRestoreValue(candidate.operation.before)}`,
         cls: "forge-restore-backup",
       });

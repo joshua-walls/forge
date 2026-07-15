@@ -19,11 +19,11 @@ import {
   filterRepairableLintResults,
   getRepairDefaultValue,
   getRepairFieldsToFix,
-  type LintResult,
   type RepairOperation,
-} from "@forge/core";
+} from "../repairs/model";
+import type { LintResult } from "../linting/model";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { loadSchema, VaultSchema, allFrontmatterFields } from "../utils/schema";
 import { ensureFolder, todayString } from "../utils/files";
 import { serializeYaml } from "../utils/yaml";
@@ -288,12 +288,12 @@ class VaultRepairModal extends Modal {
 
           const row = contentEl.createDiv("forge-tag-repair-row");
 
-          row.createEl("span", {
+          row.createSpan({
             text: badTag,
             cls: "forge-tag-repair-label",
           });
 
-          row.createEl("span", {
+          row.createSpan({
             text: err.rule === "forbidden_namespace" ? "forbidden" : "unknown",
             cls: `forge-tag-badge forge-tag-badge-${err.rule === "forbidden_namespace" ? "forbidden" : "unknown"}`,
           });

@@ -14,7 +14,7 @@
 
 import { Notice, TFile, TFolder } from "obsidian";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { readNote } from "../utils/frontmatter";
 import { ensureFolder, localTimestamp, todayString } from "../utils/files";
 import { VaultSchema, SchemaRelationship } from "../utils/schema";
@@ -217,7 +217,7 @@ function injectRelationshipHeadings(
   body: string,
   shapeName: string,
   schema: VaultSchema,
-  settings: import("../settings").ForgeSettings
+  settings: import("../config/settings").ForgeSettings
 ): string {
   const {
     shapeRelationshipHeading,
@@ -399,7 +399,7 @@ function escapeRegex(s: string): string {
 // ── Frontmatter builder ───────────────────────────────────────────────────────
 
 function buildTemplateFrontmatter(
-  settings: import("../settings").ForgeSettings,
+  settings: import("../config/settings").ForgeSettings,
   shapeName: string,
   today: string,
   existingCreated: string | null

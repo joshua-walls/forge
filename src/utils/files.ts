@@ -5,7 +5,7 @@
 //   Shared/Core/Ensure-Directory.ps1
 //   Shared/IO/Test-IsExempt.ps1
 //   Invoke-VaultPatch.ps1 → Resolve-Targets
-//   vault-paths.ts → matchesGlob (moved here as the canonical location)
+//   vault/paths.ts → matchesGlob (moved here as the canonical location)
 //
 // All file access goes through app.vault — never Node.js fs directly.
 // This ensures iOS compatibility (no filesystem access on iOS).
@@ -19,7 +19,7 @@ import {
   matchesGlob as coreMatchesGlob,
   safeTimestamp as coreSafeTimestamp,
   todayString as coreTodayString,
-} from "@forge/core";
+} from "../vault/paths";
 
 // ── Folder utilities ─────────────────────────────────────────────────────────
 
@@ -140,7 +140,7 @@ export function isExempt(path: string, exemptPaths: string[]): boolean {
  *   [star][star]  — matches zero or more path segments (recursive)
  *   [star]        — matches any characters within a single path segment
  *
- * This is the authoritative implementation — vault-paths.ts delegates here.
+ * This is the authoritative implementation — vault/paths.ts delegates here.
  * Fix for the glob bug in the original Invoke-VaultPatch.ps1 which used
  * PowerShell's -like operator (no recursive glob support).
  *

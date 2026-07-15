@@ -10,7 +10,7 @@
 
 import { App, Modal, Notice, TFile } from "obsidian";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { SchemaValidationIssue } from "../utils/schema";
 
 // ── Entry point ───────────────────────────────────────────────────────────────

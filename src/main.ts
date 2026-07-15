@@ -8,21 +8,21 @@ import {
   normalizeInboxRetentionAction,
   type DashboardAutoRefreshIntervalMinutes,
   ForgeSettings,
-} from "./settings";
-import { ForgeSettingsTab } from "./settings-tab";
-import { SchemaCache } from "./schema-cache";
-import { LintService } from "./lint_service";
-import { SchemaService } from "./schema_service";
-import { OntologyService } from "./ontology_service";
-import { ShapeLintService } from "./shape_lint_service";
-import { PatchHistoryService } from "./patch_history_service";
-import { DashboardService } from "./dashboard_service";
+} from "./config/settings";
+import { ForgeSettingsTab } from "./config/settings-tab";
+import { SchemaCache } from "./schemas/schema-cache";
+import { LintService } from "./linting/service";
+import { SchemaService } from "./schemas/schema-service";
+import { OntologyService } from "./ontology/service";
+import { ShapeLintService } from "./shapes/lint-service";
+import { PatchHistoryService } from "./patching/history-service";
+import { DashboardService } from "./dashboard/service";
 import {
   FORGE_HEALTH_DASHBOARD_VIEW,
   ForgeHealthDashboardView,
-} from "./dashboard_view";
-import type { DashboardSnapshot } from "./dashboard_types";
-import { MigrationNoticeModal } from "./migration-notice";
+} from "./dashboard/view";
+import type { DashboardSnapshot } from "./dashboard/types";
+import { MigrationNoticeModal } from "./config/migration-notice";
 import { runApplyPatch, runApplyPatchFromPatchesFolder } from "./commands/apply-patch";
 import { runVaultLint } from "./commands/run-lint";
 import { runValidateSchema } from "./commands/validate-schema";
@@ -31,16 +31,16 @@ import { runVaultMaintenance } from "./commands/maintenance";
 import { runVaultRepair } from "./commands/repair";
 import { runRestorePatch } from "./commands/restore-patch";
 import { runRenameDataviewFolder } from "./commands/utilities";
-import { installVaultForgeDocumentation } from "./docs";
+import { installVaultForgeDocumentation } from "./docs-install/installer";
 import { runExportOverview } from "./commands/export-overview";
 import { runExportOntology } from "./commands/export-ontology";
 import { runRefineShapes } from "./commands/refine-shapes";
 import { runShapeRepair } from "./commands/shape-repair";
 import { runShapeLint } from "./commands/run-shape-lint";
-import { getVaultPaths } from "./vault-paths";
-import { DataviewExpansionService } from "./dataview_expansion_service";
-import { ActiveFileLintService } from "./active_file_lint_service";
-import { ForgeStatusBar } from "./status_bar";
+import { getVaultPaths } from "./vault/paths";
+import { DataviewExpansionService } from "./dataview/expansion-service";
+import { ActiveFileLintService } from "./linting/active-file-service";
+import { ForgeStatusBar } from "./app/status-bar";
 
 type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;

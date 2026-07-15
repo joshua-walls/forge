@@ -11,12 +11,12 @@
 
 import { App, Modal, Notice } from "obsidian";
 import type ForgePlugin from "../main";
-import { LintRunResult } from "../lint-engine";
+import { LintRunResult } from "../linting/engine";
 import {
   writeLintReportJson,
   appendLintHistory,
   writeLintRunNote,
-} from "../lint-writers";
+} from "../linting/writers";
 import { runVaultRepair } from "./repair";
 import {
   defaultResultFilter,

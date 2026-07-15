@@ -1,7 +1,0 @@
-node_modules/
-dist/
-.tmp-test/
-coverage/
-.DS_Store
-.env
-*.tgz
