@@ -245,14 +245,14 @@ export function buildCuratedRepairOperations(
   const included = input.includedFiles
     ? new Set(input.includedFiles.map(normalisePath))
     : null;
-  const fieldValues = new Map((input.fieldValues ?? []).map((field) => [
-    repairFieldKey(field.file, field.field),
-    field.value,
-  ]));
-  const tagDecisions = new Map((input.tagDecisions ?? []).map((decision) => [
-    repairTagKey(decision.file, decision.tag),
-    decision,
-  ]));
+  const fieldValues = new Map<string, unknown>();
+  for (const field of input.fieldValues ?? []) {
+    fieldValues.set(repairFieldKey(field.file, field.field), field.value);
+  }
+  const tagDecisions = new Map<string, RepairTagDecision>();
+  for (const decision of input.tagDecisions ?? []) {
+    tagDecisions.set(repairTagKey(decision.file, decision.tag), decision);
+  }
   const operations: RepairOperation[] = [];
   const repairableIssues = input.candidates.flatMap((candidate) => candidate.issues);
   const skippedIssues: LintResult[] = [];
@@ -303,7 +303,7 @@ export function buildCuratedRepairOperations(
     operations,
     repairableIssues,
     skippedIssues,
-    filesWithOperations: [...new Set(operations.map((operation) => operation.target).filter(isString))],
+    filesWithOperations: getFilesWithOperations(operations),
   };
 }
 
@@ -355,7 +355,7 @@ export function buildDefaultRepairOperations(
     operations,
     repairableIssues,
     skippedIssues,
-    filesWithOperations: [...new Set(operations.map((operation) => operation.target).filter(isString))],
+    filesWithOperations: getFilesWithOperations(operations),
   };
 }
 
@@ -441,6 +441,12 @@ function groupBy<T>(items: T[], key: (item: T) => string): Record<string, T[]> {
   }, {});
 }
 
-function isString(value: unknown): value is string {
-  return typeof value === "string";
+function getFilesWithOperations(operations: RepairOperation[]): string[] {
+  const files = new Set<string>();
+  for (const operation of operations) {
+    if (typeof operation.target === "string") {
+      files.add(operation.target);
+    }
+  }
+  return [...files];
 }

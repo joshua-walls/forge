@@ -834,17 +834,29 @@ const INVENTORY_CATEGORY_LABELS: Record<VaultFileCategory, string> = {
   other: "Other",
 };
 
-const EXTENSION_CATEGORIES: Record<string, VaultFileCategory> = Object.fromEntries([
-  ...["md", "markdown"].map((extension) => [extension, "markdown"]),
-  ...["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tif", "tiff", "heic", "heif", "ico"].map((extension) => [extension, "image"]),
-  ...["pdf", "doc", "docx", "rtf", "odt", "pages", "txt", "text", "ppt", "pptx", "key", "xls", "xlsx", "numbers", "epub", "mobi"].map((extension) => [extension, "document"]),
-  ...["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "sh", "bash", "zsh", "fish", "rb", "php", "go", "rs", "java", "c", "cc", "cpp", "h", "hpp", "cs", "swift", "kt", "kts", "scala", "pl", "pm", "lua", "r", "sql", "ps1", "bat", "cmd", "html", "htm", "css", "scss", "sass", "less", "vue", "svelte"].map((extension) => [extension, "script"]),
-  ...["json", "jsonl", "ndjson", "yaml", "yml", "toml", "xml", "ini", "env", "csv", "tsv", "sqlite", "sqlite3", "db", "db3", "lock"].map((extension) => [extension, "data"]),
-  ...["canvas", "excalidraw", "drawio", "mermaid"].map((extension) => [extension, "canvas"]),
-  ...["mp3", "wav", "m4a", "aac", "flac", "ogg", "oga", "aiff"].map((extension) => [extension, "audio"]),
-  ...["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv"].map((extension) => [extension, "video"]),
-  ...["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "dmg"].map((extension) => [extension, "archive"]),
-] as Array<[string, VaultFileCategory]>);
+const EXTENSION_CATEGORIES: Record<string, VaultFileCategory> = buildExtensionCategories([
+  [["md", "markdown"], "markdown"],
+  [["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tif", "tiff", "heic", "heif", "ico"], "image"],
+  [["pdf", "doc", "docx", "rtf", "odt", "pages", "txt", "text", "ppt", "pptx", "key", "xls", "xlsx", "numbers", "epub", "mobi"], "document"],
+  [["js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "sh", "bash", "zsh", "fish", "rb", "php", "go", "rs", "java", "c", "cc", "cpp", "h", "hpp", "cs", "swift", "kt", "kts", "scala", "pl", "pm", "lua", "r", "sql", "ps1", "bat", "cmd", "html", "htm", "css", "scss", "sass", "less", "vue", "svelte"], "script"],
+  [["json", "jsonl", "ndjson", "yaml", "yml", "toml", "xml", "ini", "env", "csv", "tsv", "sqlite", "sqlite3", "db", "db3", "lock"], "data"],
+  [["canvas", "excalidraw", "drawio", "mermaid"], "canvas"],
+  [["mp3", "wav", "m4a", "aac", "flac", "ogg", "oga", "aiff"], "audio"],
+  [["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv"], "video"],
+  [["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "dmg"], "archive"],
+]);
+
+function buildExtensionCategories(
+  groups: ReadonlyArray<readonly [readonly string[], VaultFileCategory]>
+): Record<string, VaultFileCategory> {
+  const categories: Record<string, VaultFileCategory> = {};
+  for (const [extensions, category] of groups) {
+    for (const extension of extensions) {
+      categories[extension] = category;
+    }
+  }
+  return categories;
+}
 
 function categoryForExtension(extension: string): VaultFileCategory {
   return EXTENSION_CATEGORIES[extension] ?? "other";
