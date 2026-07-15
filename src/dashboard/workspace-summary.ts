@@ -74,21 +74,27 @@ export function findNormalizationCandidates(
   lowercaseFields: Iterable<string>
 ): ForgeNormalizationCandidate[] {
   const lowercaseFieldList = [...lowercaseFields];
+  const candidates: ForgeNormalizationCandidate[] = [];
 
-  return documents.flatMap((document) => {
-    if (!document.hasFrontmatter) return [];
+  for (const document of documents) {
+    if (!document.hasFrontmatter) continue;
 
     const tagPlan = planNormalizeTags(document.frontmatter);
     const frontmatterPlan = planNormalizeFrontmatter(document.frontmatter, lowercaseFieldList);
-    const details = [
-      ...frontmatterPlan.details.map((detail) => `frontmatter: ${detail}`),
-      ...tagPlan.details.map((detail) => `tags: ${detail}`),
-    ];
+    const details: string[] = [];
+    for (const detail of frontmatterPlan.details) {
+      details.push(`frontmatter: ${detail}`);
+    }
+    for (const detail of tagPlan.details) {
+      details.push(`tags: ${detail}`);
+    }
 
-    if (details.length === 0) return [];
-    return [{
+    if (details.length === 0) continue;
+    candidates.push({
       path: document.path,
       details,
-    }];
-  });
+    });
+  }
+
+  return candidates;
 }

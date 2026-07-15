@@ -1,11 +1,11 @@
-# Forge 2.0.2
+# Forge 2.0.3
 
-Forge 2.0.2 fixes the source-review lint failure after the Obsidian-only refactor.
+Forge 2.0.3 addresses additional Obsidian source-review type-safety warnings.
 
 ## Fixed
 
-- Broad ESLint/source-review scans now ignore generated test output, test files, and build-support scripts that are outside the Obsidian plugin runtime.
-- `lint:obsidian` now runs the same broad ESLint entry point, so local validation catches this class of source-review configuration issue.
+- Removed unsafe `any`/`error`-typed value patterns from dashboard inventory categorization, workspace normalization summaries, repair operation planning, and active-file lint cache pruning.
+- Removed an unnecessary type assertion in active-file lint pruning without changing runtime behavior.
 
 ## Compatibility
 

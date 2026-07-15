@@ -1,3 +1,17 @@
+# 2.0.3
+
+## Fixed
+
+- Reworked dashboard inventory, workspace normalization, repair operation, and active-file lint helper code to avoid unsafe `any`/`error`-typed values flagged by Obsidian source review.
+- Removed an unnecessary type assertion in active-file lint pruning without relying on unsafe iterator values.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+
+---
+
 # 2.0.2
 
 ## Fixed

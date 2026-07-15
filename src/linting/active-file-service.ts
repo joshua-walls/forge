@@ -306,8 +306,12 @@ export class ActiveFileLintService {
 
 function pruneMap<K, V>(map: Map<K, V>, maxEntries: number): void {
   while (map.size > maxEntries) {
-    const oldest = map.keys().next().value as K | undefined;
-    if (oldest === undefined) return;
-    map.delete(oldest);
+    let pruned = false;
+    for (const oldest of map.keys()) {
+      map.delete(oldest);
+      pruned = true;
+      break;
+    }
+    if (!pruned) return;
   }
 }
