@@ -1,3 +1,29 @@
+# 2.0.1
+
+## Note
+
+- Sorry for pushing 2.0.0 before the Obsidian-only refactor was actually finished. This release completes that cleanup.
+
+## Changed
+
+- Removed the old host-independent `forge-core` package from the active plugin architecture.
+- Folded the former core code into normal Obsidian plugin modules organized by responsibility: config, vault access, linting, schemas, dashboard, patching, repairs, shapes, exports, docs install, ontology, and app UI.
+- Kept Forge source organized in focused folders rather than flattening `src/` into one large directory.
+- Rebuilt imports, tests, and build configuration around local Obsidian plugin modules instead of `@forge/core`.
+- Updated installed release assets for desktop and mobile test vault validation.
+
+## Fixed
+
+- Removed remaining package and lockfile wiring that could make the Obsidian plugin consume the old local `forge-core` package.
+- Preserved existing settings compatibility while finishing the architecture cleanup.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+
+---
+
 # 2.0.0
 
 ## Added
@@ -8,8 +34,7 @@
 - Added a dashboard refresh exports setting so generated exports can be refreshed during dashboard refresh only when users opt in.
 - Added an empty-heading allowance setting for vaults that intentionally use heading-only structures, nested headings without prose, or Dataview/table-first sections.
 - Added Shape Repair to dashboard cleanup actions when Shape Repair is enabled.
-- Added a shared Forge core package inside the plugin repo so Obsidian builds no longer depend on publishing Forge core to npm.
-- Added automated integration coverage for the Obsidian adapter using shared Forge core dashboard models.
+- Added automated integration coverage for dashboard model behavior used by the Obsidian plugin.
 
 ## Changed
 
@@ -29,7 +54,7 @@
 - Hid export and Dataview expansion actions when their settings or dependencies are disabled.
 - Improved mobile and narrow-sidebar layout for dashboard tabs, action controls, issue rows, and Open buttons.
 - Removed the restored legacy upgrade guide from plugin output and simplified the old migration notice.
-- Moved shared lint, repair, patch, dashboard, export, schema, settings, and shape logic into Forge core modules reused by the Obsidian plugin.
+- Began moving lint, repair, patch, dashboard, export, schema, settings, and shape logic into reusable internal modules.
 
 ## Performance
 

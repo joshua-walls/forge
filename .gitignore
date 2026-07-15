@@ -5,6 +5,7 @@ data.json
 .env
 dist/
 coverage/
+.tmp-test/
 # Archives
 *.zip
 *.tar

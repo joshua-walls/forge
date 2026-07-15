@@ -19,13 +19,10 @@
 //   - Write a summary notice on completion
 
 import { App, Modal, Notice, TFile } from "obsidian";
-import {
-  buildVaultScanExemptList,
-  planNormalizeFrontmatter,
-  planNormalizeTags,
-} from "@forge/core";
+import { planNormalizeFrontmatter, planNormalizeTags } from "../vault/normalization";
+import { buildVaultScanExemptList } from "../vault/paths";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { readNote, writeNote, backupNote } from "../utils/frontmatter";
 import { getMarkdownFiles, isExempt } from "../utils/files";
 import { loadSchema } from "../utils/schema";

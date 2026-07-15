@@ -35,9 +35,9 @@ import {
   type ShapeRepairFileResult,
   type ShapeRepairFileStatus,
   type ShapeRepairRunResult as CoreShapeRepairRunResult,
-} from "@forge/core";
+} from "../shapes/repair";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { buildShapeHeadingCache } from "./shape-lint";
 import type { ParsedHeading } from "./shape-lint";
 import { readNote, backupNote } from "../utils/frontmatter";
@@ -142,8 +142,8 @@ export async function repairShapes(
 
 async function repairNote(
   app: App,
-  settings: import("../settings").ForgeSettings,
-  paths: import("../vault-paths").VaultPaths,
+  settings: import("../config/settings").ForgeSettings,
+  paths: import("../vault/paths").VaultPaths,
   file: TFile,
   headingCache: Map<string, ParsedHeading[]>,
   dryRun: boolean
@@ -198,7 +198,7 @@ async function repairNote(
 
 export async function appendShapeRepairHistory(
   app: App,
-  settings: import("../settings").ForgeSettings,
+  settings: import("../config/settings").ForgeSettings,
   run: ShapeRepairRunResult
 ): Promise<void> {
   const paths = getVaultPaths(settings);
@@ -229,7 +229,7 @@ export async function appendShapeRepairHistory(
 
 export async function writeShapeRepairRunNote(
   app: App,
-  settings: import("../settings").ForgeSettings,
+  settings: import("../config/settings").ForgeSettings,
   run: ShapeRepairRunResult
 ): Promise<string> {
   const artifact = buildShapeRepairRunNoteArtifact(settings, run);
@@ -284,10 +284,10 @@ class ShapeRepairModal extends Modal {
     const body = contentEl.createDiv("forge-modal-body");
 
     const summary = body.createDiv("forge-lint-summary");
-    summary.createEl("div", { text: `${r.repaired} ${this.dryRun ? "would be repaired" : "repaired"}` });
-    summary.createEl("div", { text: `${r.skipped} skipped` });
+    summary.createDiv({ text: `${r.repaired} ${this.dryRun ? "would be repaired" : "repaired"}` });
+    summary.createDiv({ text: `${r.skipped} skipped` });
     if (r.errors > 0) {
-      summary.createEl("div", { text: `${r.errors} errors`, cls: "forge-error-note" });
+      summary.createDiv({ text: `${r.errors} errors`, cls: "forge-error-note" });
     }
 
     const touched = r.files.filter((f) => f.status === "repaired" || f.status === "dry_run");
@@ -379,8 +379,8 @@ class ShapeRepairRestoreModal extends Modal {
       const row = list.createDiv("forge-restore-row");
 
       const info = row.createDiv("forge-restore-info");
-      info.createEl("div", { text: f.path, cls: "forge-restore-path" });
-      info.createEl("div", {
+      info.createDiv({ text: f.path, cls: "forge-restore-path" });
+      info.createDiv({
         text: `Backup: ${f.backupPath}`,
         cls: "forge-restore-backup",
       });

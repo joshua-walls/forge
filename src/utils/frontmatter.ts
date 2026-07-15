@@ -11,12 +11,15 @@
 
 import { App, TFile, normalizePath, parseYaml } from "obsidian";
 import {
-  getFmString as getCoreFmString,
-  isFieldPresent as isCoreFieldPresent,
-  sortFrontmatterFields as sortCoreFrontmatterFields,
-} from "@forge/core";
+  getFmString as getPlainFmString,
+  isFieldPresent as isPlainFieldPresent,
+  sortFrontmatterFields as sortPlainFrontmatterFields,
+  splitFrontmatter,
+} from "../vault/frontmatter";
 import { ensureFolder, safeTimestamp } from "./files";
 import { serializeYaml, trimTrailingWhitespace } from "./yaml";
+
+export type { ParsedMarkdownDocument } from "../vault/frontmatter";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,10 +63,8 @@ export async function readNote(
  * Exported for testing without needing a real TFile.
  */
 export function parseNote(raw: string, file: TFile): VaultNote {
-  // Match frontmatter block: must start at line 1 with ---
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-
-  if (!match) {
+  const split = splitFrontmatter(raw);
+  if (!split) {
     return {
       frontmatter: {},
       body: raw,
@@ -72,13 +73,10 @@ export function parseNote(raw: string, file: TFile): VaultNote {
     };
   }
 
-  const fmText = match[1];
-  const body = match[2] ?? "";
-
   let frontmatter: Record<string, unknown> = {};
 
   try {
-    const parsed: unknown = parseYaml(fmText);
+    const parsed: unknown = parseYaml(split.yaml);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       frontmatter = parsed as Record<string, unknown>;
     }
@@ -88,11 +86,13 @@ export function parseNote(raw: string, file: TFile): VaultNote {
 
   return {
     frontmatter,
-    body,
+    body: split.body,
     hasFrontmatter: true,
     file,
   };
 }
+
+export { splitFrontmatter };
 
 // ── Write ────────────────────────────────────────────────────────────────────
 
@@ -162,7 +162,7 @@ export function sortFrontmatterFields(
   frontmatter: Record<string, unknown>,
   fieldOrder?: string[]
 ): Record<string, unknown> {
-  return sortCoreFrontmatterFields(frontmatter, fieldOrder);
+  return sortPlainFrontmatterFields(frontmatter, fieldOrder);
 }
 
 // ── Field utilities ───────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export function isFieldPresent(
   frontmatter: Record<string, unknown>,
   fieldName: string
 ): boolean {
-  return isCoreFieldPresent(frontmatter, fieldName);
+  return isPlainFieldPresent(frontmatter, fieldName);
 }
 
 /**
@@ -190,5 +190,5 @@ export function getFmString(
   frontmatter: Record<string, unknown>,
   fieldName: string
 ): string {
-  return getCoreFmString(frontmatter, fieldName);
+  return getPlainFmString(frontmatter, fieldName);
 }

@@ -8,7 +8,7 @@
 
 import { App, Modal, Notice, Setting, TFile } from "obsidian";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import { getMarkdownFiles } from "../utils/files";
 import { trimLineEnd } from "../utils/yaml";
 

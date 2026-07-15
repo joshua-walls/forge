@@ -1,11 +1,11 @@
 // src/commands/export-ontology.ts
-// Export Ontology Index - host adapter around @forge/core export builders.
+// Export Ontology Index - Obsidian command around export builders.
 
 import { Notice, TFile } from "obsidian";
 import {
   buildOntologyIndexArtifacts,
   type OntologyIndex,
-} from "@forge/core";
+} from "../exports/builders";
 import type ForgePlugin from "../main";
 import { ensureFolder } from "../utils/files";
 import { loadSchema } from "../utils/schema";

@@ -1,10 +1,10 @@
 import { App, Modal, Notice } from "obsidian";
 import type ForgePlugin from "../main";
-import type { ShapeLintRunResult } from "../shape_lint_service";
+import type { ShapeLintRunResult } from "../shapes/lint-service";
 import {
   writeShapeLintReportJson,
   writeShapeLintRunNote,
-} from "../shape_lint_writers";
+} from "../shapes/lint-writers";
 import {
   defaultResultFilter,
   firstResultItem,

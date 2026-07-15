@@ -2,8 +2,8 @@
 // Obsidian adapter for Forge schema loading.
 
 import { App, TFile, parseYaml } from "obsidian";
-import type { ForgeSettings } from "../settings";
-import { getVaultPaths } from "../vault-paths";
+import type { ForgeSettings } from "../config/settings";
+import { getVaultPaths } from "../vault/paths";
 import {
   allFrontmatterFields,
   conditionallyRequiredInlineFields,
@@ -12,7 +12,7 @@ import {
   parseSchemaNote as parseCoreSchemaNote,
   reviewCycleDays,
   validateSchemaNote as validateCoreSchemaNote,
-} from "@forge/core";
+} from "../schemas/schema";
 
 export {
   allFrontmatterFields,
@@ -33,7 +33,7 @@ export type {
   SchemaTagRules,
   SchemaValidationIssue,
   VaultSchema,
-} from "@forge/core";
+} from "../schemas/schema";
 
 interface ParseSchemaOptions {
   versionLocation?: "frontmatter" | "inline";
@@ -43,7 +43,7 @@ interface ParseSchemaOptions {
 export async function loadSchema(
   app: App,
   settings: ForgeSettings
-): Promise<import("@forge/core").VaultSchema | null> {
+): Promise<import("../schemas/schema").VaultSchema | null> {
   const paths = getVaultPaths(settings);
   const file = app.vault.getAbstractFileByPath(paths.schemaMd);
 
@@ -69,7 +69,7 @@ export async function loadSchema(
 export function parseSchemaNote(
   raw: string,
   options?: ParseSchemaOptions
-): import("@forge/core").VaultSchema | null {
+): import("../schemas/schema").VaultSchema | null {
   return parseCoreSchemaNote(raw, {
     versionLocation: options?.versionLocation,
     versionField: options?.versionField,
@@ -80,7 +80,7 @@ export function parseSchemaNote(
 export function validateSchemaNote(
   raw: string,
   settings?: ForgeSettings
-): import("@forge/core").SchemaValidationIssue[] {
+): import("../schemas/schema").SchemaValidationIssue[] {
   return validateCoreSchemaNote(raw, {
     settings,
     parseYaml,

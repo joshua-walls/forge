@@ -10,19 +10,19 @@
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
 import { App, FuzzySuggestModal, Modal, Notice, TFile, normalizePath } from "obsidian";
-import { createPatchTemplateContent } from "@forge/core";
+import { createPatchTemplateContent } from "../patching/template";
 import type ForgePlugin from "../main";
-import { getVaultPaths } from "../vault-paths";
+import { getVaultPaths } from "../vault/paths";
 import {
   loadPatchFile,
   applyPatch,
   PatchRunResult,
-} from "../patch-engine";
+} from "../patching/engine";
 import {
   writeRestoreManifest,
   archivePatchFile,
   writePatchReport,
-} from "../patch-manifest";
+} from "../patching/manifest";
 import { runVaultLint } from "./run-lint";
 import { ensureFolder } from "../utils/files";
 

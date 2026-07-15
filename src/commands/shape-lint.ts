@@ -2,24 +2,23 @@ import { App, TAbstractFile, TFile, TFolder, parseYaml } from "obsidian";
 import {
   buildShapeHeadingCacheFromTemplates,
   collectShapeTemplatesFromDocuments,
-  createForgeDocument,
-  getVaultPaths,
   lintShapeHeadingsForDocument,
-  type ForgeDocument,
   type ParsedHeading,
-} from "@forge/core";
-import type { ForgeSettings } from "../settings";
-import type { LintResult } from "../lint-engine";
+} from "../shapes/lint";
+import { createForgeDocument } from "../vault/document";
+import { getVaultPaths } from "../vault/paths";
+import type { ForgeSettings } from "../config/settings";
+import type { ForgeDocument, LintResult } from "../linting/model";
 
 export {
   buildTemplateTree,
   extractHeadings,
   flattenTemplateTree,
-} from "@forge/core";
+} from "../shapes/lint";
 export type {
   ParsedHeading,
   TemplateNode,
-} from "@forge/core";
+} from "../shapes/lint";
 
 export async function buildShapeHeadingCache(
   app: App,

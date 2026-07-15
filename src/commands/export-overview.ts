@@ -1,13 +1,15 @@
 // src/commands/export-overview.ts
-// Export Vault Overview - host adapter around @forge/core export builders.
+// Export Vault Overview - Obsidian command around export builders.
 
 import { App, Notice, TFile, normalizePath, parseYaml } from "obsidian";
 import {
   buildVaultOverviewArtifacts,
-  createForgeDocument,
-  type ForgeDocument,
   type InventoryExport,
-} from "@forge/core";
+} from "../exports/builders";
+import {
+  createForgeDocument,
+} from "../vault/document";
+import type { ForgeDocument } from "../linting/model";
 import type ForgePlugin from "../main";
 import { ensureFolder } from "../utils/files";
 import { loadSchema } from "../utils/schema";
