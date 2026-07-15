@@ -10,6 +10,7 @@
     "noEmit": false,
     "outDir": ".tmp-test",
     "rootDir": ".",
+    "skipLibCheck": true,
     "sourceMap": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]

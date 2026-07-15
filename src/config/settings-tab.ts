@@ -18,6 +18,7 @@ import {
   TFile,
   TFolder,
 } from "obsidian";
+import type { SettingDefinitionItem, SettingGroup } from "obsidian";
 import type ForgePlugin from "../main";
 import { runExportOverview } from "../commands/export-overview";
 import { runExportOntology } from "../commands/export-ontology";
@@ -26,6 +27,7 @@ import { loadSchema } from "../utils/schema";
 import type { ForgeSettings } from "./settings";
 
 type TabId = "general" | "lint" | "patch" | "maintenance" | "export" | "shapes";
+type SettingsRenderMode = "legacy" | "declarative";
 type SettingsSummaryTone = "good" | "warning" | "critical" | "muted";
 type StringSettingKey = {
   [K in keyof ForgeSettings]: ForgeSettings[K] extends string ? K : never;
@@ -60,10 +62,223 @@ export class ForgeSettingsTab extends PluginSettingTab {
   plugin: ForgePlugin;
   private activeTab: TabId = "general";
   private runningActions = new Set<string>();
+  private settingsRenderMode: SettingsRenderMode = "legacy";
 
   constructor(app: App, plugin: ForgePlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return TABS.map(({ id, label }) => ({
+      type: "page",
+      name: label,
+      desc: this.declarativeTabDescription(id),
+      displayValue: () => this.declarativeTabDisplayValue(id),
+      status: () => this.declarativeTabStatus(id),
+      items: [
+        {
+          name: `${label} settings`,
+          desc: this.declarativeTabDescription(id),
+          aliases: this.declarativeTabAliases(id),
+          render: (setting: Setting, group: SettingGroup) => {
+            this.renderDeclarativeTab(setting, group, id);
+          },
+        },
+      ],
+    }));
+  }
+
+  getControlValue(key: string): unknown {
+    const settings = this.plugin.settings as unknown as Record<string, unknown>;
+    return settings[key];
+  }
+
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings as unknown as Record<string, unknown>;
+    settings[key] = value;
+    await this.plugin.saveSettings();
+    this.updateSettingsView();
+  }
+
+  private updateSettingsView(): void {
+    if (this.settingsRenderMode === "declarative") {
+      this.updateDeclarativeSettings();
+      return;
+    }
+    this.refreshSettingsTab();
+  }
+
+  private updateDeclarativeSettings(): void {
+    const update = (this as unknown as Record<string, unknown>)["update"];
+    if (typeof update === "function") {
+      update.call(this);
+    }
+  }
+
+  private renderDeclarativeTab(setting: Setting, _group: SettingGroup, tab: TabId): void {
+    this.settingsRenderMode = "declarative";
+    this.activeTab = tab;
+    const parentEl = setting.settingEl.parentElement ?? this.containerEl;
+    setting.settingEl.remove();
+    this.injectStyles();
+
+    const content = parentEl.createDiv({ cls: "forge-tab-content" });
+    this.renderSummaryStrip(content, this.tabSummaryItems(tab), "forge-settings-tab-summary");
+    this.renderTabContent(tab, content);
+  }
+
+  private declarativeTabDescription(tab: TabId): string {
+    switch (tab) {
+      case "general":
+        return "Install docs, system folders, dashboard behavior, Dataview expansion, and frontmatter field ordering.";
+      case "lint":
+        return "Schema note, schema version field, lint reports, strict mode, active-file lint, and stale note review.";
+      case "patch":
+        return "Patch archive folder, inbox folder, default patch file, backups, restore manifests, post-patch lint, and maintenance.";
+      case "maintenance":
+        return "Backup, inbox, lint history, patch report, and shape lint run retention settings.";
+      case "export":
+        return "Vault export enablement, export folder, overview fields, private notes, ontology filter, relationship heading, and excluded folders.";
+      case "shapes":
+        return "Shape engine, shapes folder, template fields, template refinement, shape lint, and shape repair.";
+    }
+  }
+
+  private declarativeTabDisplayValue(tab: TabId): string {
+    switch (tab) {
+      case "general":
+        return this.plugin.settings.forgeFolder || "System/Forge";
+      case "lint":
+        return this.plugin.settings.lintStrictMode ? "Strict" : "Warnings allowed";
+      case "patch":
+        return this.plugin.settings.patchBackupEnabled ? "Backups on" : "Backups off";
+      case "maintenance":
+        return `${this.plugin.settings.backupRetentionDays}d backups`;
+      case "export":
+        return this.plugin.settings.exportEnabled ? "Enabled" : "Disabled";
+      case "shapes":
+        return this.plugin.settings.shapesEnabled ? "Enabled" : "Disabled";
+    }
+  }
+
+  private declarativeTabStatus(tab: TabId): "warning" | null {
+    const s = this.plugin.settings;
+    if (tab === "patch" && !s.patchBackupEnabled) return "warning";
+    if (tab === "export" && s.exportEnabled && !s.exportFilterField) return "warning";
+    if (tab === "shapes" && s.shapeRepairEnabled) return "warning";
+    return null;
+  }
+
+  private declarativeTabAliases(tab: TabId): string[] {
+    switch (tab) {
+      case "general":
+        return [
+          "install documentation",
+          "install docs",
+          "system folder",
+          "forge folder",
+          "file inventory",
+          "refresh exports with dashboard",
+          "dataview expansion",
+          "auto-update mode",
+          "auto-update delay",
+          "block title",
+          "max links",
+          "frontmatter field order",
+          "prefill from schema",
+        ];
+      case "lint":
+        return [
+          "schema note",
+          "version field location",
+          "version field",
+          "reload schema",
+          "lint reports folder",
+          "strict mode",
+          "lint run retention",
+          "lint file links",
+          "lint inline metadata",
+          "exclude inbox folder",
+          "repair prompt threshold",
+          "enable auto-lint",
+          "idle delay",
+          "stale note review",
+          "review cycle field",
+          "last updated field",
+          "in-scope field",
+          "in-scope values",
+        ];
+      case "patch":
+        return [
+          "patches folder",
+          "inbox folder",
+          "default patch file",
+          "backup before patch",
+          "backup folder",
+          "generate restore manifest",
+          "run lint after patch",
+          "run maintenance after patch",
+        ];
+      case "maintenance":
+        return [
+          "backup retention",
+          "inbox retention",
+          "inbox retention action",
+          "lint history retention",
+          "lint history max entries",
+          "auto-run on dashboard refresh",
+          "patch report retention",
+          "shape lint run retention",
+        ];
+      case "export":
+        return [
+          "enable export",
+          "exports folder",
+          "export vault overview",
+          "export ontology index",
+          "domain field",
+          "type field",
+          "status field",
+          "dashboard note name",
+          "private notes",
+          "private note field",
+          "ontology filter",
+          "filter field",
+          "filter values",
+          "relationship heading",
+          "excluded folders",
+        ];
+      case "shapes":
+        return [
+          "enable vault shape engine",
+          "shapes folder",
+          "include subfolders",
+          "type target field",
+          "created field",
+          "updated field",
+          "template field configuration",
+          "enable template refinement",
+          "templates folder",
+          "inject relationship headings",
+          "relationship parent heading",
+          "relationship heading level",
+          "relationship injection position",
+          "run refinement",
+          "enable shape heading validation",
+          "strict template matching",
+          "allow empty headings",
+          "lint scope",
+          "lint folders",
+          "enable shape repair",
+          "repair scope",
+          "repair folders",
+          "repair runs folder",
+          "repair file links",
+          "repair history retention",
+          "run shape repair",
+        ];
+    }
   }
 
   private runAsync(task: () => Promise<void>): void {
@@ -198,6 +413,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
   }
 
   private renderTab(): void {
+    this.settingsRenderMode = "legacy";
     const { containerEl } = this;
     containerEl.empty();
 
@@ -219,8 +435,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
 
     const content = containerEl.createDiv({ cls: "forge-tab-content" });
     this.renderSummaryStrip(content, this.tabSummaryItems(this.activeTab), "forge-settings-tab-summary");
+    this.renderTabContent(this.activeTab, content);
+  }
 
-    switch (this.activeTab) {
+  private renderTabContent(tab: TabId, content: HTMLElement): void {
+    switch (tab) {
       case "general":     this.renderGeneral(content);     break;
       case "lint":        this.renderLint(content);        break;
       case "patch":       this.renderPatch(content);       break;
@@ -231,6 +450,11 @@ export class ForgeSettingsTab extends PluginSettingTab {
   }
 
   private refreshSettingsTab(): void {
+    if (this.settingsRenderMode === "declarative") {
+      this.updateDeclarativeSettings();
+      return;
+    }
+
     const scrollContainer = this.settingsScrollContainer();
     const previousScrollTop = scrollContainer.scrollTop;
     const shouldRestoreScroll = this.containerEl.childElementCount > 0;
@@ -343,6 +567,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.settingsRenderMode = "legacy";
     this.renderTab();
   }
 

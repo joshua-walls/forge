@@ -1,13 +1,13 @@
-# Forge 2.0.4
+# Forge 2.0.5
 
-Forge 2.0.4 addresses the remaining repair-model source-review type-safety warnings reported by Obsidian.
+Forge 2.0.5 adopts Obsidian's declarative settings API while preserving compatibility with older Obsidian versions.
 
 ## Fixed
 
-- Reworked repair issue collection to avoid unsafe `any`/`error`-typed value warnings during Obsidian source review.
+- Added declarative settings definitions so Forge settings can appear in Obsidian 1.13+ settings search while keeping the legacy settings renderer for older Obsidian versions.
 
 ## Compatibility
 
 - `minAppVersion` remains `1.7.2`.
 - No manual migration is required.
-- No user-facing behavior changed.
+- Users on Obsidian versions before `1.13.0` continue to use the existing settings tab renderer.
