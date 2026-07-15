@@ -3,7 +3,7 @@ import type { ForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import { DashboardCache } from "./dashboard_cache";
 import {
-  DASHBOARD_CACHE_SCHEMA_VERSION,
+  buildPatchHistoryResult,
   type OperationalRunSummary,
   type PatchHistoryResult,
   type PatchRunSummary,
@@ -46,17 +46,14 @@ export class PatchHistoryService {
     const operationalHistory = await this.readOperationalHistory();
     const repairRuns = await this.readRepairRuns(paths.shapeRepairHistory);
 
-    const result: PatchHistoryResult = {
-      schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-      source_command: sourceCommand,
-      generated_at: new Date().toISOString(),
-      duration_ms: Date.now() - started,
-      last_patch_run: manifests[0] ?? null,
-      last_repair_run: repairRuns[0] ?? operationalRunToPatchSummary(operationalHistory, "repair"),
-      restored_runs_available: manifests.length,
-      last_normalization_run: operationalRunToPatchSummary(operationalHistory, "normalization"),
-      lint_scans: lintScans,
-    };
+    const result = buildPatchHistoryResult({
+      sourceCommand,
+      durationMs: Date.now() - started,
+      manifests,
+      repairRuns,
+      operationalHistory,
+      lintScans,
+    });
 
     try {
       await this.cache.updateLeaf({ key: "latest_patch_history_result", value: result });
@@ -146,20 +143,4 @@ export class PatchHistoryService {
       return [];
     }
   }
-}
-
-function operationalRunToPatchSummary(
-  history: OperationalRunSummary[],
-  command: OperationalRunSummary["command"]
-): PatchRunSummary | null {
-  const run = history.find((entry) => entry.command === command);
-  if (!run) return null;
-
-  return {
-    run_id: `${run.command}-${run.started_at}`,
-    description: run.command.replace(/_/g, " "),
-    applied_at: run.started_at,
-    changed_files: run.affected_files,
-    changed_operations: run.applied_items,
-  };
 }

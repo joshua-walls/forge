@@ -28,131 +28,26 @@
 //   7. Show results modal
 
 import { App, Modal, Notice, TFile, normalizePath } from "obsidian";
+import {
+  applyShapeRepair,
+  buildShapeRepairHistoryContent,
+  buildShapeRepairRunNoteArtifact,
+  type ShapeRepairFileResult,
+  type ShapeRepairFileStatus,
+  type ShapeRepairRunResult as CoreShapeRepairRunResult,
+} from "@forge/core";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { buildShapeHeadingCache, buildTemplateTree, flattenTemplateTree } from "./shape-lint";
-import type { ParsedHeading, TemplateNode } from "./shape-lint";
+import { buildShapeHeadingCache } from "./shape-lint";
+import type { ParsedHeading } from "./shape-lint";
 import { readNote, backupNote } from "../utils/frontmatter";
-import { ensureFolder, localTimestamp, todayString } from "../utils/files";
-
-// ── Document section model ────────────────────────────────────────────────────
-//
-// The note body (post-frontmatter) is represented as a tree of DocSection
-// nodes mirroring the heading structure. Each section owns its heading line,
-// the non-heading content lines immediately beneath it, and an ordered list
-// of child sections. Unknown sections (not in template) are flagged so they
-// can be appended at the tail of their parent during reassembly.
-
-interface DocSection {
-  headingText: string;       // original casing
-  headingLevel: number;
-  headingLine: string;       // the raw "## Foo" line
-  contentLines: string[];    // non-heading lines directly under this heading
-  children: DocSection[];    // child sections in document order
-  isUnknown: boolean;        // true if not matched by any template node
-}
-
-/**
- * Builds a DocSection tree from a lines array (frontmatter already stripped).
- * `templateRoots` is used only to flag unknown sections — it does NOT affect
- * the tree structure, which is derived purely from heading levels in the note.
- */
-function buildDocTree(
-  bodyLines: string[],
-  templateRoots: TemplateNode[]
-): { roots: DocSection[]; leadingLines: string[] } {
-  // Flatten all template nodes for unknown-detection
-  const allTemplateNodes = flattenTemplateTree(templateRoots);
-
-  const headings = extractHeadingsFromLines(bodyLines);
-
-  // Build a flat section list first (heading + its direct non-heading content)
-  // Each section spans from its heading line to the line before the next
-  // heading of equal or lesser depth.
-  const flatSections: DocSection[] = [];
-
-  for (let i = 0; i < headings.length; i++) {
-    const h = headings[i];
-    const nextSameOrHigher = headings.slice(i + 1).find((nh) => nh.level <= h.level);
-    const sectionEnd = nextSameOrHigher ? nextSameOrHigher.lineIndex : bodyLines.length;
-
-    // contentLines = lines after the heading line, before any child headings
-    const firstChildHeading = headings.slice(i + 1).find(
-      (nh) => nh.lineIndex < sectionEnd && nh.level > h.level
-    );
-    const contentEnd = firstChildHeading ? firstChildHeading.lineIndex : sectionEnd;
-    const contentLines = bodyLines.slice(h.lineIndex + 1, contentEnd);
-
-    const isUnknown = !allTemplateNodes.some(
-      (tn) => tn.text.toLowerCase() === h.text.toLowerCase() && tn.level === h.level
-    );
-
-    flatSections.push({
-      headingText: h.text,
-      headingLevel: h.level,
-      headingLine: bodyLines[h.lineIndex],
-      contentLines,
-      children: [],   // populated below
-      isUnknown,
-    });
-  }
-
-  // Nest into tree by level — same algorithm as buildTemplateTree
-  const roots: DocSection[] = [];
-  const stack: DocSection[] = [];
-
-  for (const section of flatSections) {
-    while (stack.length > 0 && stack[stack.length - 1].headingLevel >= section.headingLevel) {
-      stack.pop();
-    }
-    if (stack.length === 0) {
-      roots.push(section);
-    } else {
-      stack[stack.length - 1].children.push(section);
-    }
-    stack.push(section);
-  }
-
-  // Leading body content before the first heading
-  const firstHeadingLine = headings.length > 0 ? headings[0].lineIndex : bodyLines.length;
-  const leadingLines = bodyLines.slice(0, firstHeadingLine);
-
-  return { roots, leadingLines };
-}
+import { ensureFolder, localTimestamp } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type RepairFileStatus = "repaired" | "skipped" | "dry_run" | "error";
-
-export interface RepairFileResult {
-  path: string;
-  status: RepairFileStatus;
-  operations: string[];
-  detail: string;
-  backupPath?: string;   // set when a backup was written before repair
-}
-
-export interface ShapeRepairRunResult {
-  ranAt: string;
-  dryRun: boolean;
-  repaired: number;
-  skipped: number;
-  errors: number;
-  files: RepairFileResult[];
-}
-
-export interface ShapeRepairHistoryEntry {
-  ranAt: string;
-  dryRun: boolean;
-  repaired: number;
-  skipped: number;
-  errors: number;
-  files: RepairFileResult[];
-}
-
-function isShapeRepairHistoryEntry(value: unknown): value is ShapeRepairHistoryEntry {
-  return typeof value === "object" && value !== null;
-}
+export type RepairFileStatus = ShapeRepairFileStatus;
+export type RepairFileResult = ShapeRepairFileResult;
+export type ShapeRepairRunResult = CoreShapeRepairRunResult;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -265,7 +160,7 @@ async function repairNote(
     if (!templateHeadings || templateHeadings.length === 0) return skip(file.path, "No matching template");
 
     const content = await app.vault.read(file);
-    const { repairedContent, descriptions } = applyRepair(content, templateHeadings);
+    const { repairedContent, descriptions } = applyShapeRepair(content, templateHeadings);
 
     if (descriptions.length === 0) return skip(file.path, "Already conforms");
 
@@ -299,182 +194,6 @@ async function repairNote(
   }
 }
 
-// ── Repair engine ─────────────────────────────────────────────────────────────
-
-/**
- * Top-level repair entry. Splits frontmatter from body, builds both trees,
- * runs the recursive repair pass, and reassembles the document.
- *
- * Returns the repaired content string and a list of human-readable operation
- * descriptions. If descriptions is empty the note already conforms.
- */
-function applyRepair(
-  content: string,
-  templateHeadings: ParsedHeading[]
-): { repairedContent: string; descriptions: string[] } {
-  const lines = content.split("\n");
-  const { frontmatterLines, bodyLines } = splitFrontmatter(lines);
-
-  const templateRoots = buildTemplateTree(templateHeadings);
-  const { roots: docRoots, leadingLines } = buildDocTree(bodyLines, templateRoots);
-
-  const descriptions: string[] = [];
-
-  // Recursively repair each level
-  const repairedRoots = repairLevel(templateRoots, docRoots, descriptions);
-
-  // Reassemble
-  const repairedBody = [
-    ...leadingLines,
-    ...serializeSections(repairedRoots),
-  ];
-
-  const repairedContent = [...frontmatterLines, ...repairedBody].join("\n");
-  return { repairedContent, descriptions };
-}
-
-/**
- * Repairs one level of the heading hierarchy.
- *
- * For each template node at this level:
- *   1. Find a matching doc section (text + level) within the current scope.
- *   2. If not found: create it (insert with blank placeholder content).
- *   3. Recurse into children of the matched/created section.
- *
- * After processing template nodes, append unknown doc sections (not in
- * template at this level) at the tail in their original relative order.
- *
- * Returns the repaired ordered section list for this level.
- */
-function repairLevel(
-  templateNodes: TemplateNode[],
-  docSections: DocSection[],
-  descriptions: string[],
-  parentText?: string
-): DocSection[] {
-  const result: DocSection[] = [];
-  const consumed = new Set<DocSection>();
-
-  for (const tn of templateNodes) {
-    // Find matching doc section: text (case-insensitive) + exact level
-    const match = docSections.find(
-      (ds) =>
-        !consumed.has(ds) &&
-        ds.headingText.toLowerCase() === tn.text.toLowerCase() &&
-        ds.headingLevel === tn.level
-    );
-
-    if (match) {
-      consumed.add(match);
-      // Recurse into children — repair their order and insert any missing
-      const repairedChildren = repairLevel(tn.children, match.children, descriptions, tn.text);
-      result.push({ ...match, children: repairedChildren });
-    } else {
-      // Missing — create a synthetic section with a blank placeholder
-      const prefix = "#".repeat(tn.level);
-      const context = parentText ? ` (under '${parentText}')` : "";
-      descriptions.push(`Insert missing heading: '${prefix} ${tn.text}'${context}`);
-
-      const newSection: DocSection = {
-        headingText: tn.text,
-        headingLevel: tn.level,
-        headingLine: `${prefix} ${tn.text}`,
-        contentLines: [""],   // blank placeholder line
-        children: [],
-        isUnknown: false,
-      };
-
-      // Recurse to insert any children this new section needs
-      newSection.children = repairLevel(tn.children, [], descriptions, tn.text);
-      result.push(newSection);
-    }
-  }
-
-  // Append unconsumed (unknown) sections at the tail, preserving their order
-  // and recursively repairing their children against an empty template
-  // (i.e. children pass through unchanged)
-  const unknowns = docSections.filter((ds) => !consumed.has(ds));
-  for (const u of unknowns) {
-    result.push({
-      ...u,
-      children: repairLevel([], u.children, descriptions, u.headingText),
-    });
-  }
-
-  // Detect and record reorder operations (after insertions are resolved).
-  // Only compare sections that existed in the original doc (consumed), not
-  // newly inserted ones — those weren't reordered, they were created.
-  const originalOrder = docSections
-    .filter((ds) => consumed.has(ds))
-    .map((ds) => ds.headingText.toLowerCase());
-
-  const expectedOrder = originalOrder.length > 0
-    ? templateNodes
-        .map((tn) => tn.text.toLowerCase())
-        .filter((t) => originalOrder.includes(t))
-    : [];
-
-  if (
-    originalOrder.length > 1 &&
-    !arraysEqualOrder(originalOrder, expectedOrder)
-  ) {
-    const context = parentText ? ` within '${parentText}'` : "";
-    descriptions.push(
-      `Reorder headings${context}: ${expectedOrder.map((t) => `'${t}'`).join(" → ")}`
-    );
-  }
-
-  return result;
-}
-
-/**
- * Serializes a DocSection tree back to a flat lines array.
- * Heading line → content lines → children (recursively).
- */
-function serializeSections(sections: DocSection[]): string[] {
-  const lines: string[] = [];
-  for (const s of sections) {
-    lines.push(s.headingLine);
-    lines.push(...s.contentLines);
-    lines.push(...serializeSections(s.children));
-  }
-  return lines;
-}
-
-// ── Utilities ─────────────────────────────────────────────────────────────────
-
-function splitFrontmatter(lines: string[]): {
-  frontmatterLines: string[];
-  bodyLines: string[];
-} {
-  if (lines[0]?.trim() !== "---") {
-    return { frontmatterLines: [], bodyLines: lines };
-  }
-  let closingIdx = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") { closingIdx = i; break; }
-  }
-  if (closingIdx === -1) return { frontmatterLines: [], bodyLines: lines };
-  return {
-    frontmatterLines: lines.slice(0, closingIdx + 1),
-    bodyLines: lines.slice(closingIdx + 1),
-  };
-}
-
-function extractHeadingsFromLines(lines: string[]): ParsedHeading[] {
-  const headings: ParsedHeading[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^(#{1,6})\s+(.+)$/);
-    if (m) headings.push({ level: m[1].length, text: m[2].trim(), lineIndex: i });
-  }
-  return headings;
-}
-
-function arraysEqualOrder(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
-
 // ── History writer ────────────────────────────────────────────────────────────
 
 export async function appendShapeRepairHistory(
@@ -484,34 +203,21 @@ export async function appendShapeRepairHistory(
 ): Promise<void> {
   const paths = getVaultPaths(settings);
   await ensureFolder(app, paths.exports);
-
-  const entry: ShapeRepairHistoryEntry = {
-    ranAt: run.ranAt,
-    dryRun: run.dryRun,
-    repaired: run.repaired,
-    skipped: run.skipped,
-    errors: run.errors,
-    files: run.files.filter((f) => f.status !== "skipped"),
-  };
-
-  let history: ShapeRepairHistoryEntry[] = [];
   const histPath = normalizePath(paths.shapeRepairHistory);
   const histFile = app.vault.getAbstractFileByPath(histPath);
+  let existingContent: string | null = null;
 
   if (histFile instanceof TFile) {
     try {
-      const raw = await app.vault.read(histFile);
-      const parsed: unknown = JSON.parse(raw);
-      history = Array.isArray(parsed) ? parsed.filter(isShapeRepairHistoryEntry) : [];
-    } catch { history = []; }
+      existingContent = await app.vault.read(histFile);
+    } catch { existingContent = null; }
   }
 
-  history.push(entry);
-
-  const max = settings.shapeRepairHistoryRetentionCount ?? 20;
-  if (history.length > max) history = history.slice(history.length - max);
-
-  const content = JSON.stringify(history, null, 2);
+  const content = buildShapeRepairHistoryContent(
+    existingContent,
+    run,
+    settings.shapeRepairHistoryRetentionCount ?? 20
+  );
   if (histFile instanceof TFile) {
     await app.vault.modify(histFile, content);
   } else {
@@ -526,78 +232,17 @@ export async function writeShapeRepairRunNote(
   settings: import("../settings").ForgeSettings,
   run: ShapeRepairRunResult
 ): Promise<string> {
-  const runsFolder = settings.shapeRepairRunsFolder || getVaultPaths(settings).exports;
-  await ensureFolder(app, runsFolder);
-
-  const safeTs = run.ranAt.replace(/[:.]/g, "-").replace("T", "_").replace(/\s/g, "_");
-  const notePath = normalizePath(`${runsFolder}/shape-repair-${safeTs}.md`);
-  const today = todayString();
-  const content = buildRepairRunNote(run, today, settings.shapeRepairFileLinks ?? false);
+  const artifact = buildShapeRepairRunNoteArtifact(settings, run);
+  await ensureFolder(app, artifact.folder);
+  const notePath = normalizePath(artifact.path);
 
   const existing = app.vault.getAbstractFileByPath(notePath);
   if (existing instanceof TFile) {
-    await app.vault.modify(existing, content);
+    await app.vault.modify(existing, artifact.content);
   } else {
-    await app.vault.create(notePath, content);
+    await app.vault.create(notePath, artifact.content);
   }
   return notePath;
-}
-
-function buildRepairRunNote(run: ShapeRepairRunResult, today: string, fileLinks: boolean): string {
-  const dryLabel = run.dryRun ? " (Dry Run)" : "";
-  const lines: string[] = [
-    "---",
-    "type: reference",
-    "status: complete",
-    "tags:",
-    "  - meta/shape-repair",
-    `created: ${today}`,
-    `updated: ${today}`,
-    "ai_private: false",
-    "review_cycle: never",
-    "---",
-    "",
-    `runtime:: ${run.ranAt}`,
-    `dry_run:: ${run.dryRun}`,
-    `repaired:: ${run.repaired}`,
-    `skipped:: ${run.skipped}`,
-    `errors:: ${run.errors}`,
-    "",
-    `# Shape Repair Run${dryLabel}`,
-    "",
-    "## Summary",
-    "",
-    "| Status | Count |",
-    "|--------|-------|",
-    `| ✅ Repaired${run.dryRun ? " (would)" : ""} | ${run.repaired} |`,
-    `| ⏭️ Skipped  | ${run.skipped}   |`,
-    `| 🔴 Errors   | ${run.errors}    |`,
-    "",
-  ];
-
-  const touched = run.files.filter((f) => f.status === "repaired" || f.status === "dry_run");
-  const errored = run.files.filter((f) => f.status === "error");
-
-  if (touched.length > 0) {
-    lines.push(`## ${run.dryRun ? "Would Repair" : "Repaired"}`, "");
-    for (const f of touched) {
-      const ref = fileLinks ? `[[${f.path}]]` : `\`${f.path}\``;
-      lines.push(`### ${ref}`, "");
-      for (const op of f.operations) lines.push(`- ${op}`);
-      lines.push("");
-    }
-  }
-
-  if (errored.length > 0) {
-    lines.push("## Errors", "");
-    for (const f of errored) {
-      const ref = fileLinks ? `[[${f.path}]]` : `\`${f.path}\``;
-      lines.push(`- ${ref}: ${f.detail}`);
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n");
 }
 
 // ── Results modal ─────────────────────────────────────────────────────────────

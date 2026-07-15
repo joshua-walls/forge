@@ -5,73 +5,34 @@
 // manifests still fall back to full-file .bak replacement with a clear warning.
 
 import { App, Modal, Notice, TFile, normalizePath, parseYaml } from "obsidian";
+import {
+  applyPatchRestoreOperations,
+  buildLegacyPatchRestoreCandidates,
+  buildPatchRestoreReportArtifact,
+  createForgeDocument,
+  evaluatePatchRestoreCandidates as evaluateCorePatchRestoreCandidates,
+  isPatchRestoreManifest,
+  parsePatchFile,
+  type ForgeDocument,
+  type LegacyPatchRestoreBackupDocument,
+  type PatchDocumentUpdate,
+  type PatchFile,
+  type PatchOperationChange,
+  type PatchRestoreApplyResult,
+  type PatchRestoreCandidate,
+  type PatchRestoreManifest,
+  type PatchRestoreValue,
+} from "@forge/core";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
-import { ensureFolder, localTimestamp, todayString } from "../utils/files";
-import { readNote, writeNote, parseNote } from "../utils/frontmatter";
-import { getTags, setTags, normalizeTags, addTag, removeTag, replaceTag } from "../utils/tags";
-import type {
-  PatchFile,
-  PatchOperationChange,
-  PatchRestoreValue,
-} from "../patch-engine";
+import { ensureFolder } from "../utils/files";
+import { serializeYaml } from "../utils/yaml";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ManifestChange {
-  file: string;
-  backup: string;
-}
-
-interface PatchManifest {
-  manifest_version?: number;
-  run_id: string;
-  patch_file: string;
-  description: string;
-  applied_at: string;
-  schema_version: string;
-  changes: ManifestChange[];
-  operations?: PatchOperationChange[];
-}
-
-function isManifestChange(value: unknown): value is ManifestChange {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.file === "string" && typeof candidate.backup === "string";
-}
-
-function isPatchManifest(value: unknown): value is PatchManifest {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.run_id === "string"
-    && typeof candidate.patch_file === "string"
-    && typeof candidate.description === "string"
-    && typeof candidate.applied_at === "string"
-    && typeof candidate.schema_version === "string"
-    && Array.isArray(candidate.changes)
-    && candidate.changes.every(isManifestChange);
-}
-
-type RestoreStatus =
-  | "reversible"
-  | "conflicted"
-  | "missing_target"
-  | "unsupported"
-  | "already_restored"
-  | "error";
-
-interface RestoreCandidate {
-  operation: PatchOperationChange;
-  status: RestoreStatus;
-  reason: string;
-  selected: boolean;
-}
-
-interface RestoreApplyResult {
-  operation: PatchOperationChange;
-  status: "restored" | "skipped" | "conflicted" | "error";
-  detail: string;
-}
+type PatchManifest = PatchRestoreManifest;
+type RestoreCandidate = PatchRestoreCandidate;
+type RestoreApplyResult = PatchRestoreApplyResult;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -104,7 +65,7 @@ export async function runRestorePatch(plugin: ForgePlugin): Promise<void> {
     try {
       const raw = await app.vault.read(file);
       const parsed: unknown = JSON.parse(raw);
-      if (isPatchManifest(parsed)) {
+      if (isPatchRestoreManifest(parsed)) {
         manifests.push(parsed);
       }
     } catch {
@@ -314,25 +275,22 @@ class RestorePatchModal extends Modal {
     manifest: PatchManifest,
     selected: RestoreCandidate[]
   ): Promise<void> {
-    const results: RestoreApplyResult[] = [];
-
-    for (const candidate of selected) {
-      const fresh = await evaluateRestoreOperation(this.app, candidate.operation);
-      if (fresh.status !== "reversible") {
-        results.push({
-          operation: candidate.operation,
-          status: fresh.status === "conflicted" ? "conflicted" : "skipped",
-          detail: fresh.reason,
-        });
-        continue;
-      }
-
-      results.push(await applyReverseOperation(
-        this.app,
-        this.plugin.settings.frontmatterFieldOrder,
-        candidate.operation
-      ));
-    }
+    const operations = selected.map((candidate) => candidate.operation);
+    const documents = await loadRestoreDocuments(this.app, operations);
+    const restore = applyPatchRestoreOperations({
+      documents,
+      operations,
+      settings: this.plugin.settings,
+      stringifyYaml: serializeYaml,
+    });
+    const writeErrors = await writeRestoreDocumentUpdates(this.app, restore.documents, operations);
+    const writeErrorOperationIds = new Set(writeErrors.map((result) => result.operation.id));
+    const results: RestoreApplyResult[] = [
+      ...restore.results.filter((result) =>
+        !(result.status === "restored" && writeErrorOperationIds.has(result.operation.id))
+      ),
+      ...writeErrors,
+    ];
 
     const reportPath = await writeRestoreReport(this.app, this.plugin, manifest, results, false);
     await this.plugin.patchHistoryService.readHistory("patch-history");
@@ -386,7 +344,12 @@ class RestorePatchModal extends Modal {
       }
     }
 
-    await writeRestoreReport(this.app, this.plugin, manifest, results, true);
+    await writeRestoreReport(this.app, this.plugin, manifest, results, true, {
+      restored,
+      conflicted: 0,
+      skipped: 0,
+      errors: failed,
+    });
     await this.plugin.patchHistoryService.readHistory("patch-history");
     await this.plugin.recomposeHealthDashboard();
 
@@ -408,20 +371,8 @@ async function evaluateRestoreCandidates(
   app: App,
   manifest: PatchManifest
 ): Promise<RestoreCandidate[]> {
-  const operations = manifest.operations ?? [];
-  const candidates: RestoreCandidate[] = [];
-
-  for (const operation of operations) {
-    const evaluated = await evaluateRestoreOperation(app, operation);
-    candidates.push({
-      operation,
-      status: evaluated.status,
-      reason: evaluated.reason,
-      selected: evaluated.status === "reversible",
-    });
-  }
-
-  return candidates;
+  const documents = await loadRestoreDocuments(app, manifest.operations ?? []);
+  return evaluateCorePatchRestoreCandidates(manifest, documents);
 }
 
 async function synthesizeLegacyOperationCandidates(
@@ -432,54 +383,18 @@ async function synthesizeLegacyOperationCandidates(
   const patchFile = await loadArchivedPatchFile(app, plugin, manifest);
   if (!patchFile || patchFile.operations.length === 0) return [];
 
-  const byFile = new Map<string, ManifestChange>();
-  for (const change of manifest.changes ?? []) {
-    byFile.set(normalizePath(change.file), change);
-  }
+  const targetPaths = new Set(patchFile.operations
+    .map((operation) => operation.target ? normalizePath(operation.target) : "")
+    .filter((path) => path.length > 0));
+  const currentDocuments = await loadRestoreDocumentsForPaths(app, [...targetPaths]);
+  const backupDocuments = await loadLegacyBackupDocuments(app, manifest, targetPaths);
 
-  const candidates: RestoreCandidate[] = [];
-  let seq = 0;
-
-  for (let opIndex = 0; opIndex < patchFile.operations.length; opIndex++) {
-    const op = patchFile.operations[opIndex];
-    const target = op.target ? normalizePath(op.target) : null;
-    if (!target) continue;
-
-    const manifestChange = byFile.get(target);
-    if (!manifestChange) continue;
-
-    const file = app.vault.getAbstractFileByPath(target);
-    if (!(file instanceof TFile)) continue;
-
-    const backupPath = normalizePath(manifestChange.backup);
-    if (!(await app.vault.adapter.exists(backupPath))) continue;
-
-    const backupRaw = await app.vault.adapter.read(backupPath);
-    const beforeNote = parseNote(backupRaw, file);
-    const currentNote = await readNote(app, file);
-    if (!currentNote) continue;
-
-    const change = synthesizeLegacyOperationChange(
-      op,
-      manifestChange,
-      file,
-      beforeNote.frontmatter,
-      ++seq,
-      opIndex
-    );
-
-    if (!change) continue;
-
-    const evaluated = await evaluateRestoreOperation(app, change);
-    candidates.push({
-      operation: change,
-      status: evaluated.status,
-      reason: `Reconstructed from legacy manifest: ${evaluated.reason}`,
-      selected: evaluated.status === "reversible",
-    });
-  }
-
-  return candidates;
+  return buildLegacyPatchRestoreCandidates({
+    patchFile,
+    manifest,
+    currentDocuments,
+    backupDocuments,
+  });
 }
 
 async function loadArchivedPatchFile(
@@ -501,15 +416,8 @@ async function loadArchivedPatchFile(
 
     try {
       const raw = await app.vault.read(file);
-      const yaml = extractPatchYaml(raw, path);
-      if (!yaml.trim()) continue;
-      const parsed = parseYaml(yaml) as Record<string, unknown>;
-      return {
-        meta: (parsed?.meta ?? {}),
-        operations: Array.isArray(parsed?.operations)
-          ? (parsed.operations as PatchFile["operations"])
-          : [],
-      };
+      const patch = parsePatchFile(raw, path, parseYaml);
+      if (patch) return patch;
     } catch {
       continue;
     }
@@ -518,289 +426,136 @@ async function loadArchivedPatchFile(
   return null;
 }
 
-function synthesizeLegacyOperationChange(
-  op: PatchFile["operations"][number],
-  manifestChange: ManifestChange,
-  file: TFile,
-  beforeFm: Record<string, unknown>,
-  seq: number,
-  opIndex: number
+async function loadRestoreDocuments(
+  app: App,
+  operations: PatchOperationChange[]
+): Promise<ForgeDocument[]> {
+  const paths = new Set<string>();
+  for (const operation of operations) {
+    paths.add(normalizePath(operation.file_after));
+    paths.add(normalizePath(operation.file_before));
+  }
+
+  return loadRestoreDocumentsForPaths(app, [...paths]);
+}
+
+async function loadRestoreDocumentsForPaths(
+  app: App,
+  paths: string[]
+): Promise<ForgeDocument[]> {
+  const documents: ForgeDocument[] = [];
+  for (const path of paths) {
+    const file = app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) continue;
+
+    try {
+      const content = await app.vault.read(file);
+      documents.push(createForgeDocument({
+        path: file.path,
+        content,
+        parseYaml,
+      }));
+    } catch {
+      // Missing or unreadable files are reported by the core restore evaluator.
+    }
+  }
+
+  return documents;
+}
+
+async function loadLegacyBackupDocuments(
+  app: App,
+  manifest: PatchManifest,
+  targetPaths: ReadonlySet<string>
+): Promise<LegacyPatchRestoreBackupDocument[]> {
+  const documents: LegacyPatchRestoreBackupDocument[] = [];
+
+  for (const change of manifest.changes ?? []) {
+    const targetPath = normalizePath(change.file);
+    if (!targetPaths.has(targetPath)) continue;
+
+    const backupPath = normalizePath(change.backup);
+    if (!(await app.vault.adapter.exists(backupPath))) continue;
+
+    try {
+      const backupRaw = await app.vault.adapter.read(backupPath);
+      const backupDocument = createForgeDocument({
+        path: targetPath,
+        content: backupRaw,
+        parseYaml,
+      });
+      documents.push({
+        file: targetPath,
+        frontmatter: backupDocument.frontmatter,
+      });
+    } catch {
+      // Unreadable backups cannot be reconstructed and will fall back to legacy restore.
+    }
+  }
+
+  return documents;
+}
+
+async function writeRestoreDocumentUpdates(
+  app: App,
+  updates: PatchDocumentUpdate[],
+  operations: PatchOperationChange[]
+): Promise<RestoreApplyResult[]> {
+  const errors: RestoreApplyResult[] = [];
+
+  for (const update of updates) {
+    const operation = operationForUpdate(update, operations);
+    if (!operation) continue;
+
+    const sourcePath = normalizePath(update.pathBefore);
+    const targetPath = normalizePath(update.pathAfter);
+    const sourceFile = app.vault.getAbstractFileByPath(sourcePath);
+    if (!(sourceFile instanceof TFile)) {
+      errors.push({ operation, status: "error", detail: "Current file is missing" });
+      continue;
+    }
+
+    try {
+      if (sourcePath.toLowerCase() === targetPath.toLowerCase()) {
+        await app.vault.modify(sourceFile, update.contentAfter);
+        continue;
+      }
+
+      if (app.vault.getAbstractFileByPath(targetPath)) {
+        errors.push({ operation, status: "conflicted", detail: "Original path is occupied" });
+        continue;
+      }
+
+      const folder = targetPath.includes("/") ? targetPath.substring(0, targetPath.lastIndexOf("/")) : "";
+      if (folder) await ensureFolder(app, folder);
+
+      await app.vault.rename(sourceFile, targetPath);
+      const movedFile = app.vault.getAbstractFileByPath(targetPath);
+      if (movedFile instanceof TFile) {
+        await app.vault.modify(movedFile, update.contentAfter);
+      }
+    } catch (error) {
+      errors.push({
+        operation,
+        status: "error",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return errors;
+}
+
+function operationForUpdate(
+  update: PatchDocumentUpdate,
+  operations: PatchOperationChange[]
 ): PatchOperationChange | null {
-  const id = `legacy-op-${String(seq).padStart(5, "0")}`;
-  const normalizedFile = normalizePath(file.path);
-  const backup = manifestChange.backup;
-
-  switch (op.op) {
-    case "set_field": {
-      if (!op.field) return null;
-      if (!Object.prototype.hasOwnProperty.call(op, "value") || op.value === undefined) return null;
-      const before = valueFromFrontmatter(beforeFm, op.field);
-      const after: PatchRestoreValue = { exists: true, value: op.value };
-      return {
-        id,
-        op_index: opIndex,
-        op: op.op,
-        file_before: normalizedFile,
-        file_after: normalizedFile,
-        status: "changed",
-        label: `${op.op} ${op.field}`,
-        target: { kind: "frontmatter_field", field: op.field },
-        before,
-        after,
-        reverse: {
-          kind: "set_field",
-          field: op.field,
-          value: before.exists ? before.value : undefined,
-          delete_if_missing_before: !before.exists,
-        },
-        backup,
-      };
-    }
-    case "remove_field": {
-      if (!op.field) return null;
-      const before = valueFromFrontmatter(beforeFm, op.field);
-      return {
-        id,
-        op_index: opIndex,
-        op: op.op,
-        file_before: normalizedFile,
-        file_after: normalizedFile,
-        status: "changed",
-        label: `${op.op} ${op.field}`,
-        target: { kind: "frontmatter_field", field: op.field },
-        before,
-        after: { exists: false },
-        reverse: {
-          kind: "set_field",
-          field: op.field,
-          value: before.exists ? before.value : undefined,
-          delete_if_missing_before: !before.exists,
-        },
-        backup,
-      };
-    }
-    case "add_tag":
-    case "remove_tag":
-    case "replace_tag":
-    case "normalize_tags": {
-      const beforeTags = normalizeTags(getTags(beforeFm));
-      const afterTags = synthesizeLegacyTagsAfter(op, beforeTags);
-      if (!afterTags) return null;
-      return {
-        id,
-        op_index: opIndex,
-        op: op.op,
-        file_before: normalizedFile,
-        file_after: normalizedFile,
-        status: "changed",
-        label: op.op,
-        target: { kind: "frontmatter_tags" },
-        before: { exists: true, value: beforeTags },
-        after: { exists: true, value: afterTags },
-        reverse: { kind: "set_tags", value: beforeTags },
-        backup,
-      };
-    }
-    default:
-      return null;
-  }
-}
-
-function synthesizeLegacyTagsAfter(
-  op: PatchFile["operations"][number],
-  beforeTags: string[]
-): string[] | null {
-  switch (op.op) {
-    case "add_tag":
-      return op.tag ? normalizeTags(addTag(beforeTags, op.tag)) : null;
-    case "remove_tag":
-      return op.tag ? normalizeTags(removeTag(beforeTags, op.tag)) : null;
-    case "replace_tag":
-      return op.old_tag && op.new_tag
-        ? normalizeTags(replaceTag(beforeTags, op.old_tag, op.new_tag))
-        : null;
-    case "normalize_tags":
-      return normalizeTags(beforeTags);
-    default:
-      return null;
-  }
-}
-
-async function evaluateRestoreOperation(
-  app: App,
-  operation: PatchOperationChange
-): Promise<{ status: RestoreStatus; reason: string }> {
-  try {
-    switch (operation.target.kind) {
-      case "frontmatter_field": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return { status: "missing_target", reason: "Current file is missing" };
-
-        const note = await readNote(app, file);
-        if (!note) return { status: "error", reason: "Could not read current file" };
-
-        const current = restoreValue(note.frontmatter[operation.target.field]);
-        return compareCurrentToManifest(current, operation.before, operation.after);
-      }
-      case "frontmatter_tags": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return { status: "missing_target", reason: "Current file is missing" };
-
-        const note = await readNote(app, file);
-        if (!note) return { status: "error", reason: "Could not read current file" };
-
-        const current = restoreValue(normalizeTags(getTags(note.frontmatter)));
-        return compareCurrentToManifest(current, normalizeManifestArray(operation.before), normalizeManifestArray(operation.after));
-      }
-      case "frontmatter_order": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return { status: "missing_target", reason: "Current file is missing" };
-
-        const note = await readNote(app, file);
-        if (!note) return { status: "error", reason: "Could not read current file" };
-
-        const current = restoreValue(Object.keys(note.frontmatter));
-        return compareCurrentToManifest(current, operation.before, operation.after);
-      }
-      case "note_move": {
-        const currentFile = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        const originalPath = app.vault.getAbstractFileByPath(normalizePath(operation.file_before));
-        if (currentFile instanceof TFile && !originalPath) {
-          return { status: "reversible", reason: "Ready to move note back" };
-        }
-        if (!currentFile && originalPath instanceof TFile) {
-          return { status: "already_restored", reason: "Note is already back at its original path" };
-        }
-        if (!currentFile) return { status: "missing_target", reason: "Moved note is missing" };
-        return { status: "conflicted", reason: "Original path is occupied" };
-      }
-      default:
-        return { status: "unsupported", reason: "Operation target is unsupported" };
-    }
-  } catch (e) {
-    return { status: "error", reason: String(e) };
-  }
-}
-
-async function applyReverseOperation(
-  app: App,
-  fieldOrder: string[],
-  operation: PatchOperationChange
-): Promise<RestoreApplyResult> {
-  try {
-    switch (operation.reverse.kind) {
-      case "set_field": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return result(operation, "error", "Current file is missing");
-        const note = await readNote(app, file);
-        if (!note) return result(operation, "error", "Could not read current file");
-
-        if (operation.reverse.delete_if_missing_before) {
-          delete note.frontmatter[operation.reverse.field];
-        } else {
-          note.frontmatter[operation.reverse.field] = operation.reverse.value;
-        }
-        await writeNote(app, note, fieldOrder);
-        return result(operation, "restored", "Field restored");
-      }
-      case "set_tags": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return result(operation, "error", "Current file is missing");
-        const note = await readNote(app, file);
-        if (!note) return result(operation, "error", "Could not read current file");
-
-        setTags(note.frontmatter, operation.reverse.value);
-        await writeNote(app, note, fieldOrder);
-        return result(operation, "restored", "Tags restored");
-      }
-      case "set_frontmatter_order": {
-        const file = app.vault.getAbstractFileByPath(normalizePath(operation.file_after));
-        if (!(file instanceof TFile)) return result(operation, "error", "Current file is missing");
-        const note = await readNote(app, file);
-        if (!note) return result(operation, "error", "Could not read current file");
-
-        await writeNote(app, note, operation.reverse.keys);
-        return result(operation, "restored", "Frontmatter order restored");
-      }
-      case "move_note": {
-        const from = normalizePath(operation.reverse.from);
-        const to = normalizePath(operation.reverse.to);
-        const file = app.vault.getAbstractFileByPath(from);
-        if (!(file instanceof TFile)) return result(operation, "error", "Moved note is missing");
-        if (app.vault.getAbstractFileByPath(to)) return result(operation, "conflicted", "Original path is occupied");
-
-        const folder = to.includes("/") ? to.substring(0, to.lastIndexOf("/")) : "";
-        if (folder) await ensureFolder(app, folder);
-        await app.vault.rename(file, to);
-        return result(operation, "restored", "Note moved back");
-      }
-    }
-  } catch (e) {
-    return result(operation, "error", String(e));
-  }
-}
-
-function compareCurrentToManifest(
-  current: PatchRestoreValue,
-  before: PatchRestoreValue,
-  after: PatchRestoreValue
-): { status: RestoreStatus; reason: string } {
-  if (sameRestoreValue(current, after)) {
-    return { status: "reversible", reason: "Current value still matches patch output" };
-  }
-  if (sameRestoreValue(current, before)) {
-    return { status: "already_restored", reason: "Value already matches pre-patch state" };
-  }
-  return { status: "conflicted", reason: "Current value changed after patch apply" };
-}
-
-function result(
-  operation: PatchOperationChange,
-  status: RestoreApplyResult["status"],
-  detail: string
-): RestoreApplyResult {
-  return { operation, status, detail };
-}
-
-function valueFromFrontmatter(
-  frontmatter: Record<string, unknown>,
-  field: string
-): PatchRestoreValue {
-  return Object.prototype.hasOwnProperty.call(frontmatter, field)
-    ? { exists: true, value: frontmatter[field] }
-    : { exists: false };
-}
-
-function restoreValue(value: unknown): PatchRestoreValue {
-  return value === undefined ? { exists: false } : { exists: true, value };
-}
-
-function normalizeManifestArray(value: PatchRestoreValue): PatchRestoreValue {
-  if (!value.exists || !Array.isArray(value.value)) return value;
-  return { exists: true, value: normalizeTags(value.value.map((v) => String(v))) };
-}
-
-function sameRestoreValue(a: PatchRestoreValue, b: PatchRestoreValue): boolean {
-  if (a.exists !== b.exists) return false;
-  if (!a.exists && !b.exists) return true;
-  if (!a.exists || !b.exists) return false;
-  return stableStringify(a.value) === stableStringify(b.value);
-}
-
-function stableStringify(value: unknown): string {
-  return JSON.stringify(sortDeep(value));
-}
-
-function sortDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortDeep);
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) {
-      out[key] = sortDeep((value as Record<string, unknown>)[key]);
-    }
-    return out;
-  }
-  return value;
+  const before = normalizePath(update.pathBefore).toLowerCase();
+  const after = normalizePath(update.pathAfter).toLowerCase();
+  return operations.find((operation) =>
+    normalizePath(operation.file_after).toLowerCase() === before ||
+    normalizePath(operation.file_before).toLowerCase() === after
+  ) ?? operations[0] ?? null;
 }
 
 function describeRestoreValue(value: PatchRestoreValue): string {
@@ -810,92 +565,23 @@ function describeRestoreValue(value: PatchRestoreValue): string {
   return JSON.stringify(value.value);
 }
 
-function extractPatchYaml(raw: string, patchFilePath: string): string {
-  if (!patchFilePath.toLowerCase().endsWith(".md")) return raw;
-  const match = raw.match(/```ya?ml\s*\r?\n([\s\S]*?)```/i);
-  return match?.[1]?.trim() ?? "";
-}
-
 async function writeRestoreReport(
   app: App,
   plugin: ForgePlugin,
   manifest: PatchManifest,
   results: RestoreApplyResult[],
-  legacy: boolean
+  legacy: boolean,
+  summary?: { restored: number; conflicted: number; skipped: number; errors: number }
 ): Promise<string> {
-  const paths = getVaultPaths(plugin.settings);
-  await ensureFolder(app, paths.patchReports);
+  const artifact = buildPatchRestoreReportArtifact(plugin.settings, manifest, results, { legacy, summary });
+  await ensureFolder(app, artifact.folder);
 
-  const reportPath = normalizePath(
-    `${paths.patchReports}/${manifest.run_id}-patch-report-restore.md`
-  );
-  const today = todayString();
-  const restored = results.filter((r) => r.status === "restored");
-  const conflicted = results.filter((r) => r.status === "conflicted");
-  const skipped = results.filter((r) => r.status === "skipped");
-  const errors = results.filter((r) => r.status === "error");
-
-  const lines = [
-    "---",
-    "type: reference",
-    "status: active",
-    "tags:",
-    "  - meta/patch-report",
-    `created: ${today}`,
-    `updated: ${today}`,
-    "ai_private: false",
-    "review_cycle: never",
-    "---",
-    "",
-    `source:: ${manifest.patch_file}`,
-    "patch_mode:: restore",
-    `source_patch_run:: ${manifest.run_id}`,
-    `restore_legacy:: ${legacy}`,
-    `restored_count:: ${restored.length}`,
-    `conflicted_count:: ${conflicted.length}`,
-    `skipped_count:: ${skipped.length}`,
-    `error_count:: ${errors.length}`,
-    "",
-    "# Patch Restore Report",
-    "",
-    "## Summary",
-    "",
-    `- Source run: ${manifest.run_id}`,
-    `- Description: ${manifest.description || ""}`,
-    `- Restored at: ${localTimestamp()}`,
-    `- Legacy full-file restore: ${legacy ? "yes" : "no"}`,
-    `- Restored: ${restored.length}`,
-    `- Conflicted: ${conflicted.length}`,
-    `- Skipped: ${skipped.length}`,
-    `- Errors: ${errors.length}`,
-    "",
-  ];
-
-  if (legacy) {
-    lines.push("## Legacy Restore", "");
-    lines.push("This restore used full-file backup replacement because the manifest did not contain operation-level restore data.", "");
-  }
-
-  for (const [heading, items] of [
-    ["Restored", restored],
-    ["Conflicted", conflicted],
-    ["Skipped", skipped],
-    ["Errors", errors],
-  ] as const) {
-    if (items.length === 0) continue;
-    lines.push(`## ${heading}`, "");
-    for (const item of items) {
-      lines.push(`- \`[${item.operation.op}]\` \`${item.operation.file_after}\` - ${item.detail}`);
-    }
-    lines.push("");
-  }
-
-  const existing = app.vault.getAbstractFileByPath(reportPath);
+  const existing = app.vault.getAbstractFileByPath(normalizePath(artifact.path));
   if (existing instanceof TFile) {
-    await app.vault.modify(existing, lines.join("\n"));
+    await app.vault.modify(existing, artifact.content);
   } else {
-    await app.vault.create(reportPath, lines.join("\n"));
+    await app.vault.create(normalizePath(artifact.path), artifact.content);
   }
 
-  return reportPath;
+  return artifact.path;
 }

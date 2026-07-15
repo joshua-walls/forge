@@ -187,6 +187,7 @@ class DataviewRenameConfirmModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
+    const paths = getVaultPaths(this.plugin.settings);
 
     contentEl.createEl("h2", { text: "Rename dataview folder — confirm" });
     contentEl.createEl("p", {
@@ -210,7 +211,7 @@ class DataviewRenameConfirmModal extends Modal {
 
     if (this.plugin.settings.patchBackupEnabled) {
       contentEl.createEl("p", {
-        text: "Backups will be written to system/forge/patches/backups/",
+        text: `Backups will be written to ${paths.patchBackups}/`,
         cls: "forge-backup-notice",
       });
     }
@@ -222,7 +223,6 @@ class DataviewRenameConfirmModal extends Modal {
       void (async () => {
         this.close();
 
-        const paths = getVaultPaths(this.plugin.settings);
         let changed = 0;
 
         for (const { file, updated } of this.candidates) {

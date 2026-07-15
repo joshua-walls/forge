@@ -967,6 +967,112 @@
   padding: 16px 0;
   opacity: 0.6;
 }
+
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.forge-statusbar {
+  --forge-statusbar-status-color: var(--text-muted);
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 4px;
+  max-width: min(28ch, 22vw);
+  min-width: 0;
+  user-select: none;
+}
+
+.forge-statusbar[data-status="good"] {
+  --forge-statusbar-status-color: var(--text-success);
+}
+
+.forge-statusbar[data-status="warning"] {
+  --forge-statusbar-status-color: var(--text-warning);
+}
+
+.forge-statusbar[data-status="critical"] {
+  --forge-statusbar-status-color: var(--text-error);
+}
+
+.forge-statusbar[data-status="review"],
+.forge-statusbar[data-status="muted"] {
+  --forge-statusbar-status-color: var(--text-muted);
+}
+
+.forge-statusbar:hover,
+.forge-statusbar:focus-visible {
+  color: var(--text-normal);
+}
+
+.forge-statusbar-icon {
+  color: var(--forge-statusbar-status-color);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 14px;
+  width: 14px;
+}
+
+.forge-statusbar-icon svg,
+.forge-statusbar-menu-button svg {
+  height: 14px;
+  width: 14px;
+}
+
+.forge-statusbar.is-refreshing .forge-statusbar-icon svg {
+  animation: forge-statusbar-spin 1s linear infinite;
+}
+
+.forge-statusbar-label {
+  color: currentColor;
+  font-size: var(--font-ui-smaller);
+  line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.forge-statusbar-menu-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 16px;
+  justify-content: center;
+  margin: 0;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  width: 16px;
+}
+
+button.forge-statusbar-menu-button:hover,
+button.forge-statusbar-menu-button:focus-visible {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+@keyframes forge-statusbar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-statusbar.is-refreshing .forge-statusbar-icon svg {
+    animation: none;
+  }
+}
 /* Vault Health Dashboard */
 .forge-health-dashboard {
   --forge-health-action-destructive-bg: var(--text-error);
@@ -974,6 +1080,8 @@
   --forge-health-action-destructive-color: var(--text-on-accent);
   --forge-health-action-destructive-hover-bg: var(--text-error);
   --forge-health-action-destructive-hover-color: var(--text-on-accent);
+  color: var(--text-normal);
+  line-height: 1.35;
   padding: 14px 16px 48px;
   overflow-y: auto;
   container-type: inline-size;
@@ -1084,7 +1192,8 @@
 .forge-health-issue-action,
 .forge-health-section-message {
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
+  line-height: 1.35;
 }
 
 .forge-health-section-message {
@@ -1103,7 +1212,7 @@
   --button-radius: 6px;
   border-radius: 6px;
   box-shadow: none;
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
   min-height: 0;
   padding: 5px 10px;
 }
@@ -1123,9 +1232,99 @@
   border-radius: 999px;
   color: var(--forge-health-status-color);
   padding: 4px 10px;
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
+  font-weight: 500;
   white-space: nowrap;
   max-width: 100%;
+}
+
+.forge-health-tabs {
+  align-items: center;
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  gap: 6px;
+  margin: 0 0 6px;
+  overflow-x: auto;
+  padding: 0 0 12px;
+  scrollbar-width: thin;
+}
+
+.forge-health-dashboard button.forge-health-tab {
+  --button-radius: 6px;
+  align-items: center;
+  appearance: none;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: inset 0 -2px 0 transparent;
+  color: var(--text-normal);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  gap: 6px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 30px;
+  min-width: max-content;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.forge-health-dashboard button.forge-health-tab:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.forge-health-dashboard button.forge-health-tab.is-active {
+  background: var(--background-primary);
+  border-color: var(--interactive-accent);
+  box-shadow: inset 0 -2px 0 var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.forge-health-dashboard button.forge-health-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.forge-health-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.forge-health-tab-badge {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  min-width: 1.55em;
+  padding: 2px 5px;
+  text-align: center;
+}
+
+.forge-health-tab-badge[data-status="critical"] {
+  border-color: color-mix(in srgb, var(--text-error) 48%, var(--background-modifier-border));
+  color: var(--text-error);
+}
+
+.forge-health-tab-badge[data-status="warning"] {
+  border-color: color-mix(in srgb, var(--text-warning) 48%, var(--background-modifier-border));
+  color: var(--text-warning);
+}
+
+.forge-health-tab-badge[data-status="good"] {
+  border-color: color-mix(in srgb, var(--text-success) 48%, var(--background-modifier-border));
+  color: var(--text-success);
+}
+
+.forge-health-tab-content {
+  min-width: 0;
 }
 
 .forge-health-empty,
@@ -1168,7 +1367,7 @@
   border-radius: 4px;
   box-shadow: none;
   display: inline-flex;
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
   justify-content: center;
   line-height: 1;
   min-height: 0;
@@ -1197,7 +1396,8 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 999px;
   color: var(--forge-health-status-color);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
+  font-weight: 500;
   line-height: 1.2;
   padding: 3px 8px;
   white-space: nowrap;
@@ -1206,7 +1406,8 @@
 
 .forge-health-section-meta {
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
+  line-height: 1.35;
   margin: 0 0 10px 0;
 }
 
@@ -1215,7 +1416,27 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 12px 0 10px 0;
+  margin: 10px 0 8px 0;
+}
+
+.forge-health-action-group {
+  margin: 10px 0 12px;
+}
+
+.forge-health-action-group:first-of-type {
+  margin-top: 0;
+}
+
+.forge-health-action-group-title {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 6px;
+}
+
+.forge-health-action-group > .forge-health-section-actions {
+  margin: 0;
 }
 
 .forge-health-dashboard button.forge-health-action-button,
@@ -1224,22 +1445,25 @@
   --button-height: auto;
   appearance: none;
   align-items: center;
+  border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   box-shadow: none;
   display: inline-flex;
-  flex: 0 1 auto;
-  font-size: var(--font-ui-smaller);
+  flex: 0 0 auto;
+  font-size: var(--font-ui-small);
   justify-content: center;
   line-height: 1.2;
   max-width: 100%;
   min-height: 0;
-  overflow-wrap: anywhere;
-  padding: 5px 10px;
-  white-space: normal;
+  overflow: hidden;
+  overflow-wrap: normal;
+  padding: 4px 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .forge-health-dashboard button.forge-health-action-button {
-  min-width: 0;
+  min-inline-size: max-content;
   width: auto;
 }
 
@@ -1248,9 +1472,9 @@
 }
 
 .forge-health-dashboard button.forge-health-action-secondary {
-  background: transparent;
+  background: var(--background-secondary);
   border-color: var(--background-modifier-border);
-  color: var(--text-muted);
+  color: var(--text-normal);
 }
 
 .forge-health-dashboard button.forge-health-action-secondary:hover {
@@ -1268,7 +1492,6 @@
 .forge-health-dashboard button.forge-health-action-destructive:hover {
   background: var(--forge-health-action-destructive-hover-bg);
   color: var(--forge-health-action-destructive-hover-color);
-  filter: brightness(1.08);
 }
 
 .forge-health-dashboard button.forge-health-action-destructive:disabled {
@@ -1309,7 +1532,8 @@
 
 .forge-health-metric-label {
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
+  line-height: 1.25;
   margin-top: 4px;
   overflow-wrap: anywhere;
 }
@@ -1324,7 +1548,7 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin: 8px 0 10px 0;
+  margin: 6px 0 8px 0;
 }
 
 .forge-health-issue-group-list {
@@ -1434,6 +1658,7 @@
 }
 
 .forge-health-issue-main {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -1444,54 +1669,13 @@
 
 .forge-health-issue-message {
   margin-top: 3px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.forge-health-preview-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 12px;
-}
-
-.forge-health-preview-row {
-  align-items: flex-start;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-left-width: 4px;
-  border-radius: 6px;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 8px 10px;
-}
-
-.forge-health-preview-row[data-severity="critical"] {
-  border-left-color: var(--text-error);
-}
-
-.forge-health-preview-row[data-severity="warning"] {
-  border-left-color: var(--text-warning);
-}
-
-.forge-health-preview-row[data-severity="info"] {
-  border-left-color: var(--text-accent);
-}
-
-.forge-health-preview-main {
-  min-width: 0;
-}
-
-.forge-health-preview-title {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.forge-health-preview-detail {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  margin-top: 3px;
-  overflow-wrap: anywhere;
+.forge-health-issue > button.forge-health-action-button {
+  flex: 0 0 auto;
+  min-inline-size: 4.5rem;
 }
 
 .forge-health-chip-list {
@@ -1506,7 +1690,7 @@
   border-radius: 999px;
   padding: 3px 8px;
   color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
 }
 
 .forge-health-table {
@@ -1540,8 +1724,7 @@
 
 @media (max-width: 600px) {
   .forge-health-header,
-  .forge-health-issue,
-  .forge-health-preview-row {
+  .forge-health-issue {
     flex-direction: column;
   }
 
@@ -1616,7 +1799,30 @@
   }
 }
 
+@container (max-width: 520px) {
+  .forge-health-section-actions {
+    align-items: center;
+    display: flex;
+  }
+
+  .forge-health-dashboard .forge-health-section-actions button.forge-health-action-button,
+  .forge-health-dashboard .forge-health-issue-controls button {
+    min-height: 0;
+    width: auto;
+    max-inline-size: 100%;
+  }
+}
+
 @container (max-width: 280px) {
+  .forge-health-tabs {
+    gap: 3px;
+    padding-bottom: 8px;
+  }
+
+  .forge-health-dashboard button.forge-health-tab {
+    padding-inline: 7px;
+  }
+
   .forge-health-metric-grid {
     grid-template-columns: 1fr;
   }
@@ -1633,11 +1839,6 @@
   .forge-health-issue-group-count {
     grid-column: 2;
     justify-self: start;
-  }
-
-  .forge-health-section-actions {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .forge-health-dashboard .forge-health-section-actions button.forge-health-action-button,

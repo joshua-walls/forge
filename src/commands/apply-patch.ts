@@ -10,6 +10,7 @@
 //   6. If settings.patchAutoLintAfterApply: trigger lint (Milestone 4)
 
 import { App, FuzzySuggestModal, Modal, Notice, TFile, normalizePath } from "obsidian";
+import { createPatchTemplateContent } from "@forge/core";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import {
@@ -23,7 +24,7 @@ import {
   writePatchReport,
 } from "../patch-manifest";
 import { runVaultLint } from "./run-lint";
-import { ensureFolder, todayString } from "../utils/files";
+import { ensureFolder } from "../utils/files";
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -190,35 +191,7 @@ async function createPatchTemplateIfMissing(
 
   if (folder) await ensureFolder(app, folder);
 
-  const today = todayString();
-  const content = [
-    "---",
-    "type: procedure",
-    "status: draft",
-    "tags:",
-    "  - tool/forge",
-    `created: ${today}`,
-    `updated: ${today}`,
-    "ai_private: false",
-    "review_cycle: never",
-    "---",
-    "",
-    "# Vault Patch",
-    "",
-    "Patch file for Forge.",
-    "",
-    "## Patch",
-    "",
-    "```yaml",
-    "meta:",
-    "  description: Manual vault patch",
-    "",
-    "operations: []",
-    "```",
-    "",
-  ].join("\n");
-
-  await app.vault.create(normalizedPath, content);
+  await app.vault.create(normalizedPath, createPatchTemplateContent());
   return true;
 }
 

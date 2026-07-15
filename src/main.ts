@@ -4,6 +4,7 @@
 import { Plugin, Notice, WorkspaceLeaf } from "obsidian";
 import {
   DEFAULT_SETTINGS,
+  normalizeForgeSettings,
   normalizeInboxRetentionAction,
   type DashboardAutoRefreshIntervalMinutes,
   ForgeSettings,
@@ -20,6 +21,7 @@ import {
   FORGE_HEALTH_DASHBOARD_VIEW,
   ForgeHealthDashboardView,
 } from "./dashboard_view";
+import type { DashboardSnapshot } from "./dashboard_types";
 import { MigrationNoticeModal } from "./migration-notice";
 import { runApplyPatch, runApplyPatchFromPatchesFolder } from "./commands/apply-patch";
 import { runVaultLint } from "./commands/run-lint";
@@ -38,6 +40,7 @@ import { runShapeLint } from "./commands/run-shape-lint";
 import { getVaultPaths } from "./vault-paths";
 import { DataviewExpansionService } from "./dataview_expansion_service";
 import { ActiveFileLintService } from "./active_file_lint_service";
+import { ForgeStatusBar } from "./status_bar";
 
 type LegacyDashboardRuntimeSettings = {
   dashboardAutoRefreshEnabled?: boolean;
@@ -66,9 +69,11 @@ export default class ForgePlugin extends Plugin {
   dashboardService: DashboardService;
   dataviewExpansionService: DataviewExpansionService;
   activeFileLintService: ActiveFileLintService;
+  statusBar: ForgeStatusBar | null = null;
   hasPendingExternalSettingsReload = false;
   private lastKnownSettingsMtime = 0;
   private readonly settingsPollIntervalMs = 5_000;
+  private schemaCacheRetryTimer: number | null = null;
 
   private handleCommandError(commandId: string, error: unknown): void {
     const message = error instanceof Error ? error.message : "Unexpected error";
@@ -141,6 +146,8 @@ export default class ForgePlugin extends Plugin {
     );
     this.dataviewExpansionService = new DataviewExpansionService(this.app, this, this.settings);
     this.activeFileLintService = new ActiveFileLintService(this.app, this, this.settings);
+    this.statusBar = new ForgeStatusBar(this);
+    this.statusBar.load();
 
     this.registerView(
       FORGE_HEALTH_DASHBOARD_VIEW,
@@ -401,8 +408,7 @@ export default class ForgePlugin extends Plugin {
       callback: () => {
         void (async () => {
           try {
-            await this.dashboardService.refreshSnapshot();
-            new Notice("Forge: Vault Health Dashboard refreshed.", 4000);
+            await this.refreshHealthDashboard();
           } catch (error) {
             this.handleCommandError("refresh-vault-health-dashboard", error);
           }
@@ -499,7 +505,8 @@ export default class ForgePlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       // Warm schema cache — retry once after 3s if vault not ready yet (iOS sync delay)
       void this.schemaCache.refresh().catch(() => {
-        window.setTimeout(() => {
+        this.schemaCacheRetryTimer = window.setTimeout(() => {
+          this.schemaCacheRetryTimer = null;
           void this.schemaCache.refresh().catch((error: unknown) => {
             console.warn("[Forge] Schema cache retry failed:", error);
           });
@@ -513,6 +520,14 @@ export default class ForgePlugin extends Plugin {
   }
 
   onunload(): void {
+    if (this.schemaCacheRetryTimer !== null) {
+      window.clearTimeout(this.schemaCacheRetryTimer);
+      this.schemaCacheRetryTimer = null;
+    }
+    this.dataviewExpansionService?.unload();
+    this.activeFileLintService?.unload();
+    this.statusBar?.unload();
+    this.statusBar = null;
   }
 
   async openHealthDashboard(): Promise<void> {
@@ -541,6 +556,25 @@ export default class ForgePlugin extends Plugin {
     });
   }
 
+  async refreshHealthDashboard(options: { notify?: boolean; reloadViews?: boolean } = {}): Promise<DashboardSnapshot> {
+    const notify = options.notify ?? true;
+    const reloadViews = options.reloadViews ?? true;
+    this.statusBar?.setRefreshing(true);
+    try {
+      const snapshot = await this.dashboardService.refreshSnapshot();
+      this.statusBar?.setSnapshot(snapshot);
+      if (reloadViews) {
+        await this.reloadHealthDashboardViewsFromCache();
+      }
+      if (notify) {
+        new Notice("Forge: Vault Health Dashboard refreshed.", 4000);
+      }
+      return snapshot;
+    } finally {
+      this.statusBar?.setRefreshing(false);
+    }
+  }
+
   openForgeSettings(): void {
     const setting = (this.app as AppWithSettingsManager).setting;
     if (!setting?.open) {
@@ -554,7 +588,8 @@ export default class ForgePlugin extends Plugin {
 
   async recomposeHealthDashboard(): Promise<void> {
     try {
-      await this.dashboardService.composeSnapshotFromLatest();
+      const snapshot = await this.dashboardService.composeSnapshotFromLatest();
+      this.statusBar?.setSnapshot(snapshot);
       await this.reloadHealthDashboardViewsFromCache();
     } catch (e) {
       console.warn("[Forge] Could not recompose health dashboard:", e);
@@ -568,6 +603,7 @@ export default class ForgePlugin extends Plugin {
         leaf.view.render();
       }
     }
+    this.statusBar?.render();
   }
 
   async reloadHealthDashboardViewsFromCache(): Promise<void> {
@@ -577,6 +613,7 @@ export default class ForgePlugin extends Plugin {
         await leaf.view.reloadFromCache();
       }
     }
+    await this.statusBar?.reloadFromCache();
   }
 
   async loadSettings(): Promise<void> {
@@ -585,7 +622,7 @@ export default class ForgePlugin extends Plugin {
       ? (rawSettings as Record<string, unknown>).inboxRetentionAction
       : undefined;
     const loaded = sanitizeLoadedSettings(rawSettings);
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    this.settings = normalizeForgeSettings(Object.assign({}, DEFAULT_SETTINGS, loaded));
     this.settings.inboxRetentionAction = normalizeInboxRetentionAction(legacyInboxRetentionAction);
 
     if ("dataviewExpansionAutoUpdateOnSave" in loaded && !("dataviewExpansionAutoUpdateMode" in loaded)) {
@@ -702,7 +739,9 @@ export default class ForgePlugin extends Plugin {
 
       this.lastKnownSettingsMtime = mtime;
       const stored = sanitizeLoadedSettings((await this.loadData()) ?? {});
-      const normalizedStored = settingsForPersistence(Object.assign({}, DEFAULT_SETTINGS, stored));
+      const normalizedStored = settingsForPersistence(
+        normalizeForgeSettings(Object.assign({}, DEFAULT_SETTINGS, stored))
+      );
       const normalizedCurrent = settingsForPersistence(this.settings);
       if (JSON.stringify(normalizedStored) === JSON.stringify(normalizedCurrent)) return;
 
@@ -743,6 +782,7 @@ export default class ForgePlugin extends Plugin {
         await leaf.view.onSettingsReloaded();
       }
     }
+    await this.statusBar?.reloadFromCache();
   }
 }
 

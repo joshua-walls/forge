@@ -1,17 +1,23 @@
 {
   "name": "forge",
-  "version": "1.10.5",
+  "version": "2.0.0",
   "description": "Define your vault's structure and let Forge enforce it — lint, normalize, patch, and maintain with confidence.",
   "main": "main.js",
   "scripts": {
+    "build:core": "node scripts/ensure-core-built.mjs",
     "dev": "node esbuild.config.mjs",
-    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
-    "lint:obsidian": "npm exec -- eslint --no-warn-ignored \"src/**/*.ts\" \"manifest.json\" \"styles.css\"",
+    "typecheck": "npm run build:core && tsc --noEmit --skipLibCheck",
+    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "lint:obsidian": "npm run build:core && npm exec -- eslint --no-warn-ignored \"src/**/*.ts\" \"manifest.json\" \"styles.css\"",
+    "test": "npm run build:core && node --test tests/*.test.mjs",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
   "keywords": [],
   "author": "Joshua Walls",
   "license": "MIT",
+  "dependencies": {
+    "@forge/core": "file:./forge-core"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@eslint/json": "^2.0.0",

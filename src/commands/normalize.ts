@@ -19,17 +19,15 @@
 //   - Write a summary notice on completion
 
 import { App, Modal, Notice, TFile } from "obsidian";
+import {
+  buildVaultScanExemptList,
+  planNormalizeFrontmatter,
+  planNormalizeTags,
+} from "@forge/core";
 import type ForgePlugin from "../main";
 import { getVaultPaths } from "../vault-paths";
 import { readNote, writeNote, backupNote } from "../utils/frontmatter";
-import {
-  getTags,
-  setTags,
-  normalizeTags,
-  convertTagSeparator,
-  isInvalidTag,
-} from "../utils/tags";
-import { buildExemptList, getMarkdownFiles, isExempt } from "../utils/files";
+import { getMarkdownFiles, isExempt } from "../utils/files";
 import { loadSchema } from "../utils/schema";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -47,7 +45,7 @@ export async function runNormalizeTags(plugin: ForgePlugin): Promise<void> {
   const paths = getVaultPaths(settings);
 
   const schema = await loadSchema(app, settings);
-  const exemptPaths = buildExemptList(schema?.exempt_paths ?? [], paths.forge);
+  const exemptPaths = buildVaultScanExemptList(settings, schema?.exempt_paths ?? []);
 
 
   const files = getMarkdownFiles(app).filter(
@@ -71,6 +69,7 @@ export async function runNormalizeTags(plugin: ForgePlugin): Promise<void> {
     "Normalize Tags",
     `${candidates.length} file(s) have tags to normalize.`,
     candidates,
+    paths.patchBackups,
     async () => {
       const started = Date.now();
       const applyResults = await normalizeTagsPass(app, settings, files, false);
@@ -104,41 +103,19 @@ async function normalizeTagsPass(
     const note = await readNote(app, file);
     if (!note || !note.hasFrontmatter) continue;
 
-    const originalTags = getTags(note.frontmatter);
-
-    // Convert namespace:tag → namespace/tag, remove invalid tags
-    const converted = originalTags
-      .map(convertTagSeparator)
-      .filter((t) => !isInvalidTag(t));
-
-    // Sort and deduplicate
-    const normalized = normalizeTags(converted);
-
-    const originalStr = originalTags.join("|");
-    const normalizedStr = normalized.join("|");
-
-    if (originalStr === normalizedStr) continue;
-
-    const removedCount  = originalTags.length - converted.length;
-    const convertedCount = originalTags.filter(
-      (t, i) => convertTagSeparator(t) !== t
-    ).length;
-
-    const details: string[] = [];
-    if (convertedCount > 0) details.push(`${convertedCount} separator(s) fixed`);
-    if (removedCount > 0) details.push(`${removedCount} invalid tag(s) removed`);
-    if (originalStr !== normalizedStr) details.push("sorted/deduped");
+    const plan = planNormalizeTags(note.frontmatter);
+    if (!plan.changed) continue;
 
     if (!dryRun) {
       await backupNote(app, file, paths.patchBackups);
-      setTags(note.frontmatter, normalized);
+      note.frontmatter = plan.frontmatter;
       await writeNote(app, note, settings.frontmatterFieldOrder);
     }
 
     results.push({
       file: file.path,
       changed: true,
-      detail: details.join(", "),
+      detail: plan.details.join(", "),
     });
   }
 
@@ -152,10 +129,7 @@ export async function runNormalizeFrontmatter(plugin: ForgePlugin): Promise<void
   const paths = getVaultPaths(settings);
 
   const schema = await loadSchema(app, settings);
-  const exemptPaths = [
-    ...(schema?.exempt_paths ?? []),
-    paths.forge,
-  ];
+  const exemptPaths = buildVaultScanExemptList(settings, schema?.exempt_paths ?? []);
 
   const files = getMarkdownFiles(app).filter(
     (f) => !isExempt(f.path, exemptPaths)
@@ -178,6 +152,7 @@ export async function runNormalizeFrontmatter(plugin: ForgePlugin): Promise<void
     "Normalize Frontmatter",
     `${candidates.length} file(s) have frontmatter to normalize.`,
     candidates,
+    paths.patchBackups,
     async () => {
       const started = Date.now();
       const applyResults = await normalizeFrontmatterPass(app, settings, files, false, plugin);
@@ -222,61 +197,19 @@ async function normalizeFrontmatterPass(
     const note = await readNote(app, file);
     if (!note || !note.hasFrontmatter) continue;
 
-    const fm = note.frontmatter;
-    let changed = false;
-    const details: string[] = [];
-
-    // Lowercase field names
-    const upperKeys = Object.keys(fm).filter((k) => k !== k.toLowerCase());
-    if (upperKeys.length > 0) {
-      for (const key of upperKeys) {
-        const lower = key.toLowerCase();
-        if (lower !== key) {
-          fm[lower] = fm[key];
-          delete fm[key];
-        }
-      }
-      changed = true;
-      details.push(`${upperKeys.length} field name(s) lowercased`);
-    }
-
-    // Lowercase values for enum fields
-    for (const field of lowercaseFields) {
-      if (!(field in fm)) continue;
-
-      const original = fm[field];
-      if (typeof original !== "string") continue;
-
-      const lower = original.toLowerCase();
-      if (original !== lower) {
-        fm[field] = lower;
-        changed = true;
-        details.push(`${field} value lowercased`);
-      }
-    }
-
-    // Lowercase tags
-    const tags = getTags(fm);
-    const loweredTags = tags.map((t) => t.toLowerCase());
-    const tagStr = tags.join("|");
-    const loweredStr = loweredTags.join("|");
-    if (tagStr !== loweredStr) {
-      setTags(fm, loweredTags);
-      changed = true;
-      details.push("tags lowercased");
-    }
-
-    if (!changed) continue;
+    const plan = planNormalizeFrontmatter(note.frontmatter, lowercaseFields);
+    if (!plan.changed) continue;
 
     if (!dryRun) {
       await backupNote(app, file, paths.patchBackups);
+      note.frontmatter = plan.frontmatter;
       await writeNote(app, note, settings.frontmatterFieldOrder);
     }
 
     results.push({
       file: file.path,
       changed: true,
-      detail: details.join(", "),
+      detail: plan.details.join(", "),
     });
   }
 
@@ -290,6 +223,7 @@ class NormalizeConfirmModal extends Modal {
   private title: string;
   private summary: string;
   private candidates: NormalizeResult[];
+  private backupPath: string;
   private onConfirm: () => Promise<void>;
 
   constructor(
@@ -298,6 +232,7 @@ class NormalizeConfirmModal extends Modal {
     title: string,
     summary: string,
     candidates: NormalizeResult[],
+    backupPath: string,
     onConfirm: () => Promise<void>
   ) {
     super(app);
@@ -305,6 +240,7 @@ class NormalizeConfirmModal extends Modal {
     this.title = title;
     this.summary = summary;
     this.candidates = candidates;
+    this.backupPath = backupPath;
     this.onConfirm = onConfirm;
   }
 
@@ -329,7 +265,7 @@ class NormalizeConfirmModal extends Modal {
 
     if (this.plugin.settings.patchBackupEnabled) {
       contentEl.createEl("p", {
-        text: "Backups will be written to system/forge/patches/backups/",
+        text: `Backups will be written to ${this.backupPath}/`,
         cls: "forge-backup-notice",
       });
     }

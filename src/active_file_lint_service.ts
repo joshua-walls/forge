@@ -3,11 +3,13 @@ import type ForgePlugin from "./main";
 import type { ForgeSettings } from "./settings";
 import type { DashboardIssue } from "./dashboard_types";
 import { lintResultToDashboardIssue } from "./dashboard_types";
+import { isMarkdownFile } from "./utils/files";
 
 const DEFAULT_IDLE_DELAY_MS = 10_000;
 const LEAVE_NOTE_DELAY_MS = 250;
 const OPEN_NOTE_DELAY_MS = 500;
 const READ_VIEW_MODIFY_DELAY_MS = 500;
+const MAX_STATUS_CACHE_ENTRIES = 50;
 
 type ViewState = {
   path: string;
@@ -17,6 +19,8 @@ type ViewState = {
 export type ActiveFileLintStatus = {
   filePath: string;
   generatedAt: string;
+  lintIssues: DashboardIssue[];
+  shapeIssues: DashboardIssue[];
   issues: DashboardIssue[];
   reviewIssues: DashboardIssue[];
   errors: number;
@@ -43,11 +47,22 @@ export class ActiveFileLintService {
 
   updateSettings(settings: ForgeSettings): void {
     this.settings = settings;
+    if (!this.isEnabled()) {
+      this.clearPendingTimers();
+      this.dirtyFiles.clear();
+    }
     this.plugin.renderHealthDashboardViews();
   }
 
+  unload(): void {
+    this.clearPendingTimers();
+    this.dirtyFiles.clear();
+    this.lastNoticeSignatureByFile.clear();
+    this.lastResultsByFile.clear();
+  }
+
   onEditorChanged(file: TFile | null): void {
-    if (!this.isEnabled() || !(file instanceof TFile) || file.extension !== "md") return;
+    if (!this.isEnabled() || !isMarkdownFile(file)) return;
 
     this.currentMarkdownFilePath = file.path;
     const wasDirty = this.dirtyFiles.has(file.path);
@@ -62,7 +77,7 @@ export class ActiveFileLintService {
     const previousPath = this.lastOpenedFilePath;
     this.lastOpenedFilePath = file?.path ?? previousPath;
 
-    if (file instanceof TFile && file.extension === "md") {
+    if (isMarkdownFile(file)) {
       this.currentMarkdownFilePath = file.path;
     }
 
@@ -70,7 +85,7 @@ export class ActiveFileLintService {
       this.scheduleLintIfDirty(previousPath, LEAVE_NOTE_DELAY_MS);
     }
 
-    if (this.isEnabled() && file instanceof TFile && file.extension === "md" && !this.lastResultsByFile.has(file.path)) {
+    if (this.isEnabled() && isMarkdownFile(file) && !this.lastResultsByFile.has(file.path)) {
       this.scheduleLint(file, OPEN_NOTE_DELAY_MS);
     }
 
@@ -79,7 +94,7 @@ export class ActiveFileLintService {
   }
 
   onFileModified(file: TAbstractFile | null): void {
-    if (!this.isEnabled() || !(file instanceof TFile) || file.extension !== "md") return;
+    if (!this.isEnabled() || !isMarkdownFile(file)) return;
     if (file.path !== this.currentMarkdownFilePath) return;
 
     this.scheduleLint(file, READ_VIEW_MODIFY_DELAY_MS);
@@ -99,7 +114,7 @@ export class ActiveFileLintService {
     if (previous.path !== current.path) return;
     if (previous.mode === "source" && current.mode === "preview") {
       const file = this.app.vault.getAbstractFileByPath(current.path);
-      if (file instanceof TFile && file.extension === "md") {
+      if (isMarkdownFile(file)) {
         this.scheduleLint(file, 0);
       }
     }
@@ -141,7 +156,7 @@ export class ActiveFileLintService {
     if (!this.dirtyFiles.has(path)) return;
 
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (file instanceof TFile && file.extension === "md") {
+    if (isMarkdownFile(file)) {
       this.scheduleLint(file, delayMs);
     }
   }
@@ -171,18 +186,19 @@ export class ActiveFileLintService {
       });
       if (!lintResult) return;
 
-      const shapeLintResult = this.settings.shapeLintEnabled
+      const shapeLintResult = this.settings.shapesEnabled && this.settings.shapeLintEnabled
         ? await this.plugin.shapeLintService.runShapeLintForFile(file)
         : null;
       const shapeIssues = shapeLintResult?.results.map((issue) => ({
         ...lintResultToDashboardIssue(issue),
         source_command: "auto-active-file-shape-lint",
       })) ?? [];
+      const lintIssues = lintResult.results.map((issue) => ({
+        ...lintResultToDashboardIssue(issue),
+        source_command: "auto-active-file-lint",
+      })).filter((issue) => issue.issue_type !== "stale_note" && issue.issue_type !== "stale_inbox_note");
       const allIssues = [
-        ...lintResult.results.map((issue) => ({
-          ...lintResultToDashboardIssue(issue),
-          source_command: "auto-active-file-lint",
-        })).filter((issue) => issue.issue_type !== "stale_note" && issue.issue_type !== "stale_inbox_note"),
+        ...lintIssues,
         ...shapeIssues,
       ];
       const reviewIssues = lintResult.reviewItems.map((issue) => ({
@@ -203,6 +219,8 @@ export class ActiveFileLintService {
       this.lastResultsByFile.set(file.path, {
         filePath: file.path,
         generatedAt: new Date().toISOString(),
+        lintIssues,
+        shapeIssues,
         issues: allIssues,
         reviewIssues,
         errors,
@@ -211,6 +229,7 @@ export class ActiveFileLintService {
         reviewItems,
         exempt,
       });
+      pruneMap(this.lastResultsByFile, MAX_STATUS_CACHE_ENTRIES);
       this.maybeShowNotice(file, {
         lintErrors,
         lintWarnings,
@@ -247,6 +266,7 @@ export class ActiveFileLintService {
 
     if (this.lastNoticeSignatureByFile.get(file.path) === signature) return;
     this.lastNoticeSignatureByFile.set(file.path, signature);
+    pruneMap(this.lastNoticeSignatureByFile, MAX_STATUS_CACHE_ENTRIES);
 
     const totalErrors = counts.lintErrors + counts.shapeErrors;
     const totalWarnings = counts.lintWarnings + counts.shapeWarnings;
@@ -267,7 +287,7 @@ export class ActiveFileLintService {
     if (!view) return null;
 
     const file = view.file;
-    if (!(file instanceof TFile) || file.extension !== "md") return null;
+    if (!isMarkdownFile(file)) return null;
 
     return {
       path: file.path,
@@ -275,4 +295,19 @@ export class ActiveFileLintService {
     };
   }
 
+  private clearPendingTimers(): void {
+    for (const timer of this.pendingTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    this.pendingTimers.clear();
+  }
+
+}
+
+function pruneMap<K, V>(map: Map<K, V>, maxEntries: number): void {
+  while (map.size > maxEntries) {
+    const oldest = map.keys().next().value as K | undefined;
+    if (oldest === undefined) return;
+    map.delete(oldest);
+  }
 }

@@ -10,6 +10,11 @@
 // These are thin wrappers around js-yaml, the same library Obsidian uses internally.
 
 import { App, TFile, normalizePath, parseYaml } from "obsidian";
+import {
+  getFmString as getCoreFmString,
+  isFieldPresent as isCoreFieldPresent,
+  sortFrontmatterFields as sortCoreFrontmatterFields,
+} from "@forge/core";
 import { ensureFolder, safeTimestamp } from "./files";
 import { serializeYaml, trimTrailingWhitespace } from "./yaml";
 
@@ -25,29 +30,6 @@ export interface VaultNote {
   /** The TFile this note was read from */
   file: TFile;
 }
-
-// ── Canonical frontmatter field order ────────────────────────────────────────
-// Port of Shared/Schema/Sort-FrontmatterFields.ps1
-// Fields not in this list are appended alphabetically after the known fields.
-
-const PREFERRED_FIELD_ORDER = [
-  "type",
-  "kind",
-  "domain",
-  "status",
-  "shapes",
-  "tags",
-  "created",
-  "updated",
-  "review_by",
-  "ai_private",
-  "ai_open_questions",
-  "source",
-  "supersedes",
-  "superseded_by",
-  "version",
-  "review_cycle",
-];
 
 // ── Read ─────────────────────────────────────────────────────────────────────
 
@@ -180,26 +162,7 @@ export function sortFrontmatterFields(
   frontmatter: Record<string, unknown>,
   fieldOrder?: string[]
 ): Record<string, unknown> {
-  const order = fieldOrder ?? PREFERRED_FIELD_ORDER;
-  const result: Record<string, unknown> = {};
-
-  // Known fields first, in preferred order
-  for (const field of order) {
-    if (Object.prototype.hasOwnProperty.call(frontmatter, field)) {
-      result[field] = frontmatter[field];
-    }
-  }
-
-  // Remaining fields alphabetically
-  const remaining = Object.keys(frontmatter)
-    .filter((k) => !order.includes(k))
-    .sort();
-
-  for (const key of remaining) {
-    result[key] = frontmatter[key];
-  }
-
-  return result;
+  return sortCoreFrontmatterFields(frontmatter, fieldOrder);
 }
 
 // ── Field utilities ───────────────────────────────────────────────────────────
@@ -214,15 +177,7 @@ export function isFieldPresent(
   frontmatter: Record<string, unknown>,
   fieldName: string
 ): boolean {
-  if (!Object.prototype.hasOwnProperty.call(frontmatter, fieldName)) {
-    return false;
-  }
-
-  const value = frontmatter[fieldName];
-  if (value === null || value === undefined) return false;
-  if (typeof value === "string") return value.trim().length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
+  return isCoreFieldPresent(frontmatter, fieldName);
 }
 
 /**
@@ -235,17 +190,5 @@ export function getFmString(
   frontmatter: Record<string, unknown>,
   fieldName: string
 ): string {
-  const value = frontmatter[fieldName];
-  if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) {
-    return value
-      .filter((v): v is string | number | boolean => (
-        typeof v === "string" || typeof v === "number" || typeof v === "boolean"
-      ))
-      .map((v) => String(v))
-      .join("; ");
-  }
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-    ? String(value)
-    : "";
+  return getCoreFmString(frontmatter, fieldName);
 }

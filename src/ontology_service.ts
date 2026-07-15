@@ -1,11 +1,12 @@
-import { App, TFile, normalizePath } from "obsidian";
+import { App } from "obsidian";
 import type { ForgeSettings } from "./settings";
 import { getVaultPaths } from "./vault-paths";
 import { readNote } from "./utils/frontmatter";
 import { loadSchema } from "./utils/schema";
 import { DashboardCache } from "./dashboard_cache";
 import {
-  DASHBOARD_CACHE_SCHEMA_VERSION,
+  buildOntologyMetricsResult,
+  type OntologyMetricsDocument,
   type OntologyMetricsResult,
 } from "./dashboard_types";
 
@@ -24,35 +25,25 @@ export class OntologyService {
     const markdownFiles = this.app.vault.getMarkdownFiles();
     const schema = await loadSchema(this.app, this.settings);
 
-    const folderCoverage: Record<string, number> = {};
-    const tagDistribution: Record<string, number> = {};
+    const documents: OntologyMetricsDocument[] = [];
 
     for (const file of markdownFiles) {
       if (file.path.split("/").some((segment) => segment.startsWith("."))) continue;
-      const topFolder = file.path.includes("/") ? file.path.split("/")[0] : "(root)";
-      folderCoverage[topFolder] = (folderCoverage[topFolder] ?? 0) + 1;
-
       const note = await readNote(this.app, file);
-      const tags = note?.frontmatter?.tags;
-      const tagList = Array.isArray(tags) ? tags : typeof tags === "string" ? [tags] : [];
-      for (const tag of tagList.map((value) => String(value).replace(/^#/, ""))) {
-        if (!tag) continue;
-        tagDistribution[tag] = (tagDistribution[tag] ?? 0) + 1;
-      }
+      documents.push({
+        path: file.path,
+        frontmatter: note?.frontmatter ?? {},
+      });
     }
 
-    const result: OntologyMetricsResult = {
-      schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-      source_command: sourceCommand,
-      generated_at: new Date().toISOString(),
-      duration_ms: Date.now() - started,
-      shape_count: countMarkdownInFolder(markdownFiles, paths.shapes),
-      template_count: countMarkdownInFolder(markdownFiles, paths.templates),
-      relationship_type_count: Object.keys(schema?.ontology?.relationships ?? {}).length,
-      folder_coverage: sortRecord(folderCoverage),
-      tag_distribution: sortRecord(tagDistribution),
-      orphaned_entities: null,
-    };
+    const result = buildOntologyMetricsResult({
+      sourceCommand,
+      durationMs: Date.now() - started,
+      documents,
+      shapesPath: paths.shapes,
+      templatesPath: paths.templates,
+      relationshipTypeCount: Object.keys(schema?.ontology?.relationships ?? {}).length,
+    });
 
     try {
       await this.cache.updateLeaf({ key: "latest_ontology_result", value: result });
@@ -65,17 +56,4 @@ export class OntologyService {
   async latest(): Promise<OntologyMetricsResult | null> {
     return (await this.cache.read()).latest_ontology_result;
   }
-}
-
-function countMarkdownInFolder(files: TFile[], folder: string): number {
-  const prefix = normalizePath(folder).replace(/\/$/, "");
-  return files.filter((file) => file.path === prefix || file.path.startsWith(prefix + "/")).length;
-}
-
-function sortRecord(record: Record<string, number>): Record<string, number> {
-  const sorted: Record<string, number> = {};
-  for (const [key, value] of Object.entries(record).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
-    sorted[key] = value;
-  }
-  return sorted;
 }

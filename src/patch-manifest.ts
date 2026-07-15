@@ -13,9 +13,13 @@
 //   System/Forge/Patches/Applied/{runId}-vault-patch.md
 
 import { App, TFile, normalizePath } from "obsidian";
+import {
+  buildPatchArchiveArtifact,
+  buildPatchReportArtifact,
+  buildPatchRestoreManifestArtifact,
+} from "@forge/core";
 import type { ForgeSettings } from "./settings";
-import { getVaultPaths } from "./vault-paths";
-import { ensureFolder, todayString } from "./utils/files";
+import { ensureFolder } from "./utils/files";
 import type { PatchRunResult } from "./patch-engine";
 
 // ── Manifest ─────────────────────────────────────────────────────────────────
@@ -30,29 +34,11 @@ export async function writeRestoreManifest(
   settings: ForgeSettings,
   result: PatchRunResult
 ): Promise<void> {
-  if (!settings.patchGenerateManifest) return;
-  if (result.manifest.length === 0 && result.operations.length === 0) return;
-  if (result.dryRun) return;
+  const artifact = buildPatchRestoreManifestArtifact(settings, result);
+  if (!artifact) return;
 
-  const paths = getVaultPaths(settings);
-  await ensureFolder(app, paths.patchReports);
-
-  const manifest = {
-    manifest_version: 2,
-    run_id: result.runId,
-    patch_file: result.patchFile,
-    description: result.description,
-    applied_at: result.appliedAt,
-    schema_version: result.schemaVersion,
-    changes: result.manifest,
-    operations: result.operations,
-  };
-
-  const manifestPath = normalizePath(
-    `${paths.patchReports}/${result.runId}-patch-manifest.json`
-  );
-
-  await app.vault.create(manifestPath, JSON.stringify(manifest, null, 2));
+  await ensureFolder(app, artifact.folder);
+  await app.vault.create(normalizePath(artifact.path), artifact.content);
 }
 
 // ── Applied patch copy ────────────────────────────────────────────────────────
@@ -65,26 +51,20 @@ export async function archivePatchFile(
   settings: ForgeSettings,
   result: PatchRunResult
 ): Promise<void> {
-  if (result.dryRun) return;
-
-  const paths = getVaultPaths(settings);
-  await ensureFolder(app, paths.patchApplied);
-
   const sourceFile = app.vault.getAbstractFileByPath(
     normalizePath(result.patchFile)
   );
 
   if (!(sourceFile instanceof TFile)) return;
 
-  const sourceExt = sourceFile.extension || "md";
-  const archivePath = normalizePath(
-    `${paths.patchApplied}/${result.runId}-vault-patch.${sourceExt}`
-  );
+  const artifact = buildPatchArchiveArtifact(settings, result, sourceFile.extension);
+  if (!artifact) return;
 
-  if (app.vault.getAbstractFileByPath(archivePath)) return;
+  await ensureFolder(app, artifact.folder);
+  if (app.vault.getAbstractFileByPath(normalizePath(artifact.path))) return;
 
   const content = await app.vault.read(sourceFile);
-  await app.vault.create(archivePath, content);
+  await app.vault.create(normalizePath(artifact.path), content);
 }
 
 // ── Report note ───────────────────────────────────────────────────────────────
@@ -99,123 +79,16 @@ export async function writePatchReport(
   settings: ForgeSettings,
   result: PatchRunResult
 ): Promise<string> {
-  const paths = getVaultPaths(settings);
+  const artifact = buildPatchReportArtifact(settings, result);
+  await ensureFolder(app, artifact.folder);
 
-  const folder = result.dryRun ? paths.exports : paths.patchReports;
-  await ensureFolder(app, folder);
-
-  const mode = result.dryRun ? "dry-run" : "apply";
-  const reportPath = normalizePath(
-    `${folder}/${result.runId}-patch-report-${mode}.md`
-  );
-
-  const changed = result.results.filter((r) => r.status === "changed");
-  const skipped = result.results.filter((r) => r.status === "skipped");
-  const errors = result.results.filter((r) => r.status === "error");
-
-  const today = todayString();
-
-  const content = buildReportNote(result, changed, skipped, errors, today, mode);
-
-  const existing = app.vault.getAbstractFileByPath(reportPath);
+  const existing = app.vault.getAbstractFileByPath(normalizePath(artifact.path));
 
   if (existing instanceof TFile) {
-    await app.vault.modify(existing, content);
+    await app.vault.modify(existing, artifact.content);
   } else {
-    await app.vault.create(reportPath, content);
+    await app.vault.create(normalizePath(artifact.path), artifact.content);
   }
 
-  return reportPath;
-}
-
-function buildReportNote(
-  result: PatchRunResult,
-  changed: PatchRunResult["results"],
-  skipped: PatchRunResult["results"],
-  errors: PatchRunResult["results"],
-  today: string,
-  mode: string
-): string {
-  const lines: string[] = [
-    "---",
-    "type: reference",
-    "status: active",
-    "tags:",
-    "  - meta/patch-report",
-    `created: ${today}`,
-    `updated: ${today}`,
-    "ai_private: false",
-    "review_cycle: never",
-    "---",
-    "",
-    `source:: ${result.patchFile}`,
-    `patch_mode:: ${mode}`,
-    `changed_count:: ${changed.length}`,
-    `skipped_count:: ${skipped.length}`,
-    `error_count:: ${errors.length}`,
-    "",
-    "# Patch Report",
-    "",
-    "## Summary",
-    "",
-    `- Mode: ${mode}`,
-    `- Run ID: ${result.runId}`,
-    `- Patch file: ${result.patchFile}`,
-    `- Description: ${result.description}`,
-    `- Applied at: ${result.appliedAt}`,
-    `- Changed: ${changed.length}`,
-    `- Skipped: ${skipped.length}`,
-    `- Errors: ${errors.length}`,
-    "",
-  ];
-
-  if (errors.length > 0) {
-    lines.push("## Errors", "");
-
-    for (const r of errors) {
-      lines.push(`- \`[${r.op}]\` \`${r.file}\` — ${r.detail}`);
-    }
-
-    lines.push("");
-  }
-
-  if (changed.length > 0) {
-    lines.push("## Changed", "");
-
-    const byOp = groupBy(changed, (r) => r.op);
-
-    for (const [op, items] of Object.entries(byOp)) {
-      lines.push(`### ${op}`, "");
-
-      for (const r of items) {
-        lines.push(`- \`${r.file}\` — ${r.detail}`);
-      }
-
-      lines.push("");
-    }
-  }
-
-  if (skipped.length > 0) {
-    lines.push("## Skipped", "");
-
-    for (const r of skipped) {
-      lines.push(`- \`[${r.op}]\` \`${r.file}\` — ${r.detail}`);
-    }
-
-    lines.push("");
-  }
-
-  return lines.join("\n");
-}
-
-function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
-  return arr.reduce<Record<string, T[]>>((acc, item) => {
-    const k = key(item);
-
-    if (!acc[k]) acc[k] = [];
-
-    acc[k].push(item);
-
-    return acc;
-  }, {});
+  return artifact.path;
 }
