@@ -5,10 +5,15 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   {
     ignores: [
+      ".tmp-test/**",
+      "coverage/**",
+      "esbuild.config.mjs",
       "eslint.config.mjs",
       "dist/**",
       "main.js",
       "node_modules/**",
+      "tests/**",
+      "version-bump.mjs",
     ],
   },
   ...obsidianmd.configs.recommended,

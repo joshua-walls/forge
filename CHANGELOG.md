@@ -1,3 +1,17 @@
+# 2.0.2
+
+## Fixed
+
+- Fixed broad ESLint/source-review scans by ignoring generated test output, test files, and build-support scripts that are outside the Obsidian plugin runtime.
+- Updated `lint:obsidian` to run the same broad ESLint entry point used by external source review, while keeping tests covered by `npm test`.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+
+---
+
 # 2.0.1
 
 ## Note
