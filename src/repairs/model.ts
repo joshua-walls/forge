@@ -254,7 +254,10 @@ export function buildCuratedRepairOperations(
     tagDecisions.set(repairTagKey(decision.file, decision.tag), decision);
   }
   const operations: RepairOperation[] = [];
-  const repairableIssues = input.candidates.flatMap((candidate) => candidate.issues);
+  const repairableIssues: LintResult[] = [];
+  for (const candidate of input.candidates) {
+    repairableIssues.push(...candidate.issues);
+  }
   const skippedIssues: LintResult[] = [];
 
   for (const candidate of input.candidates) {

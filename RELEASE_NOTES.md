@@ -1,11 +1,10 @@
-# Forge 2.0.3
+# Forge 2.0.4
 
-Forge 2.0.3 addresses additional Obsidian source-review type-safety warnings.
+Forge 2.0.4 addresses the remaining repair-model source-review type-safety warnings reported by Obsidian.
 
 ## Fixed
 
-- Removed unsafe `any`/`error`-typed value patterns from dashboard inventory categorization, workspace normalization summaries, repair operation planning, and active-file lint cache pruning.
-- Removed an unnecessary type assertion in active-file lint pruning without changing runtime behavior.
+- Reworked repair issue collection to avoid unsafe `any`/`error`-typed value warnings during Obsidian source review.
 
 ## Compatibility
 

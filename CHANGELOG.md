@@ -1,3 +1,17 @@
+# 2.0.4
+
+## Fixed
+
+- Reworked repair issue collection to avoid the remaining unsafe `any`/`error`-typed value warnings reported by Obsidian source review.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+- No user-facing behavior changed.
+
+---
+
 # 2.0.3
 
 ## Fixed
