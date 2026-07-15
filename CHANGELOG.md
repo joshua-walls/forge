@@ -1,3 +1,50 @@
+# 2.0.0
+
+## Added
+
+- Added a compact desktop-only Forge status bar item with current health, dashboard open, and quick actions for refresh, lint, schema validation, shape lint, and settings.
+- Added the `Overview`, `Note`, `Issues`, and `Tools` Vault Health dashboard tabs.
+- Added dashboard inventory as an optional setting for counting vault file types and non-note assets.
+- Added a dashboard refresh exports setting so generated exports can be refreshed during dashboard refresh only when users opt in.
+- Added an empty-heading allowance setting for vaults that intentionally use heading-only structures, nested headings without prose, or Dataview/table-first sections.
+- Added Shape Repair to dashboard cleanup actions when Shape Repair is enabled.
+- Added a shared Forge core package inside the plugin repo so Obsidian builds no longer depend on publishing Forge core to npm.
+- Added automated integration coverage for the Obsidian adapter using shared Forge core dashboard models.
+
+## Changed
+
+- Reworked Vault Health into a clearer dashboard:
+  - `Overview` shows Health Summary, Recommendations, optional Vault Inventory, and Ontology.
+  - `Note` focuses on the active note's Lint, Shape, and Needs Review state.
+  - `Issues` shows active lint issues, Shape Health, and Needs Review.
+  - `Tools` contains grouped actions, Schema Health, Lockblock, and Maintenance History.
+- Grouped dashboard actions into Checks, Cleanup, and Outputs so destructive, scanning, and output actions are easier to distinguish.
+- Moved schema validation back into Schema Health so the schema status and its refresh action live together.
+- Made Shape Health use the same grouped issue format as Active Issues.
+- Made dashboard refresh run schema validation, optional pre-scan maintenance, vault lint, shape lint, optional exports, ontology metrics, optional post-output maintenance, patch history, and snapshot composition in dependency order so one refresh produces complete output.
+- Turned dashboard inventory and dashboard-triggered exports off by default to reduce baseline refresh cost.
+- Made Refresh metrics update ontology metrics and, when dashboard inventory is enabled, file inventory without requiring exports.
+- Hid Vault Inventory when inventory is disabled instead of showing an empty placeholder.
+- Hid shape actions when the relevant Shape Engine features are disabled.
+- Hid export and Dataview expansion actions when their settings or dependencies are disabled.
+- Improved mobile and narrow-sidebar layout for dashboard tabs, action controls, issue rows, and Open buttons.
+- Removed the restored legacy upgrade guide from plugin output and simplified the old migration notice.
+- Moved shared lint, repair, patch, dashboard, export, schema, settings, and shape logic into Forge core modules reused by the Obsidian plugin.
+
+## Performance
+
+- Reduced default dashboard refresh work by making inventory and export refresh optional.
+- Avoided running expensive inventory scans unless dashboard inventory is enabled.
+- Kept status bar health display snapshot-driven so it does not trigger vault scans just to update the status bar.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+- If you relied on dashboard refresh regenerating exports, enable dashboard refresh exports in Forge settings.
+
+---
+
 # 1.10.5
 
 ## Fixed

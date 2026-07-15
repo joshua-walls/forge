@@ -5,8 +5,7 @@ import { getVaultPaths } from "./vault-paths";
 import { validateSchemaNote } from "./utils/schema";
 import { DashboardCache } from "./dashboard_cache";
 import {
-  DASHBOARD_CACHE_SCHEMA_VERSION,
-  schemaIssueToDashboardIssue,
+  buildSchemaValidationResult,
   type SchemaValidationResult,
 } from "./dashboard_types";
 
@@ -29,13 +28,11 @@ export class SchemaService {
     const file = this.app.vault.getAbstractFileByPath(paths.schemaMd);
 
     if (!(file instanceof TFile)) {
-      return this.persist({
-        schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-        source_command: sourceCommand,
-        generated_at: new Date().toISOString(),
-        duration_ms: Date.now() - started,
-        files_scanned: 0,
-        schema_path: paths.schemaMd,
+      return this.persist(buildSchemaValidationResult({
+        sourceCommand,
+        durationMs: Date.now() - started,
+        filesScanned: 0,
+        schemaPath: paths.schemaMd,
         violations: [{
           file_path: paths.schemaMd,
           issue_type: "schema_missing",
@@ -44,22 +41,18 @@ export class SchemaService {
           suggested_action: "Create schema.md or update Forge schema settings.",
           source_command: sourceCommand,
         }],
-        errors: 1,
-        warnings: 0,
-      });
+      }));
     }
 
     let raw = "";
     try {
       raw = await this.app.vault.read(file);
     } catch {
-      return this.persist({
-        schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-        source_command: sourceCommand,
-        generated_at: new Date().toISOString(),
-        duration_ms: Date.now() - started,
-        files_scanned: 1,
-        schema_path: paths.schemaMd,
+      return this.persist(buildSchemaValidationResult({
+        sourceCommand,
+        durationMs: Date.now() - started,
+        filesScanned: 1,
+        schemaPath: paths.schemaMd,
         violations: [{
           file_path: paths.schemaMd,
           issue_type: "schema_read_failed",
@@ -68,9 +61,7 @@ export class SchemaService {
           suggested_action: "Check that the schema note is readable.",
           source_command: sourceCommand,
         }],
-        errors: 1,
-        warnings: 0,
-      });
+      }));
     }
 
     const issues = validateSchemaNote(raw, this.settings);
@@ -78,22 +69,13 @@ export class SchemaService {
       await this.schemaCache?.refresh();
     }
 
-    const violations = issues.map((issue) => ({
-      ...schemaIssueToDashboardIssue(issue, paths.schemaMd),
-      source_command: sourceCommand,
+    return this.persist(buildSchemaValidationResult({
+      sourceCommand,
+      durationMs: Date.now() - started,
+      filesScanned: 1,
+      schemaPath: paths.schemaMd,
+      issues,
     }));
-
-    return this.persist({
-      schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-      source_command: sourceCommand,
-      generated_at: new Date().toISOString(),
-      duration_ms: Date.now() - started,
-      files_scanned: 1,
-      schema_path: paths.schemaMd,
-      violations,
-      errors: issues.filter((issue) => issue.severity === "error").length,
-      warnings: issues.filter((issue) => issue.severity === "warning").length,
-    });
   }
 
   async latest(): Promise<SchemaValidationResult | null> {

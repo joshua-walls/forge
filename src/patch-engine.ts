@@ -20,6 +20,16 @@
 // which the command uses to write the report and manifest.
 
 import { App, TFile, normalizePath, parseYaml } from "obsidian";
+import {
+  parsePatchFile,
+  type PatchFile,
+  type PatchManifestEntry,
+  type PatchOperation,
+  type PatchOperationChange,
+  type PatchOpResult,
+  type PatchRestoreValue,
+  type PatchRunResult,
+} from "@forge/core";
 import type { ForgeSettings } from "./settings";
 import {
   readNote,
@@ -50,133 +60,20 @@ function formatPatchValue(value: unknown): string {
     : "";
 }
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export type PatchOpStatus = "changed" | "skipped" | "error";
-
-export interface PatchOpResult {
-  op: string;
-  file: string;
-  status: PatchOpStatus;
-  detail: string;
-  change?: PatchOperationChange;
-}
-
-export interface PatchManifestEntry {
-  file: string;
-  backup: string;
-}
-
-export type PatchRestoreTarget =
-  | { kind: "frontmatter_field"; field: string }
-  | { kind: "frontmatter_tags" }
-  | { kind: "frontmatter_order" }
-  | { kind: "note_move" };
-
-export type PatchRestoreValue =
-  | { exists: true; value: unknown }
-  | { exists: false };
-
-export type PatchReverseAction =
-  | { kind: "set_field"; field: string; value?: unknown; delete_if_missing_before: boolean }
-  | { kind: "set_tags"; value: string[] }
-  | { kind: "set_frontmatter_order"; keys: string[] }
-  | { kind: "move_note"; from: string; to: string };
-
-export interface PatchOperationChange {
-  id: string;
-  op_index: number;
-  op: string;
-  file_before: string;
-  file_after: string;
-  status: "changed";
-  label: string;
-  target: PatchRestoreTarget;
-  before: PatchRestoreValue;
-  after: PatchRestoreValue;
-  reverse: PatchReverseAction;
-  backup?: string;
-}
-
-export interface PatchRunResult {
-  runId: string;
-  patchFile: string;
-  description: string;
-  appliedAt: string;
-  schemaVersion: string;
-  dryRun: boolean;
-  results: PatchOpResult[];
-  manifest: PatchManifestEntry[];
-  operations: PatchOperationChange[];
-}
-
-export interface PatchMeta {
-  generated_at?: string;
-  description?: string;
-  schema_version?: string;
-  source?: string;
-  contains_schema_changes?: boolean;
-}
-
-export interface PatchOperation {
-  op: string;
-  target?: string;
-  target_pattern?: string;
-  scope?: PatchScope;
-  field?: string;
-  value?: unknown;
-  value_from?: string;
-  path_segment_index?: number;
-  trim_prefix?: string;
-  trim_suffix?: string;
-  lowercase?: boolean;
-  uppercase?: boolean;
-  only_if_missing?: boolean;
-  when?: { field: string; equals: string };
-  tag?: string;
-  old_tag?: string;
-  new_tag?: string;
-  strategy?: string;
-  format?: string;
-  when_missing?: boolean;
-  days?: number;
-  value_if_true?: string;
-  skip_if?: string[];
-  source?: string;
-  destination?: string;
-  frontmatter?: Record<string, unknown>;
-  source_root?: string;
-  destination_folder?: string;
-  strip_frontmatter?: boolean;
-}
-
-export interface PatchScope {
-  created_since?: string | Date;
-  created_before?: string | Date;
-  updated_since?: string | Date;
-  updated_before?: string | Date;
-  updated_field?: string;
-  file_created_since?: string | Date;
-  file_created_before?: string | Date;
-  file_modified_since?: string | Date;
-  file_modified_before?: string | Date;
-  field_equals?: Record<string, unknown>;
-  field_not_equals?: Record<string, unknown>;
-  field_present?: string | string[];
-  field_missing?: string | string[];
-  has_tag?: string | string[];
-  missing_tag?: string | string[];
-  path_in?: string | string[];
-  path_not_in?: string | string[];
-  type_in?: string | string[];
-  status_in?: string | string[];
-  limit?: number;
-}
-
-export interface PatchFile {
-  meta: PatchMeta;
-  operations: PatchOperation[];
-}
+export type {
+  PatchFile,
+  PatchManifestEntry,
+  PatchMeta,
+  PatchOperation,
+  PatchOperationChange,
+  PatchOpResult,
+  PatchOpStatus,
+  PatchRestoreTarget,
+  PatchRestoreValue,
+  PatchReverseAction,
+  PatchRunResult,
+  PatchScope,
+} from "@forge/core";
 
 // ── Main engine ──────────────────────────────────────────────────────────────
 
@@ -209,27 +106,9 @@ export async function loadPatchFile(
     return null;
   }
 
-  try {
-    const yamlText = extractPatchYaml(raw, patchFilePath);
-
-    if (!yamlText.trim()) {
-      console.warn(`[Forge] Patch file contains no YAML payload: ${patchFilePath}`);
-      return null;
-    }
-
-    const parsed = parseYaml(yamlText) as Record<string, unknown>;
-
-    const meta = (parsed?.meta ?? {}) as PatchMeta;
-
-    const operations = Array.isArray(parsed?.operations)
-      ? (parsed.operations as PatchOperation[])
-      : [];
-
-    return { meta, operations };
-  } catch (e) {
-    console.warn(`[Forge] Could not parse patch YAML:`, e);
-    return null;
-  }
+  const patchFile = parsePatchFile(raw, patchFilePath, parseYaml);
+  if (!patchFile) console.warn(`[Forge] Could not parse patch YAML: ${patchFilePath}`);
+  return patchFile;
 }
 
 /**
@@ -793,18 +672,6 @@ async function applyMoveNote(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function extractPatchYaml(raw: string, patchFilePath: string): string {
-  const lowerPath = patchFilePath.toLowerCase();
-
-  if (!lowerPath.endsWith(".md")) {
-    return raw;
-  }
-
-  const match = raw.match(/```ya?ml\s*\r?\n([\s\S]*?)```/i);
-
-  return match?.[1]?.trim() ?? "";
-}
 
 function resolveFieldValue(op: PatchOperation, file: TFile): unknown {
   const hasLiteralValue = "value" in op && op.value !== undefined;

@@ -10,7 +10,16 @@
 // All file access goes through app.vault — never Node.js fs directly.
 // This ensures iOS compatibility (no filesystem access on iOS).
 
-import { App, TFile, TFolder, normalizePath } from "obsidian";
+import { App, TAbstractFile, TFile, TFolder, normalizePath } from "obsidian";
+import {
+  buildExemptList as buildCoreExemptList,
+  getDomain as getCoreDomain,
+  isExempt as isCoreExempt,
+  localTimestamp as coreLocalTimestamp,
+  matchesGlob as coreMatchesGlob,
+  safeTimestamp as coreSafeTimestamp,
+  todayString as coreTodayString,
+} from "@forge/core";
 
 // ── Folder utilities ─────────────────────────────────────────────────────────
 
@@ -52,12 +61,16 @@ export async function ensureFolder(app: App, folderPath: string): Promise<void> 
 export function getMarkdownFiles(app: App, rootFolder?: string): TFile[] {
   const files = app.vault.getMarkdownFiles();
 
-  if (!rootFolder) return files.filter((f) => !isHiddenPath(f.path));
+  if (!rootFolder) return files.filter((f) => isMarkdownFile(f) && !isHiddenPath(f.path));
 
   const prefix = normalizePath(rootFolder).toLowerCase() + "/";
   return files.filter(
-    (f) => f.path.toLowerCase().startsWith(prefix) && !isHiddenPath(f.path)
+    (f) => isMarkdownFile(f) && f.path.toLowerCase().startsWith(prefix) && !isHiddenPath(f.path)
   );
+}
+
+export function isMarkdownFile(file: TAbstractFile | null | undefined): file is TFile {
+  return file instanceof TFile && file.extension.toLowerCase() === "md";
 }
 
 /**
@@ -115,18 +128,7 @@ export function resolveTargets(app: App, target?: string, targetPattern?: string
  * Port of Test-IsExempt from Shared/IO/Test-IsExempt.ps1.
  */
 export function isExempt(path: string, exemptPaths: string[]): boolean {
-  if (!exemptPaths.length) return false;
-  const normalised = normalizePath(path).toLowerCase();
-  return exemptPaths.some((p) => {
-    if (isGlobPattern(p)) return matchesGlob(path, p);
-
-    const prefix = normalizePath(p).toLowerCase();
-    return normalised.startsWith(prefix + "/") || normalised === prefix;
-  });
-}
-
-function isGlobPattern(path: string): boolean {
-  return path.includes("*");
+  return isCoreExempt(path, exemptPaths);
 }
 
 // ── Glob matching ─────────────────────────────────────────────────────────────
@@ -148,30 +150,7 @@ function isGlobPattern(path: string): boolean {
  *   "Church/Scripture (WEB)/[star][star]"  matches nested scripture notes
  */
 export function matchesGlob(path: string, pattern: string): boolean {
-  const normPath = normalizePath(path).toLowerCase();
-  const normPattern = normalizePath(pattern).toLowerCase();
-
-  // Convert glob to regex
-  const regexStr = globToRegex(normPattern);
-  try {
-    return new RegExp(regexStr).test(normPath);
-  } catch {
-    return false;
-  }
-}
-
-function globToRegex(pattern: string): string {
-  // Escape all regex special chars except * and /
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-
-  // Replace **/ with a regex that matches zero or more path segments
-  // Replace remaining * with [^/]* (any char except /)
-  const regexBody = escaped
-    .replace(/\*\*\//g, "(.+/)?")   // **/ → optional path segments
-    .replace(/\*\*/g, ".*")          // ** at end → anything
-    .replace(/\*/g, "[^/]*");        // * → any chars in one segment
-
-  return `^${regexBody}$`;
+  return coreMatchesGlob(path, pattern);
 }
 
 // ── Path utilities ────────────────────────────────────────────────────────────
@@ -181,10 +160,7 @@ function globToRegex(pattern: string): string {
  * Notes at root level return "Root".
  */
 export function getDomain(path: string): string {
-  const normalised = normalizePath(path);
-  const firstSlash = normalised.indexOf("/");
-  if (firstSlash < 0) return "Root";
-  return normalised.substring(0, firstSlash);
+  return getCoreDomain(path);
 }
 
 /**
@@ -203,21 +179,14 @@ function isHiddenPath(path: string): boolean {
  * No UTC offset suffix — Obsidian renders timestamps as-is in local time.
  */
 export function localTimestamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
+  return coreLocalTimestamp();
 }
 
 /**
  * Returns today's date in YYYY-MM-DD format using local time.
  */
 export function todayString(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return coreTodayString();
 }
 
 /**
@@ -225,12 +194,7 @@ export function todayString(): string {
  * Used for backup filenames and run IDs.
  */
 export function safeTimestamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
-    `_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
-  );
+  return coreSafeTimestamp();
 }
 
 /**
@@ -243,5 +207,5 @@ export function buildExemptList(
   forgeFolder: string,
   extraPaths: string[] = []
 ): string[] {
-  return [...schemaExemptPaths, forgeFolder, ...extraPaths].filter(Boolean);
+  return buildCoreExemptList(schemaExemptPaths, forgeFolder, extraPaths);
 }

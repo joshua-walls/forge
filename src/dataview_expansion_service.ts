@@ -57,6 +57,14 @@ export class DataviewExpansionService {
 
   updateSettings(settings: ForgeSettings): void {
     this.settings = settings;
+    if (!settings.dataviewExpansionEnabled || settings.dataviewExpansionAutoUpdateMode === "off") {
+      this.clearPendingTimers();
+    }
+  }
+
+  unload(): void {
+    this.clearPendingTimers();
+    this.ignoredModifyCounts.clear();
   }
 
   isDataviewAvailable(): boolean {
@@ -108,6 +116,13 @@ export class DataviewExpansionService {
     }, delayMs);
 
     this.pendingTimers.set(file.path, timer);
+  }
+
+  private clearPendingTimers(): void {
+    for (const timer of this.pendingTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    this.pendingTimers.clear();
   }
 
   private getAutoUpdateDelayMs(): number {

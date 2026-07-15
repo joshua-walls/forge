@@ -309,6 +309,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
         return [
           this.pathSummaryItem("Vault system folder", s.systemFolder || "System"),
           this.pathSummaryItem("Forge data folder", s.forgeFolder || "System/Forge"),
+          { label: "Dashboard inventory", value: s.dashboardFileInventoryEnabled ? "On" : "Off", tone: s.dashboardFileInventoryEnabled ? "good" : "muted" },
           { label: "Dataview compatibility blocks", value: s.dataviewExpansionEnabled ? "Enabled" : "Disabled", tone: s.dataviewExpansionEnabled ? "good" : "muted" },
         ];
       case "lint":
@@ -394,8 +395,41 @@ export class ForgeSettingsTab extends PluginSettingTab {
       "System/Forge"
     );
 
+    this.renderDashboardSettings(el);
     this.renderDataviewExpansionSettings(el);
     this.renderFrontmatterFieldOrder(el);
+  }
+
+  private renderDashboardSettings(el: HTMLElement): void {
+    const s = this.plugin.settings;
+
+    this.renderSectionHeading(el, "Dashboard");
+
+    new Setting(el)
+      .setName("File inventory")
+      .setDesc("Counts non-note assets by file type during dashboard refresh. Turn off to keep refreshes lighter.")
+      .addToggle((toggle) =>
+        toggle.setValue(s.dashboardFileInventoryEnabled).onChange((value) => {
+          this.runAsync(async () => {
+            s.dashboardFileInventoryEnabled = value;
+            await this.plugin.saveSettings();
+            this.refreshSettingsTab();
+          });
+        })
+      );
+
+    new Setting(el)
+      .setName("Refresh exports with dashboard")
+      .setDesc("Runs export overview and ontology index as part of dashboard refresh. Turn off to keep exports manual.")
+      .addToggle((toggle) =>
+        toggle.setValue(s.dashboardRefreshExportsEnabled).onChange((value) => {
+          this.runAsync(async () => {
+            s.dashboardRefreshExportsEnabled = value;
+            await this.plugin.saveSettings();
+            this.refreshSettingsTab();
+          });
+        })
+      );
   }
 
   private renderDataviewExpansionSettings(el: HTMLElement): void {
@@ -1928,6 +1962,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       { label: "Validation", value: s.shapeLintEnabled ? "On" : "Off", tone: s.shapeLintEnabled ? "good" : "muted" },
       { label: "Scope", value: (s.shapeLintScope ?? "all") === "all" ? "All notes" : `${s.shapeLintFolders.length} folders`, tone: (s.shapeLintScope ?? "all") === "all" || s.shapeLintFolders.length > 0 ? "good" : "warning" },
       { label: "Strict matching", value: s.shapeLintStrictMode ? "On" : "Off", tone: s.shapeLintStrictMode ? "warning" : "muted" },
+      { label: "Empty headings", value: s.shapeLintAllowEmptySections ? "Allowed" : "Reported", tone: s.shapeLintAllowEmptySections ? "muted" : "warning" },
     ]);
     el.createEl("p", {
       text: "When enabled, lint runs validate note heading structure against the " +
@@ -1939,7 +1974,7 @@ export class ForgeSettingsTab extends PluginSettingTab {
       .setName("Enable shape heading validation")
       .setDesc(
         "Checks that notes matching a shape have all required headings, " +
-        "in the correct order, with no empty sections."
+        "in the correct order, with empty headings handled by the setting below."
       )
       .addToggle((t) =>
         t.setValue(s.shapeLintEnabled).onChange((v) => {
@@ -1962,6 +1997,22 @@ export class ForgeSettingsTab extends PluginSettingTab {
           t.setValue(s.shapeLintStrictMode).onChange((v) => {
             this.runAsync(async () => {
               s.shapeLintStrictMode = v;
+              await this.plugin.saveSettings();
+              this.refreshSettingsTab();
+            });
+          })
+        );
+
+      new Setting(el)
+        .setName("Allow empty headings")
+        .setDesc(
+          "Do not report required headings that are present but intentionally empty. " +
+          "Missing headings and heading order are still checked."
+        )
+        .addToggle((t) =>
+          t.setValue(s.shapeLintAllowEmptySections).onChange((v) => {
+            this.runAsync(async () => {
+              s.shapeLintAllowEmptySections = v;
               await this.plugin.saveSettings();
               this.refreshSettingsTab();
             });

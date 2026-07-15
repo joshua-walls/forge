@@ -1,11 +1,11 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { DashboardCache } from "./dashboard_cache";
 import {
-  DASHBOARD_CACHE_SCHEMA_VERSION,
-  type DashboardIssue,
+  buildDashboardSnapshot,
+  buildVaultFileInventory,
   type DashboardSnapshot,
-  type DashboardSummary,
   type OperationalRunSummary,
+  type VaultFileRecord,
 } from "./dashboard_types";
 import type { LintService } from "./lint_service";
 import type { OntologyService } from "./ontology_service";
@@ -74,12 +74,20 @@ export class DashboardService {
 
   async refreshSnapshot(): Promise<DashboardSnapshot> {
     const started = Date.now();
+    const maintenanceStarted = this.settings.maintenanceAutoRunOnDashboardRefresh ? Date.now() : 0;
+    const maintenanceResults: Awaited<ReturnType<typeof runVaultMaintenanceSilently>> = [];
     const refreshContext = {
       app: this.app,
       settings: this.settings,
       ontologyService: this.services.ontologyService,
       recomposeHealthDashboard: async () => {},
     } as ForgePlugin;
+
+    await this.services.schemaService.validate("refresh-vault-health-dashboard");
+
+    if (this.settings.maintenanceAutoRunOnDashboardRefresh) {
+      maintenanceResults.push(...await runVaultMaintenanceSilently(this.app, this.settings, "pre_scan"));
+    }
 
     const lintResult = await this.services.lintService.runLint("refresh-vault-health-dashboard");
     if (lintResult) {
@@ -88,15 +96,13 @@ export class DashboardService {
       await writeLintRunNote(this.app, this.settings, lintResult);
     }
 
-    await this.services.schemaService.validate("refresh-vault-health-dashboard");
-
-    if (this.settings.shapeLintEnabled) {
+    if (this.settings.shapesEnabled && this.settings.shapeLintEnabled) {
       const shapeLintResult = await this.services.shapeLintService.runShapeLint("refresh-vault-health-dashboard");
       await writeShapeLintReportJson(this.app, this.settings, shapeLintResult);
       await writeShapeLintRunNote(this.app, this.settings, shapeLintResult);
     }
 
-    if (this.settings.exportEnabled) {
+    if (this.settings.exportEnabled && this.settings.dashboardRefreshExportsEnabled) {
       await runExportOverview(refreshContext, { silent: true });
       await runExportOntology(refreshContext, {
         silent: true,
@@ -107,11 +113,8 @@ export class DashboardService {
 
     await this.services.ontologyService.collectMetrics("refresh-vault-health-dashboard");
 
-    await this.services.patchHistoryService.readHistory("refresh-vault-health-dashboard");
-
     if (this.settings.maintenanceAutoRunOnDashboardRefresh) {
-      const maintenanceStarted = Date.now();
-      const maintenanceResults = await runVaultMaintenanceSilently(this.app, this.settings);
+      maintenanceResults.push(...await runVaultMaintenanceSilently(this.app, this.settings, "post_output"));
       const applied = maintenanceResults.filter((r) => r.status === "removed" || r.status === "trimmed").length;
       const errors = maintenanceResults.filter((r) => r.status === "error");
       await this.recordOperationalRun({
@@ -126,6 +129,8 @@ export class DashboardService {
       });
     }
 
+    await this.services.patchHistoryService.readHistory("refresh-vault-health-dashboard");
+
     return this.composeSnapshotFromLatest(Date.now() - started);
   }
 
@@ -134,43 +139,28 @@ export class DashboardService {
     const latestLint = cache.latest_lint_result;
     const latestSchema = cache.latest_schema_result;
     const latestOntology = cache.latest_ontology_result;
-    const latestShapeLint = cache.latest_shape_lint_result;
+    const latestFileInventory = this.settings.dashboardFileInventoryEnabled
+      ? buildVaultFileInventory({
+        files: this.app.vault.getFiles().map(toVaultFileRecord),
+      })
+      : null;
+    const latestShapeLint = this.settings.shapesEnabled && this.settings.shapeLintEnabled
+      ? cache.latest_shape_lint_result
+      : null;
     const latestPatchHistory = cache.latest_patch_history_result;
 
-    const issues: DashboardIssue[] = [
-      ...(latestLint?.issues ?? []),
-      ...(latestSchema?.violations ?? []),
-    ].sort((a, b) => severityWeight(b.severity) - severityWeight(a.severity));
-
-    const summary: DashboardSummary = {
-      notes_scanned: latestLint?.files_scanned ?? 0,
-      lint_issue_count: latestLint?.issues.length ?? 0,
-      review_item_count: latestLint?.review_items?.length ?? 0,
-      schema_violation_count: latestSchema?.violations.length ?? 0,
-      broken_shape_count: latestShapeLint?.issues.length ?? 0,
-      invalid_frontmatter_count: latestLint?.issues.filter((issue) =>
-        ["no_frontmatter", "required_field", "type_mismatch", "enum_value", "date_format"].includes(issue.issue_type)
-      ).length ?? 0,
-      normalization_candidates: null,
-      unresolved_links: null,
-    };
-
-    const snapshot: DashboardSnapshot = {
-      schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-      source_command: "refresh-vault-health-dashboard",
-      generated_at: new Date().toISOString(),
-      duration_ms: durationMs,
-      vault_name: this.app.vault.getName(),
-      summary,
-      issues,
-      review_items: latestLint?.review_items ?? [],
+    const snapshot = buildDashboardSnapshot({
+      vaultName: this.app.vault.getName(),
+      durationMs,
       lint: latestLint,
       schema: latestSchema,
       ontology: latestOntology,
-      shape_lint: latestShapeLint,
-      patch_history: latestPatchHistory,
-    };
+      fileInventory: latestFileInventory,
+      shapeLint: latestShapeLint,
+      patchHistory: latestPatchHistory,
+    });
 
+    await this.cache.updateLeaf({ key: "latest_file_inventory_result", value: latestFileInventory });
     await this.cache.updateLeaf({ key: "dashboard_snapshot", value: snapshot });
     return snapshot;
   }
@@ -194,13 +184,10 @@ export class DashboardService {
   }
 }
 
-function severityWeight(severity: DashboardIssue["severity"]): number {
-  switch (severity) {
-    case "critical":
-      return 3;
-    case "warning":
-      return 2;
-    default:
-      return 1;
-  }
+function toVaultFileRecord(file: TFile): VaultFileRecord {
+  return {
+    path: file.path,
+    extension: file.extension,
+    size_bytes: file.stat.size,
+  };
 }

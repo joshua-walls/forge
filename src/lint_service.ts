@@ -3,8 +3,7 @@ import type { ForgeSettings } from "./settings";
 import { runLint, runLintForFile, type LintRunResult } from "./lint-engine";
 import { DashboardCache } from "./dashboard_cache";
 import {
-  DASHBOARD_CACHE_SCHEMA_VERSION,
-  lintResultToDashboardIssue,
+  buildLintScanResult,
   type LintScanResult,
 } from "./dashboard_types";
 
@@ -24,7 +23,7 @@ export class LintService {
 
     await this.updateCacheSafely({
       key: "latest_lint_result",
-      value: this.toDashboardResult(result, sourceCommand, Date.now() - started),
+      value: buildLintScanResult(result, sourceCommand, Date.now() - started),
     });
 
     return result;
@@ -41,7 +40,7 @@ export class LintService {
     if (options.updateDashboardCache) {
       await this.updateCacheSafely({
         key: "latest_lint_result",
-        value: this.toDashboardResult(
+        value: buildLintScanResult(
           result,
           (options.sourceCommand as LintScanResult["source_command"]) ?? "run-vault-lint",
           Date.now() - started
@@ -56,31 +55,6 @@ export class LintService {
     return (await this.cache.read()).latest_lint_result;
   }
 
-  private toDashboardResult(
-    result: LintRunResult,
-    sourceCommand: LintScanResult["source_command"],
-    durationMs: number
-  ): LintScanResult {
-    return {
-      schema_version: DASHBOARD_CACHE_SCHEMA_VERSION,
-      source_command: sourceCommand,
-      generated_at: result.envelope.timestamp,
-      duration_ms: durationMs,
-      files_scanned: result.envelope.notes_scanned,
-      issues: result.results.map((issue) => ({
-        ...lintResultToDashboardIssue(issue),
-        source_command: sourceCommand,
-      })).filter((issue) => !isReviewIssue(issue.issue_type)),
-      review_items: result.reviewItems.map((issue) => ({
-        ...lintResultToDashboardIssue(issue),
-        source_command: sourceCommand,
-      })),
-      errors: result.errors.length,
-      warnings: result.warnings.length,
-      infos: result.infos.length,
-    };
-  }
-
   private async updateCacheSafely(...args: Parameters<DashboardCache["updateLeaf"]>): Promise<void> {
     try {
       await this.cache.updateLeaf(...args);
@@ -88,8 +62,4 @@ export class LintService {
       console.warn("[Forge] Could not update dashboard lint cache:", e);
     }
   }
-}
-
-function isReviewIssue(issueType: string): boolean {
-  return issueType === "stale_note" || issueType === "stale_inbox_note";
 }

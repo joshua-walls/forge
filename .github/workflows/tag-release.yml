@@ -59,8 +59,14 @@ jobs:
       - name: Obsidian lint
         run: npm run lint:obsidian
 
+      - name: Tests
+        run: npm test
+
       - name: Build
         run: npm run build
+
+      - name: Verify Obsidian release files
+        run: test -f manifest.json && test -f versions.json && test -f main.js && test -f styles.css
 
       - name: Create and push tag
         if: ${{ github.event_name != 'workflow_dispatch' }}

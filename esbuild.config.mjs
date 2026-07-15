@@ -54,6 +54,7 @@ function docFolderPlugin() {
             for (const entry of entries) {
               const rel = base ? `${base}/${entry.name}` : entry.name;
               if (entry.isDirectory()) {
+                if (folderName === "docs" && rel === "architecture") continue;
                 results.push(...collectFiles(path.join(dir, entry.name), rel));
               } else if (entry.isFile() && entry.name.endsWith(".md")) {
                 results.push(rel);

@@ -19,6 +19,11 @@ import {
 export async function runShapeLint(plugin: ForgePlugin): Promise<ShapeLintRunResult | null> {
   const { app, settings } = plugin;
 
+  if (!settings.shapesEnabled) {
+    new Notice("Forge: Shapes is not enabled. Enable it in settings → shapes.", 5000);
+    return null;
+  }
+
   if (!settings.shapeLintEnabled) {
     new Notice("Forge: Shape lint is disabled in settings.", 5000);
     return null;

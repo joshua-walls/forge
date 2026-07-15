@@ -22,9 +22,10 @@ import { getMarkdownFiles } from "../utils/files";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export type MaintenancePhase = "pre_scan" | "post_output" | "all";
 type MaintenanceStatus = "removed" | "trimmed" | "skipped" | "error";
 
-interface MaintenanceResult {
+export interface MaintenanceResult {
   task: string;
   target: string;
   status: MaintenanceStatus;
@@ -98,9 +99,10 @@ export async function runVaultMaintenance(plugin: ForgePlugin): Promise<void> {
 
 export async function runVaultMaintenanceSilently(
   app: App,
-  settings: ForgePlugin["settings"]
+  settings: ForgePlugin["settings"],
+  phase: MaintenancePhase = "all"
 ): Promise<MaintenanceResult[]> {
-  return runAllTasks(app, settings, false);
+  return runTasksForPhase(app, settings, false, phase);
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -110,15 +112,31 @@ async function runAllTasks(
   settings: ForgePlugin["settings"],
   dryRun: boolean
 ): Promise<MaintenanceResult[]> {
+  return runTasksForPhase(app, settings, dryRun, "all");
+}
+
+async function runTasksForPhase(
+  app: App,
+  settings: ForgePlugin["settings"],
+  dryRun: boolean,
+  phase: MaintenancePhase
+): Promise<MaintenanceResult[]> {
   const results: MaintenanceResult[] = [];
-  results.push(...await trimLintHistory(app, settings, dryRun));
-  results.push(...await trimLintRunNotes(app, settings, dryRun));
-  results.push(...await trimShapeLintRunNotes(app, settings, dryRun));
-  results.push(...await trimPatchReportNotes(app, settings, dryRun));
-  results.push(...await trimShapeRepairHistory(app, settings, dryRun));
-  results.push(...await trimShapeRepairRunNotes(app, settings, dryRun));
-  results.push(...await cleanPatchBackups(app, settings, dryRun));
-  results.push(...await cleanInbox(app, settings, dryRun));
+
+  if (phase === "pre_scan" || phase === "all") {
+    results.push(...await cleanInbox(app, settings, dryRun));
+  }
+
+  if (phase === "post_output" || phase === "all") {
+    results.push(...await trimLintHistory(app, settings, dryRun));
+    results.push(...await trimLintRunNotes(app, settings, dryRun));
+    results.push(...await trimShapeLintRunNotes(app, settings, dryRun));
+    results.push(...await trimPatchReportNotes(app, settings, dryRun));
+    results.push(...await trimShapeRepairHistory(app, settings, dryRun));
+    results.push(...await trimShapeRepairRunNotes(app, settings, dryRun));
+    results.push(...await cleanPatchBackups(app, settings, dryRun));
+  }
+
   return results;
 }
 
