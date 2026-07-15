@@ -1,3 +1,17 @@
+# 2.0.5
+
+## Fixed
+
+- Added declarative settings definitions so Forge settings can appear in Obsidian 1.13+ settings search while preserving the legacy settings renderer for older Obsidian versions.
+
+## Compatibility
+
+- `minAppVersion` remains `1.7.2`.
+- No manual migration is required.
+- Users on Obsidian versions before `1.13.0` continue to use the existing settings tab renderer.
+
+---
+
 # 2.0.4
 
 ## Fixed
