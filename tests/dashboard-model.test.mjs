@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   buildDashboardSummary,
   createWorkspaceHealthResult,
-} = require("../.tmp-test/src/dashboard-model.js");
+} = require("../.tmp-test/src/dashboard/model.js");
 
 describe("Forge dashboard model integration", () => {
   it("resolves the dashboard model from the Obsidian adapter", () => {
