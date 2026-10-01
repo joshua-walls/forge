@@ -1,3 +1,24 @@
+# 3.1.0
+
+## Added
+
+- Added a Vault Repair preflight screen with repairable issue and file counts.
+- Added bounded repair runs by reviewing the first N lint findings or all findings.
+- Added compact mobile repair styling for smaller screens.
+
+## Changed
+
+- Vault Repair now passes only selected findings into the review flow.
+- Mobile repair forms hide redundant enum and date guidance text while preserving controls.
+
+## Compatibility
+
+- `minAppVersion` remains `1.10.0`.
+- No settings or note migration is required.
+- Review and patch application remain explicit; Vault Repair does not write notes directly.
+
+---
+
 # 3.0.2
 
 ## Fixed
