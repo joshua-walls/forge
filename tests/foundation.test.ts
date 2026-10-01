@@ -33,6 +33,7 @@ import {
   getRepairDefaultValue,
   getRepairFieldsToFix,
   matchingTagsForRepairIssue,
+  selectRepairIssues,
 } from "../src/repairs/model.js";
 import {
   buildForgeDocumentation,
@@ -337,6 +338,23 @@ describe("plugin foundation", () => {
     assert.equal(getRepairDefaultValue(schema, "ai_private", "2026-07-13"), false);
     assert.equal(extractRepairTagNamespace(issues[1]), "loose");
     assert.deepEqual(matchingTagsForRepairIssue(issues[1], ["loose", "topic/a"]), ["loose"]);
+  });
+
+  it("selects bounded repair findings without mutating source issue order", () => {
+    const issues = [
+      { file: "A.md", severity: "error" as const, rule: "required_field", message: "one" },
+      { file: "A.md", severity: "error" as const, rule: "required_field", message: "two" },
+      { file: "B.md", severity: "error" as const, rule: "required_field", message: "three" },
+    ];
+
+    assert.deepEqual(selectRepairIssues(issues, 2), {
+      selectedIssues: issues.slice(0, 2),
+      selectedCount: 2,
+      totalCount: 3,
+    });
+    assert.equal(selectRepairIssues(issues, 99).selectedCount, 3);
+    assert.equal(selectRepairIssues(issues, -1).selectedCount, 0);
+    assert.deepEqual(issues.map((issue) => issue.message), ["one", "two", "three"]);
   });
 
   it("builds a default repair patch from lint issues with plain data", () => {

@@ -1,7 +1,7 @@
 {
   "id": "forge",
   "name": "Forge",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "minAppVersion": "1.10.0",
   "description": "Define the structure your vault should have, then let Forge enforce it. Lint for drift, normalize metadata, and apply auditable bulk changes with confidence.",
   "author": "Joshua Walls",

@@ -759,6 +759,22 @@
 
 /* ── Repair modal ─────────────────────────────────────────────────────────── */
 
+.forge-repair-modal .forge-repair-limit {
+  margin-bottom: 12px;
+}
+
+.forge-repair-modal .forge-repair-limit .setting-item {
+  padding: 8px 0;
+}
+
+body.is-mobile .forge-repair-modal .setting-item-description {
+  display: none;
+}
+
+body.is-mobile .forge-repair-modal .setting-item {
+  padding: 8px 0;
+}
+
 .forge-schema-path {
   font-size: var(--font-ui-small);
   font-family: var(--font-monospace);

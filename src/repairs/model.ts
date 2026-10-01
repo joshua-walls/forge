@@ -67,6 +67,12 @@ export interface BuildRepairFileCandidatesInput {
   today?: string;
 }
 
+export interface RepairSelectionResult {
+  selectedIssues: LintResult[];
+  selectedCount: number;
+  totalCount: number;
+}
+
 export interface RepairFieldValue {
   file: string;
   field: string;
@@ -85,6 +91,22 @@ export interface BuildCuratedRepairOperationsInput {
   includedFiles?: string[];
   fieldValues?: RepairFieldValue[];
   tagDecisions?: RepairTagDecision[];
+}
+
+/** Select the first N repairable findings for bounded repair runs. */
+export function selectRepairIssues(
+  issues: LintResult[],
+  limit: number | null,
+): RepairSelectionResult {
+  const boundedLimit = limit === null
+    ? issues.length
+    : Math.max(0, Math.min(Math.floor(limit), issues.length));
+
+  return {
+    selectedIssues: issues.slice(0, boundedLimit),
+    selectedCount: boundedLimit,
+    totalCount: issues.length,
+  };
 }
 
 const REPAIRABLE_RULES = new Set([

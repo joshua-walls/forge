@@ -19,6 +19,7 @@ import {
   filterRepairableLintResults,
   getRepairDefaultValue,
   getRepairFieldsToFix,
+  selectRepairIssues,
   type RepairOperation,
 } from "../repairs/model";
 import type { LintResult } from "../linting/model";
@@ -102,14 +103,85 @@ export async function runVaultRepair(plugin: ForgePlugin): Promise<void> {
     return;
   }
 
-  // Group errors by file
-  const byFile = new Map<string, LintError[]>();
-  for (const error of errors) {
-    if (!byFile.has(error.file)) byFile.set(error.file, []);
-    byFile.get(error.file)!.push(error);
+  new RepairSelectionModal(app, plugin, schema, errors).open();
+}
+
+class RepairSelectionModal extends Modal {
+  private readonly plugin: ForgePlugin;
+  private readonly schema: VaultSchema;
+  private readonly issues: LintError[];
+
+  constructor(app: App, plugin: ForgePlugin, schema: VaultSchema, issues: LintError[]) {
+    super(app);
+    this.plugin = plugin;
+    this.schema = schema;
+    this.issues = issues;
   }
 
-  new VaultRepairModal(app, plugin, schema, byFile).open();
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("forge-repair-modal");
+
+    const fileCount = new Set(this.issues.map((issue) => issue.file)).size;
+    contentEl.createEl("h2", { text: "Select repair findings" });
+    contentEl.createEl("p", {
+      text: `${this.issues.length} repairable issue(s) across ${fileCount} file(s).`,
+      cls: "forge-error-note",
+    });
+
+    const limitInput = contentEl.createDiv("forge-repair-limit");
+    new Setting(limitInput)
+      .setName("Findings to review")
+      .setDesc("Process findings in lint-report order. Use full count to review all findings.")
+      .addText((text) => {
+        text.inputEl.type = "number";
+        text.inputEl.min = "0";
+        text.inputEl.max = String(this.issues.length);
+        text.setValue(String(this.issues.length));
+      });
+
+    const buttonRow = contentEl.createDiv("forge-button-row");
+    const startButton = buttonRow.createEl("button", { text: "Review selected", cls: "mod-cta" });
+    startButton.addEventListener("click", () => {
+      const input = limitInput.querySelector("input");
+      const rawLimit = input?.value.trim() ?? "";
+      const parsedLimit = rawLimit === "" ? this.issues.length : Number(rawLimit);
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 0) {
+        new Notice("Forge: Enter a valid finding count.", 4000);
+        return;
+      }
+
+      const selection = selectRepairIssues(this.issues, parsedLimit);
+      if (selection.selectedCount === 0) {
+        new Notice("Forge: Select at least one repair finding.", 4000);
+        return;
+      }
+
+      const byFile = new Map<string, LintError[]>();
+      for (const issue of selection.selectedIssues) {
+        const fileIssues = byFile.get(issue.file) ?? [];
+        fileIssues.push(issue);
+        byFile.set(issue.file, fileIssues);
+      }
+
+      this.close();
+      new VaultRepairModal(this.app, this.plugin, this.schema, byFile).open();
+    });
+
+    const allButton = buttonRow.createEl("button", { text: "Review all" });
+    allButton.addEventListener("click", () => {
+      const input = limitInput.querySelector("input");
+      if (input) input.value = String(this.issues.length);
+    });
+
+    const cancelButton = buttonRow.createEl("button", { text: "Cancel" });
+    cancelButton.addEventListener("click", () => this.close());
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -137,6 +209,7 @@ class VaultRepairModal extends Modal {
   }
 
   onOpen(): void {
+    this.contentEl.addClass("forge-repair-modal");
     this.renderCurrentFile();
   }
 
