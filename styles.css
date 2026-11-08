@@ -775,6 +775,82 @@ body.is-mobile .forge-repair-modal .setting-item {
   padding: 8px 0;
 }
 
+.forge-repair-details summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+  padding: 8px 0;
+}
+
+body.is-mobile .forge-repair-review {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.is-mobile .forge-repair-review .forge-repair-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+body.is-mobile .forge-repair-body h2 {
+  margin: 0 0 8px;
+  font-size: var(--font-ui-large);
+}
+
+body.is-mobile .forge-repair-body .forge-schema-path {
+  margin: 0 0 4px;
+}
+
+body.is-mobile .forge-repair-review .forge-repair-body .setting-item {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+body.is-mobile .forge-repair-body .setting-item-info {
+  margin: 0;
+  min-width: 0;
+}
+
+body.is-mobile .forge-repair-body .setting-item-name {
+  overflow-wrap: anywhere;
+}
+
+body.is-mobile .forge-repair-body .setting-item-control {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+
+body.is-mobile .forge-repair-body .setting-item-control input,
+body.is-mobile .forge-repair-body .setting-item-control select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+body.is-mobile .forge-repair-modal .forge-repair-created .setting-item-description {
+  display: block;
+}
+
+body.is-mobile .forge-repair-review .forge-repair-actions {
+  flex-shrink: 0;
+  gap: 6px;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+body.is-mobile .forge-repair-actions button,
+body.is-mobile .forge-repair-details summary,
+body.is-mobile .forge-repair-body .forge-tag-toggle {
+  min-height: 44px;
+}
+
 .forge-schema-path {
   font-size: var(--font-ui-small);
   font-family: var(--font-monospace);

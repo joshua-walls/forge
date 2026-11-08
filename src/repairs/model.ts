@@ -154,6 +154,14 @@ export function getRepairFieldsToFix(schema: VaultSchema, issues: LintResult[]):
   return [...fields];
 }
 
+/** Suggest a local calendar date without inventing a date for missing metadata. */
+export function getRepairCreatedDate(ctime: number | undefined): string {
+  if (ctime === undefined || !Number.isFinite(ctime) || ctime <= 0) return "";
+  const date = new Date(ctime);
+  if (!Number.isFinite(date.getTime())) return "";
+  return `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function getRepairDefaultValue(
   schema: VaultSchema,
   fieldName: string,

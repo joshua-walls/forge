@@ -12,12 +12,13 @@
 //   6. Write patch to System/Forge/Patches/vault-patch.md
 //   7. Offer to apply immediately via Apply Vault Patch
 
-import { App, Modal, Notice, TFile, Setting } from "obsidian";
+import { App, Modal, Notice, TFile, Setting, Platform, parseYaml } from "obsidian";
 import {
   buildRepairPatchContent,
   extractRepairTagNamespace,
   filterRepairableLintResults,
   getRepairDefaultValue,
+  getRepairCreatedDate,
   getRepairFieldsToFix,
   selectRepairIssues,
   type RepairOperation,
@@ -28,6 +29,7 @@ import { getVaultPaths } from "../vault/paths";
 import { loadSchema, VaultSchema, allFrontmatterFields } from "../utils/schema";
 import { ensureFolder, todayString } from "../utils/files";
 import { serializeYaml } from "../utils/yaml";
+import { splitFrontmatter } from "../vault/frontmatter";
 import { runApplyPatch } from "./apply-patch";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -194,6 +196,7 @@ class VaultRepairModal extends Modal {
   private currentIndex: number = 0;
   private ops: RepairOp[] = [];
   private skippedCount: number = 0;
+  private renderId: number = 0;
 
   constructor(
     app: App,
@@ -210,14 +213,16 @@ class VaultRepairModal extends Modal {
 
   onOpen(): void {
     this.contentEl.addClass("forge-repair-modal");
-    this.renderCurrentFile();
+    void this.renderCurrentFile();
   }
 
-  private renderCurrentFile(): void {
+  private async renderCurrentFile(): Promise<void> {
+    const renderId = ++this.renderId;
     const { contentEl } = this;
     contentEl.empty();
 
     if (this.currentIndex >= this.fileList.length) {
+      contentEl.removeClass("forge-repair-review");
       this.renderFinish();
       return;
     }
@@ -226,28 +231,65 @@ class VaultRepairModal extends Modal {
     const fileErrors = this.byFile.get(filePath) ?? [];
     const total = this.fileList.length;
     const current = this.currentIndex + 1;
+    let fieldsToFix = this.getFieldsToFix(fileErrors);
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    let existingCreated: unknown;
+    let createdReadFailed = false;
 
-    contentEl.createEl("h2", { text: `Vault Repair (${current} of ${total})` });
-    contentEl.createEl("p", {
+    // A lint report and metadata cache may both lag behind the note. Read the
+    // current value before suggesting a missing created date or replacing one.
+    if (fieldsToFix.includes("created")) {
+      try {
+        if (!(file instanceof TFile)) throw new Error("Note unavailable");
+        const raw = await this.app.vault.read(file);
+        const split = splitFrontmatter(raw);
+        if (!split && /^---\r?\n/u.test(raw)) throw new Error("Invalid frontmatter");
+        const parsed: unknown = split ? parseYaml(split.yaml) : {};
+        if (parsed !== null && parsed !== undefined
+          && (typeof parsed !== "object" || Array.isArray(parsed))) {
+          throw new Error("Invalid frontmatter");
+        }
+        existingCreated = (parsed as Record<string, unknown> | null)?.created;
+        if (typeof existingCreated === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(existingCreated)
+          && Number.isFinite(Date.parse(existingCreated))) {
+          fieldsToFix = fieldsToFix.filter((name) => name !== "created");
+        }
+      } catch {
+        fieldsToFix = fieldsToFix.filter((name) => name !== "created");
+        createdReadFailed = true;
+      }
+      // Closing the modal or moving to another file invalidates pending reads.
+      if (renderId !== this.renderId) return;
+    }
+
+    contentEl.addClass("forge-repair-review");
+    const body = contentEl.createDiv("forge-repair-body");
+    body.createEl("h2", { text: `Vault Repair (${current} of ${total})` });
+    body.createEl("p", {
       text: filePath,
       cls: "forge-schema-path",
     });
 
     // Show errors for this file
-    contentEl.createEl("h3", { text: "Issues" });
-    const errorList = contentEl.createEl("ul", { cls: "forge-error-list" });
+    const details = body.createEl("details", { cls: "forge-repair-details" });
+    details.open = !Platform.isMobile;
+    details.createEl("summary", { text: `Issues (${fileErrors.length})` });
+    const errorList = details.createEl("ul", { cls: "forge-error-list" });
     for (const e of fileErrors) {
       const prefix = e.severity === "warning" ? "⚠️" : "🔴";
       errorList.createEl("li", { text: `${prefix} [${e.rule}] ${e.message}` });
     }
 
     // Build field inputs for fixable errors
-    const fieldsToFix = this.getFieldsToFix(fileErrors);
     const fieldValues = new Map<string, unknown>();
+    if (createdReadFailed) {
+      body.createEl("p", {
+        text: "Could not read the current created value. Its repair is skipped; check the note and run lint again.",
+        cls: "forge-error-note",
+      });
+    }
 
     if (fieldsToFix.length > 0) {
-      contentEl.createEl("h3", { text: "Fix" });
-
       for (const fieldName of fieldsToFix) {
         const field = allFrontmatterFields(this.schema).find((f) => f.name === fieldName);
         if (!field) continue;
@@ -257,7 +299,7 @@ class VaultRepairModal extends Modal {
           const initialVal = stringifyRepairValue(suggestion) || field.values[0];
           fieldValues.set(fieldName, initialVal);
 
-          new Setting(contentEl)
+          new Setting(body)
             .setName(fieldName)
             .setDesc(`Valid: ${field.values.join(", ")}`)
             .addDropdown((dd) => {
@@ -272,7 +314,7 @@ class VaultRepairModal extends Modal {
           const initialVal = suggestion !== null ? stringifyRepairValue(suggestion) : "false";
           fieldValues.set(fieldName, initialVal === "true");
 
-          new Setting(contentEl)
+          new Setting(body)
             .setName(fieldName)
             .addDropdown((dd) => {
               dd.addOption("false", "False");
@@ -282,19 +324,28 @@ class VaultRepairModal extends Modal {
             });
         } else if (field.type === "date") {
           const suggestion = this.getSuggestion(fieldName, fileErrors);
-          const initialVal = stringifyRepairValue(suggestion) || todayString();
+          const missingCreated = fieldName === "created"
+            && (existingCreated === undefined || existingCreated === null
+              || (typeof existingCreated === "string" && existingCreated.trim() === ""));
+          const initialVal = missingCreated
+            ? getRepairCreatedDate(file instanceof TFile ? file.stat.ctime : undefined)
+            : stringifyRepairValue(suggestion) || todayString();
           fieldValues.set(fieldName, initialVal);
 
-          new Setting(contentEl)
+          const dateSetting = new Setting(body)
             .setName(fieldName)
-            .setDesc("Format: Yyyy-mm-dd")
+            .setDesc(missingCreated && !initialVal
+              ? "File creation date unavailable. Enter a date: YYYY-MM-DD."
+              : missingCreated ? "From file metadata; editable. YYYY-MM-DD."
+                : "Suggested date is editable. Format: YYYY-MM-DD.")
             .addText((t) => {
               t.setPlaceholder("Yyyy-mm-dd");
               t.setValue(initialVal);
               t.onChange((val) => fieldValues.set(fieldName, val));
             });
+          if (missingCreated) dateSetting.settingEl.addClass("forge-repair-created");
         } else if (field.type === "list" && fieldName === "tags") {
-          new Setting(contentEl)
+          new Setting(body)
             .setName("Tags")
             .setDesc(`Comma-separated. Namespaces: ${this.schema.tag_rules.allowed_namespaces.join(", ")}`)
             .addText((t) => {
@@ -307,7 +358,7 @@ class VaultRepairModal extends Modal {
           const suggestion = this.getSuggestion(fieldName, fileErrors);
           if (suggestion) fieldValues.set(fieldName, suggestion);
 
-          new Setting(contentEl)
+          new Setting(body)
             .setName(fieldName)
             .addText((t) => {
               if (suggestion) t.setValue(stringifyRepairValue(suggestion));
@@ -329,7 +380,7 @@ class VaultRepairModal extends Modal {
     const tagDecisions = new Map<string, TagAction>();
 
     if (badTagErrors.length > 0) {
-      contentEl.createEl("h3", { text: "Tag namespace issues" });
+      body.createEl("h3", { text: "Tag namespace issues" });
 
       // Resolve full tags from metadataCache so we can emit precise patch ops.
       // Lint messages only embed the namespace, not the full tag — look them up here.
@@ -359,7 +410,7 @@ class VaultRepairModal extends Modal {
           if (tagDecisions.has(badTag)) continue;
           tagDecisions.set(badTag, { action: "skip", newValue: "" });
 
-          const row = contentEl.createDiv("forge-tag-repair-row");
+          const row = body.createDiv("forge-tag-repair-row");
 
           row.createSpan({
             text: badTag,
@@ -421,6 +472,7 @@ class VaultRepairModal extends Modal {
 
     // Buttons
     const buttonRow = contentEl.createDiv("forge-button-row");
+    buttonRow.addClass("forge-repair-actions");
 
     const hasAnyFixes = fieldsToFix.length > 0 || badTagErrors.length > 0;
 
@@ -457,7 +509,7 @@ class VaultRepairModal extends Modal {
       }
 
       this.currentIndex++;
-      this.renderCurrentFile();
+      void this.renderCurrentFile();
     });
 
     if (hasAnyFixes) {
@@ -465,7 +517,7 @@ class VaultRepairModal extends Modal {
       skipBtn.addEventListener("click", () => {
         this.skippedCount++;
         this.currentIndex++;
-        this.renderCurrentFile();
+        void this.renderCurrentFile();
       });
     }
 
@@ -598,6 +650,7 @@ class VaultRepairModal extends Modal {
   }
 
   onClose(): void {
+    this.renderId++;
     this.contentEl.empty();
   }
 }
