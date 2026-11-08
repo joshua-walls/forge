@@ -31,6 +31,7 @@ import {
   extractRepairTagNamespace,
   filterRepairableLintResults,
   getRepairDefaultValue,
+  getRepairCreatedDate,
   getRepairFieldsToFix,
   matchingTagsForRepairIssue,
   selectRepairIssues,
@@ -295,6 +296,14 @@ describe("plugin foundation", () => {
     assert.equal(result.patch, null);
     assert.equal(result.yaml, "");
     assert.equal(result.error, "Patch file contains no YAML payload");
+  });
+
+  it("suggests created dates from local file metadata without inventing missing dates", () => {
+    assert.equal(getRepairCreatedDate(new Date(2020, 0, 2, 0, 15).getTime()), "2020-01-02");
+    assert.equal(getRepairCreatedDate(new Date(2020, 11, 31, 23, 45).getTime()), "2020-12-31");
+    for (const value of [undefined, NaN, Infinity, 0, -1, 1e20]) {
+      assert.equal(getRepairCreatedDate(value), "");
+    }
   });
 
   it("identifies repairable lint issues and schema-driven defaults", () => {

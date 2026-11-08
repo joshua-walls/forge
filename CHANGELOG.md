@@ -1,3 +1,21 @@
+# 3.1.1
+
+## Fixed
+
+- Reduced mobile Vault Repair scrolling with compact field rows, collapsible issue details, and file actions outside the scrolling review area.
+- Missing `created` dates in interactive Vault Repair now suggest the file creation date reported by Obsidian, formatted in local time. The suggestion remains editable and the generated patch preserves the final entry.
+- Read current frontmatter before suggesting a `created` repair so stale lint reports or metadata caches do not replace existing valid dates.
+- Leave the date blank when creation metadata is unavailable. Skip the `created` repair with guidance when the note cannot be read or its frontmatter cannot be parsed.
+
+## Compatibility
+
+- `minAppVersion` remains `1.10.0`.
+- No settings or note migration is required.
+- `updated` and `review_by` defaults are unchanged.
+- Patch review and application remain explicit.
+
+---
+
 # 3.1.0
 
 ## Added
